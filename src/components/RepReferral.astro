@@ -742,6 +742,9 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
         } else if (el instanceof HTMLInputElement && el.type === 'checkbox') el.checked = value === true;
         else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) el.value = String(value);
       }
+      // The State type-ahead has no name, so it is put back from the restored list: the
+      // box must show the state the retry sends (Codex P1 on #7).
+      if (stateInput && stateSelect) stateInput.value = stateName(stateSelect.value);
     };
     form?.addEventListener('submit', async (event) => {
       event.preventDefault();
