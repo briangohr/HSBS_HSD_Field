@@ -1,0 +1,320 @@
+---
+// Personal field app link (TSM app). The key is a secret in the URL. This page does not
+// contain the key list. A well-formed key is resolved by HSBS 1F (FIELD_FLOW_URL), the
+// field app's own flow, and opens the app only for a Rep Roster row. Submit goes to
+// /api/referral. The flow URL is never sent to the browser.
+// Off (404) unless REP_APP_ENABLED=true. Contract: docs/field-flow-contract.md.
+import '../../styles/global.css';
+import RepReferral from '../../components/RepReferral.astro';
+import { clientIp } from '../../lib/http';
+import { repAppCompanies, repAppEnabled, repPayEnabled, repPromisePlan, repStaffingPromisePlan } from '../../lib/register-flow.mjs';
+import { sendTab } from '../../lib/rep-companies.mjs';
+import { pickRepFields, submitRep, type RepSubmitResult } from '../../lib/rep-submit';
+import { lookupReferral, submitBudgetMs } from '../../lib/field-flow.mjs';
+import { isReferralKey } from '../../lib/field-form.mjs';
+
+export const prerender = false;
+
+if (!repAppEnabled()) {
+  return new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+}
+
+const key = String(Astro.params.key ?? '').trim();
+// When this request started, so a no-JavaScript submit after the lookup stays under 60s.
+const started = Date.now();
+const submissionId = crypto.randomUUID();
+
+let state: 'invalid' | 'unknown' | 'unavailable' | 'ready' = 'invalid';
+let repName = '';
+let repResult: RepSubmitResult | undefined;
+let repValues: Record<string, unknown> = {};
+// My Team (slice 5). isManager is the lookup's strict JSON true; /api/team re-checks with
+// the flow, whose 404 is the real gate.
+let isManager = false;
+
+if (isReferralKey(key)) {
+  try {
+    const referrer = await lookupReferral(key);
+    isManager = referrer.isManager === true;
+    repName = referrer.rep.name;
+    state = 'ready';
+  } catch (err) {
+    state = err instanceof Error && err.name === 'ReferralKeyUnknownError' ? 'unknown' : 'unavailable';
+  }
+}
+
+// Rep app without JavaScript: the form POSTs here. Same path as /api/referral.
+let repSubmissionId: string = submissionId;
+if (state === 'ready' && Astro.request.method === 'POST') {
+  const length = Number(Astro.request.headers.get('content-length') ?? '0');
+  let form: FormData | undefined;
+  if (length <= 16 * 1024) {
+    try {
+      form = await Astro.request.formData();
+    } catch {
+      form = undefined;
+    }
+  }
+  if (!form) {
+    repResult = { status: 400, error: 'This referral did not send. Please try again.' };
+  } else {
+    const f = form;
+    repValues = pickRepFields((k) => f.get(k), (k) => f.getAll(k));
+    repSubmissionId = String(f.get('submissionId') ?? submissionId);
+    let ip: string;
+    try {
+      ip = Astro.clientAddress;
+    } catch {
+      ip = clientIp(Astro.request);
+    }
+    repResult = await submitRep(key, repSubmissionId, repValues, ip, submitBudgetMs(Date.now() - started));
+    // A failed send keeps the same id, so trying again can't make a second row.
+    if (repResult.ok) repSubmissionId = crypto.randomUUID();
+  }
+}
+
+Astro.response.headers.set('Cache-Control', 'no-store');
+// same-origin: the no-JavaScript form must carry this site's Origin, or Astro's cross-site
+// check refuses it. The key in the URL still never goes to another site.
+Astro.response.headers.set('Referrer-Policy', 'same-origin');
+Astro.response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+if (state === 'unavailable') Astro.response.status = 503;
+else if (state !== 'ready') Astro.response.status = 404;
+else if (repResult) Astro.response.status = repResult.status;
+
+const badLink = state === 'invalid' || state === 'unknown';
+const showRep = state === 'ready' && Boolean(repName);
+// Field two-track spec, section 4: which companies the Send tab offers. Unset is
+// HealthFirst only, the page exactly as on main. With two or more, the company named by
+// ?company=<key> (a no-JavaScript choice) or by the form just posted opens; else the choice.
+const repSend = sendTab(repAppCompanies());
+const repPicked = repResult
+  ? typeof repValues.company === 'string' ? repValues.company : ''
+  : String(Astro.url.searchParams.get('company') ?? '');
+const showTeam = isManager && showRep;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="same-origin" />
+    <meta name="theme-color" content="#002f6d" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="HSBS Referral" />
+    <title>{showRep ? `${repSend.classic ? 'HealthFirst referral' : 'Send a referral'} | ${repName}` : 'Referral link'}</title>
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    {showRep && <link rel="manifest" href={`/refer/manifest/${key}`} />}
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body class="ref">
+    <header class="ref-top">
+      <div class="ref-logo">
+        <img src="/logos/HSBS_horizontal_color.svg" alt="Henry Schein Business Solutions" height="32" />
+      </div>
+    </header>
+
+    <main class="ref-main" id="main">
+      {
+        badLink && (
+          <section class="ref-card">
+            <h1>This link does not work.</h1>
+            <p>Open the personal referral link you were given.</p>
+          </section>
+        )
+      }
+      {
+        state === 'unavailable' && (
+          <section class="ref-card">
+            <h1>This form is not available right now.</h1>
+            <p>Try the link again in a few minutes.</p>
+          </section>
+        )
+      }
+
+      {
+        showRep && (
+          <RepReferral
+            repName={repName}
+            referralKey={key}
+            submissionId={repSubmissionId}
+            pay={repPayEnabled()}
+            payPlan={repPromisePlan()}
+            staffingPlan={repStaffingPromisePlan()}
+            result={repResult}
+            values={repValues}
+            showTeam={showTeam}
+            companies={repSend.keys}
+            picked={repPicked}
+          />
+        )
+      }
+    </main>
+
+    <style is:global>
+      html:has(body.ref) { scroll-padding-top: 5rem; }
+      body.ref { background: var(--bg-accent); }
+      .ref-check, .ref-choice, .ref-path, .ref-field, .ref-submit, .ref-summary, .ref-set {
+        scroll-margin-top: 5rem;
+      }
+      .ref-top {
+        background: #fff;
+        border-bottom: 3px solid var(--hs-navy);
+        padding: 0.85rem 1rem;
+      }
+      .ref-logo { display: inline-flex; }
+      .ref-logo img { height: 32px; width: auto; }
+      .ref-main {
+        width: min(100% - 1.5rem, 40rem);
+        margin: 0 auto;
+        padding: 1rem 0 calc(1.5rem + env(safe-area-inset-bottom));
+      }
+      .ref-card, .ref-who {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 1.1rem 1rem 1.25rem;
+      }
+      .ref-who {
+        display: flex;
+        gap: 0.9rem;
+        align-items: center;
+        margin-bottom: 0.9rem;
+      }
+      .ref-avatar {
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
+        overflow: hidden;
+        flex: 0 0 auto;
+        background: var(--hs-navy);
+        color: #fff;
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        font-size: 1.4rem;
+      }
+      .ref-avatar > * { grid-area: 1 / 1; }
+      .ref-avatar img { width: 100%; height: 100%; object-fit: cover; }
+      .ref-kicker {
+        margin: 0;
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--hs-navy);
+      }
+      .ref h1 { font-size: 1.55rem; margin: 0; }
+      .ref-role { margin: 0.15rem 0 0; color: var(--text-2); }
+      .ref-role span { display: block; color: var(--muted); font-size: 0.95rem; }
+      .ref h2 { font-size: 1.35rem; margin-bottom: 0.8rem; }
+      .ref-paths, .ref-choices, .ref-companies { display: grid; gap: 0.55rem; }
+      .ref-paths { grid-template-columns: 1fr 1fr; align-items: stretch; }
+      .ref-path { display: flex; }
+      .ref-path input {
+        -webkit-appearance: none;
+        appearance: none;
+      }
+      .ref-path, .ref-choice, .ref-check { position: relative; }
+      .ref-path input, .ref-choice input, .ref-check input {
+        position: absolute;
+        opacity: 0;
+        inset: 0;
+        margin: 0;
+        cursor: pointer;
+      }
+      .ref-path span, .ref-choice span, .ref-check span {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-height: 52px;
+        border: 1.5px solid var(--hs-navy);
+        border-radius: 12px;
+        padding: 0.65rem 0.9rem;
+        font-weight: 600;
+        color: var(--hs-navy);
+        background: #fff;
+      }
+      .ref-path span {
+        flex: 1;
+        align-items: center;
+        text-align: center;
+        min-height: 4.75rem;
+        line-height: 1.2;
+      }
+      .ref-path small {
+        display: block;
+        font-size: 0.85rem;
+        font-weight: 500;
+        line-height: 1.2;
+        text-align: center;
+        color: var(--muted);
+      }
+      .ref-path input:checked + span,
+      .ref-choice input:checked + span,
+      .ref-check input:checked + span {
+        background: var(--hs-navy);
+        color: #fff;
+      }
+      .ref-path input:checked + span small,
+      .ref-check input:checked + span { color: #fff; }
+      .ref-path input:focus-visible + span,
+      .ref-choice input:focus-visible + span,
+      .ref-check input:focus-visible + span,
+      .ref-field input:focus-visible,
+      .ref-field select:focus-visible,
+      .ref-field textarea:focus-visible {
+        outline: 3px solid var(--hs-sky);
+        outline-offset: 2px;
+      }
+      .ref-field { display: grid; gap: 0.35rem; margin-top: 0.9rem; font-weight: 600; }
+      .ref-field input, .ref-field select, .ref-field textarea {
+        font: inherit;
+        font-weight: 500;
+        min-height: 52px;
+        border: 1.5px solid #b9c1ce;
+        border-radius: 12px;
+        padding: 0.7rem 0.85rem;
+        width: 100%;
+        background: #fff;
+      }
+      .ref-field textarea { min-height: 6.5rem; resize: vertical; }
+      .ref-set { border: 0; margin: 1rem 0 0; padding: 0; min-width: 0; }
+      .ref-set legend { font-weight: 700; padding: 0; margin-bottom: 0.55rem; }
+      .ref-opt { font-weight: 500; color: var(--muted); }
+      .ref-check--block { display: block; margin-top: 0.9rem; }
+      .ref-error, .ref-summary {
+        color: var(--btn-red);
+        font-weight: 600;
+        margin: 0.35rem 0 0;
+      }
+      .ref-summary { background: #fff5f6; border-radius: 10px; padding: 0.7rem 0.8rem; }
+      [aria-invalid="true"] { box-shadow: 0 0 0 3px rgba(200, 16, 46, 0.25); }
+      .ref-submit { width: 100%; justify-content: center; min-height: 52px; margin-top: 1.1rem; }
+      .ref-submit:disabled { opacity: 0.55; cursor: not-allowed; }
+      .ref-sent {
+        margin: 0 0 0.4rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--hs-navy);
+      }
+      #referral-done h2 { margin-bottom: 0.4rem; }
+      #referral-receipt-line { margin: 0 0 1.1rem; font-weight: 600; }
+      #referral-another { width: 100%; justify-content: center; min-height: 52px; }
+      [hidden] { display: none !important; }
+      @media (min-width: 720px) {
+        .ref-main { padding-top: 1.5rem; }
+        .ref-card, .ref-who { padding: 1.4rem 1.4rem 1.5rem; }
+      }
+    </style>
+  </body>
+</html>

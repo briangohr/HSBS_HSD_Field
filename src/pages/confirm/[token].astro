@@ -1,0 +1,228 @@
+---
+// Manager confirm link from the HSBS 1J manager email: /confirm/<token>. The token is
+// a single-use secret tied to one Rep Roster row (spec v3, D9). Opening the page only
+// reads who is asking (1J "confirm-peek"); it never confirms. Mail scanners follow
+// links but don't submit forms, so the answer needs a button press. With JavaScript the
+// buttons post /api/confirm; without it each button is a small POST form back to this
+// page. Both use submitConfirm. Token never logged.
+// Not used by the rep journey at launch (Brian, 11/9, D18: managers come from Brian's Team
+// Roster and nobody confirms); nothing links here and no token is issued. So the page
+// answers 404 before any 1J call unless REP_APP_ENABLED and REP_CONFIRM_ENABLED are both
+// "true", and REP_CONFIRM_ENABLED stays unset at launch. The copy below is #43's and is not
+// used at launch: a yes grants nothing (My Team reads only the Team Roster). Removable later.
+import '../../styles/global.css';
+import { clientIp, rateLimited } from '../../lib/http';
+import {
+  ConfirmUnknownError,
+  ConfirmUsedError,
+  isConfirmToken,
+  confirmEnabled,
+  peekConfirm,
+} from '../../lib/register-flow.mjs';
+import { submitConfirm } from '../../lib/confirm-submit';
+
+export const prerender = false;
+
+if (!confirmEnabled()) {
+  return new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+}
+
+const token = String(Astro.params.token ?? '').trim();
+let state: 'invalid' | 'used' | 'unavailable' | 'ready' | 'confirmed' | 'declined' = 'invalid';
+let repName = '';
+let alertText = '';
+
+/** Peeks per IP per 10 minutes: made-up tokens never run 1J without limit. */
+const PEEK_LIMIT = 30;
+let ip: string;
+try {
+  ip = Astro.clientAddress;
+} catch {
+  ip = clientIp(Astro.request);
+}
+
+if (isConfirmToken(token) && rateLimited(`confirm-peek:${ip}`, PEEK_LIMIT)) {
+  state = 'unavailable';
+  Astro.response.status = 429;
+} else if (isConfirmToken(token)) {
+  try {
+    ({ repName } = await peekConfirm(token));
+    state = 'ready';
+  } catch (err) {
+    if (err instanceof ConfirmUsedError) state = 'used';
+    else if (err instanceof ConfirmUnknownError) state = 'invalid';
+    else state = 'unavailable';
+  }
+}
+
+// No-JavaScript answer: a button's form posted here. Only after a good peek.
+if (state === 'ready' && Astro.request.method === 'POST') {
+  let answer: unknown;
+  try {
+    answer = (await Astro.request.formData()).get('answer');
+  } catch {
+    answer = undefined;
+  }
+  const r = await submitConfirm(token, answer, ip);
+  if (r.ok) state = r.result === 'confirmed' ? 'confirmed' : 'declined';
+  else if (r.status === 410) state = 'used';
+  else if (r.status === 404) state = 'invalid';
+  else alertText = r.error ?? 'This is not available right now.';
+  Astro.response.status = r.status;
+}
+// A link that does not work is 404; one already used or expired is 410 (issue #51), on
+// the GET peek and on a no-JavaScript POST alike, so the HTTP status matches the page.
+if (state === 'invalid') Astro.response.status = 404;
+if (state === 'used') Astro.response.status = 410;
+
+const firstName = repName.split(' ')[0] || repName;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    {/* same-origin, not no-referrer: the no-JavaScript button forms must carry this
+        site's Origin, or Astro's cross-site check refuses them. The token in the URL still
+        never goes to another site: same-origin sends no referrer cross-site. */}
+    <meta name="referrer" content="same-origin" />
+    <meta name="theme-color" content="#002f6d" />
+    <title>Confirm your team | HSBS</title>
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body class="cf">
+    <header class="cf-top">
+      <img src="/logos/HSBS_horizontal_color.svg" alt="Henry Schein Business Solutions" height="32" />
+    </header>
+
+    <main class="cf-main" id="main">
+      {
+        state === 'invalid' && (
+          <section class="cf-card">
+            <h1>This link does not work.</h1>
+            <p>Open the link from the email you got, or reply to that email if it keeps failing.</p>
+          </section>
+        )
+      }
+      {
+        state === 'used' && (
+          <section class="cf-card">
+            <h1>This link was already used or has expired.</h1>
+            <p>Nothing else is needed from you. If you think that's wrong, reply to the email it came in.</p>
+          </section>
+        )
+      }
+      {
+        state === 'unavailable' && (
+          <section class="cf-card">
+            <h1>This is not available right now.</h1>
+            <p>Open the link again in a few minutes.</p>
+          </section>
+        )
+      }
+      {
+        (state === 'ready' || state === 'confirmed' || state === 'declined') && (
+          <>
+            <section class="cf-card" id="cf-ask" data-token={token} hidden={state !== 'ready'}>
+              <h1>Is {repName} on your team?</h1>
+              <p>{repName} signed up for the HSBS app and listed you as their manager.</p>
+              <form method="post" action={`/confirm/${token}`}>
+                <input type="hidden" name="answer" value="yes" />
+                <button class="cf-yes" type="submit" data-answer="yes">Yes, {firstName} is on my team</button>
+              </form>
+              <form method="post" action={`/confirm/${token}`}>
+                <input type="hidden" name="answer" value="no" />
+                <button class="cf-no" type="submit" data-answer="no">Not my team</button>
+              </form>
+              <p class="cf-small">Confirming adds {firstName} to the My Team tab in your HSBS app.</p>
+              <p class="cf-alert" id="cf-alert" role="alert" hidden={!alertText}>{alertText}</p>
+            </section>
+
+            <section class="cf-card" id="cf-yes-done" hidden={state !== 'confirmed'} tabindex="-1">
+              <h1>Done. {repName} is on your team.</h1>
+              <p>
+                You'll see {firstName} on the My Team tab in your HSBS app. If you don't have the app yet, your
+                personal link is on its way to your Henry Schein email.
+              </p>
+            </section>
+
+            <section class="cf-card" id="cf-no-done" hidden={state !== 'declined'} tabindex="-1">
+              <h1>Thanks.</h1>
+              <p>We'll ask {firstName} to add the right manager.</p>
+            </section>
+          </>
+        )
+      }
+    </main>
+
+    <script>
+      const ask = document.getElementById('cf-ask');
+      if (ask) {
+        const token = ask.dataset.token ?? '';
+        const alertBox = document.getElementById('cf-alert') as HTMLElement;
+        const buttons = Array.from(ask.querySelectorAll<HTMLButtonElement>('button[data-answer]'));
+        const show = (id: string) => {
+          ask.hidden = true;
+          const done = document.getElementById(id) as HTMLElement;
+          done.hidden = false;
+          done.focus();
+        };
+        ask.querySelectorAll<HTMLFormElement>('form').forEach((form) =>
+          form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const answer = (form.elements.namedItem('answer') as HTMLInputElement).value;
+            buttons.forEach((b) => (b.disabled = true));
+            alertBox.hidden = true;
+            try {
+              const res = await fetch('/api/confirm', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ token, answer }),
+              });
+              const body = await res.json().catch(() => ({}));
+              if (res.ok && body.ok) {
+                show(body.result === 'confirmed' ? 'cf-yes-done' : 'cf-no-done');
+                return;
+              }
+              alertBox.textContent = body.error ?? 'This is not available right now.';
+            } catch {
+              alertBox.textContent = 'That did not send. Check your connection and try again.';
+            }
+            alertBox.hidden = false;
+            buttons.forEach((b) => (b.disabled = false));
+          }),
+        );
+      }
+    </script>
+
+    <style>
+      .cf { background: var(--bg-accent); min-height: 100vh; margin: 0; font-family: 'Jost', system-ui, sans-serif; color: var(--text); }
+      .cf-top { background: #fff; border-bottom: 1px solid var(--line); padding: 0.75rem 1rem; }
+      .cf-top img { display: block; height: 32px; width: auto; }
+      .cf-main { max-width: 34rem; margin: 0 auto; padding: 1rem 1rem 3rem; }
+      .cf-card { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 1.25rem 1rem 1.5rem; }
+      .cf-card h1 { font-size: 1.45rem; margin: 0 0 0.5rem; color: var(--hs-navy); }
+      .cf-card p { margin: 0 0 1rem; }
+      .cf-card:focus { outline: none; }
+      .cf-yes,
+      .cf-no {
+        display: block; width: 100%; min-height: 48px; margin-top: 0.75rem; border-radius: 12px;
+        font: inherit; font-weight: 600; font-size: 1.05rem; cursor: pointer;
+      }
+      .cf-yes { border: 0; background: var(--btn-red); color: #fff; }
+      .cf-no { border: 2px solid var(--hs-navy); background: #fff; color: var(--hs-navy); }
+      .cf-yes:disabled,
+      .cf-no:disabled { opacity: 0.6; cursor: default; }
+      .cf-yes:focus-visible,
+      .cf-no:focus-visible { outline: 3px solid var(--hs-blue); outline-offset: 2px; }
+      .cf-small { margin-top: 1rem !important; font-size: 0.9rem; color: var(--muted); }
+      .cf-alert { color: var(--btn-red); font-weight: 500; }
+    </style>
+  </body>
+</html>

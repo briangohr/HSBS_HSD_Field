@@ -1,0 +1,25 @@
+{
+  "name": "hsbs-hsd-field",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "check": "astro check",
+    "test": "node --import ./scripts/test-register.mjs --test --test-concurrency=1 src/lib/*.test.mjs",
+    "e2e": "node scripts/e2e/rep-app.e2e.mjs && node scripts/e2e/refer.e2e.mjs"
+  },
+  "dependencies": {
+    "@astrojs/vercel": "^11.0.11",
+    "astro": "^7.3.5"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@types/node": "^22.20.5",
+    "playwright": "1.63.0",
+    "typescript": "^5.9.3"
+  }
+}

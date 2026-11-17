@@ -1,0 +1,133 @@
+---
+// Staffing form on the rep app's Send tab (field two-track spec, section 4 "Staffing
+// form"). Shown only when REP_APP_COMPANIES lists Staffing. The form works without
+// JavaScript: it POSTs to /refer/<key> with company=Staffing, and the server runs the same
+// path as /api/referral (src/lib/rep-submit.ts). With JavaScript, RepReferral.astro's script
+// sends it (the receipt and the Track reset live there). New styles stay is:inline and
+// carry their own prefix, so the HealthFirst-only Send tab never changes.
+import { PREFERRED_CONTACTS } from '../lib/field-form.mjs';
+import {
+  PRACTICE_TYPES,
+  PRACTICE_TYPE_LABELS,
+  STAFFING_CONSENT,
+  STAFFING_STAR,
+  staffingPayLine,
+  staffingSendLabel,
+  type StaffingPlan,
+} from '../lib/rep-staffing-form.mjs';
+
+interface Props {
+  repName: string;
+  referralKey: string;
+  submissionId: string;
+  /** The staffing pay plan when pay is on and one is set; null shows no dollar amount. */
+  plan?: StaffingPlan | null;
+  /** The server's answer to a no-JavaScript staffing post, and the values it carried. */
+  result?: { ok?: true; error?: string; errors?: { field: string; message: string }[] };
+  values?: Record<string, unknown>;
+}
+const { repName, referralKey, submissionId, plan = null, result, values = {} } = Astro.props;
+const sent = result?.ok === true;
+const fieldError = (f: string) => result?.errors?.find((e) => e.field === f)?.message ?? '';
+const v = (k: string) => (sent ? '' : typeof values[k] === 'string' ? (values[k] as string) : '');
+const payLine = staffingPayLine(plan);
+const label = staffingSendLabel(sent ? {} : { ...values, permission: values.permission === true });
+---
+
+<style is:inline>
+  .rs-h2 { font-size: 1.05rem; margin: 1.25rem 0 0.5rem; }
+  .rs-pay { margin: 0.4rem 0 0; font-weight: 600; font-size: 0.92rem; }
+  .rs-field { display: grid; gap: 0.2rem; margin-top: 0.75rem; font-weight: 600; font-size: 0.92rem; border: 0; padding: 0; }
+  .rs-field input, .rs-field textarea { font: inherit; font-weight: 400; font-size: 1rem; padding: 0.65rem 0.75rem; min-height: 44px; border: 1px solid #c3cad6; border-radius: 10px; background: #fff; color: var(--text); width: 100%; box-sizing: border-box; }
+  .rs-choices { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .rs-choices legend { width: 100%; padding: 0; margin-bottom: 0.2rem; }
+  .rs-field .rs-choice { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 500; border: 1px solid #c3cad6; border-radius: 999px; padding: 0.45rem 0.9rem; min-height: 44px; box-sizing: border-box; background: #fff; }
+  .rs-field .rs-choice input { width: auto; min-height: 0; }
+  .rs-ok { display: flex; gap: 0.6rem; align-items: flex-start; margin-top: 1rem; font-weight: 600; }
+  .rs-ok input { width: 1.4rem; height: 1.4rem; margin-top: 0.1rem; flex: none; }
+  .rs-star { margin: 0.6rem 0 0; font-size: 0.88rem; color: var(--muted); }
+  .rs-err { font-weight: 500; font-size: 0.85rem; color: var(--btn-red); }
+  .rs-err:empty { display: none; }
+  .rs-alert { margin: 1rem 0 0; color: var(--btn-red); font-weight: 500; }
+  .rs-send { display: block; width: 100%; margin-top: 1rem; min-height: 48px; border: 0; border-radius: 12px; background: var(--btn-red); color: #fff; font: inherit; font-weight: 600; font-size: 1.05rem; cursor: pointer; }
+  .rs-send:disabled { opacity: 0.6; cursor: default; }
+</style>
+<div class="rep-staffing" data-staffing>
+  <h2 class="rs-h2" id="rs-title">Staffing referral</h2>
+  <p>Sending as {repName}.</p>
+  {payLine && <p class="rs-pay" data-staffing-pay>{payLine}</p>}
+
+  <form id="staffing-form" method="post" action={`/refer/${referralKey}`} novalidate>
+    <input type="hidden" name="app" value="rep" />
+    <input type="hidden" name="company" value="Staffing" />
+    <input type="hidden" name="submissionId" value={submissionId} />
+
+    <label class="rs-field">
+      Point of contact (name)
+      <input name="contactName" value={v('contactName')} maxlength="120" autocomplete="off" required />
+      <span class="rs-err" data-for="contactName">{fieldError('contactName')}</span>
+    </label>
+    <label class="rs-field">
+      Practice name
+      <input name="practiceName" value={v('practiceName')} maxlength="160" autocomplete="off" required />
+      <span class="rs-err" data-for="practiceName">{fieldError('practiceName')}</span>
+    </label>
+    <label class="rs-field">
+      JDE #
+      <input name="jde" value={v('jde')} inputmode="numeric" pattern="[0-9]*" maxlength="40" autocomplete="off" required />
+      <span class="rs-err" data-for="jde">{fieldError('jde')}</span>
+    </label>
+    <label class="rs-field">
+      Best phone
+      <input name="officePhone" value={v('officePhone')} type="tel" inputmode="tel" maxlength="40" autocomplete="off" required />
+      <span class="rs-err" data-for="officePhone">{fieldError('officePhone')}</span>
+    </label>
+    <label class="rs-field">
+      Email (optional)
+      <input name="email" value={v('email')} type="email" inputmode="email" maxlength="320" autocomplete="off" />
+      <span class="rs-err" data-for="email">{fieldError('email')}</span>
+    </label>
+
+    <fieldset class="rs-field rs-choices">
+      <legend>Best way to reach them</legend>
+      {
+        PREFERRED_CONTACTS.map((c) => (
+          <label class="rs-choice">
+            <input type="radio" name="preferredContact" value={c} checked={v('preferredContact') === c} />
+            {c}
+          </label>
+        ))
+      }
+      <span class="rs-err" data-for="preferredContact">{fieldError('preferredContact')}</span>
+    </fieldset>
+
+    <fieldset class="rs-field rs-choices">
+      <legend>Practice type</legend>
+      {
+        PRACTICE_TYPES.map((t) => (
+          <label class="rs-choice">
+            <input type="radio" name="practiceType" value={t} checked={v('practiceType') === t} />
+            {PRACTICE_TYPE_LABELS[t as keyof typeof PRACTICE_TYPE_LABELS]}
+          </label>
+        ))
+      }
+      <span class="rs-err" data-for="practiceType">{fieldError('practiceType')}</span>
+    </fieldset>
+
+    <label class="rs-field">
+      Notes (optional)
+      <textarea name="notes" maxlength="2000" rows="3">{v('notes')}</textarea>
+      <span class="rs-err" data-for="notes">{fieldError('notes')}</span>
+    </label>
+
+    <label class="rs-ok">
+      <input type="checkbox" name="permission" value="yes" checked={!sent && values.permission === true} />
+      <span data-staffing-consent>{STAFFING_CONSENT}</span>
+    </label>
+    <span class="rs-err" data-for="permission">{fieldError('permission')}</span>
+    <p class="rs-star">{STAFFING_STAR}</p>
+
+    <p class="rs-alert" id="staffing-alert" role="alert" hidden={!result?.error}>{result?.error ?? ''}</p>
+    <button class="rs-send" type="submit" id="staffing-send-button">{label}</button>
+  </form>
+</div>

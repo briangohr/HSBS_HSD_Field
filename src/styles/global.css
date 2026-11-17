@@ -1,0 +1,280 @@
+/* Henry Schein brand system — "wolf, not sheep".
+   Tokens from _brand/henry_schein/brand.yaml. Two colors per view max,
+   red as singular accent only, navy rules under headlines, no gradients. */
+
+:root {
+  /* Brand — primary */
+  --hs-red: #ed1c24; /* brand accent: headlines, rules, emphasis */
+  --btn-red: #c8102e; /* AA-contrast red for button fills under white text (5.2:1) */
+  --hs-blue: #0072bc;
+  --hs-navy: #002f6d;
+  /* Brand — secondary palette (stage accents) */
+  --hs-teal: #027b87;
+  --hs-sky: #39aad9;
+  --hs-wine: #83195b;
+  --hs-orange: #f18a00;
+  --hs-gray: #e8e8e8;
+
+  /* Semantic */
+  --text: #0a0f1a;
+  --text-2: #45506a;
+  --muted: #5d6675; /* AA on white (~5:1) — used for secondary text */
+  --bg: #ffffff;
+  --bg-accent: #f5f7fa;
+  --bg-navy: #002f6d;
+  --rule: #002f6d;
+  --line: #e3e7ee;
+
+  --maxw: 1200px;
+  --gutter: clamp(1.25rem, 4vw, 3rem);
+  --radius: 16px;
+
+  /* Jost — a free Futura-alike (geometric sans), the spiritually-correct web swap
+     for the brand kit's prescribed Futura Medium. Loaded in Base.astro. */
+  --font: "Jost", "Century Gothic", "Questrial", "Futura", "Avenir Next",
+    system-ui, -apple-system, sans-serif;
+
+  --shadow: 0 2px 6px rgba(0, 47, 109, 0.04),
+    0 18px 40px -16px rgba(0, 47, 109, 0.14);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.5em;
+  font-weight: 700;
+}
+
+/* Display type — sized down from clamp(2.6/7vw/5.2rem) for screen-real-estate
+   discipline. Mobile floor 2rem, desktop cap 3.6rem keeps single-word stage
+   names (Growth, Transition) feeling deliberate rather than thunderous. */
+.display {
+  font-size: clamp(2rem, 4.4vw, 3.6rem);
+  letter-spacing: -0.035em;
+}
+.h-eyebrow {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--hs-navy);
+  margin: 0 0 1.25rem;
+}
+.h-section {
+  font-size: clamp(1.9rem, 4vw, 3rem);
+  letter-spacing: -0.03em;
+}
+
+p {
+  margin: 0 0 1rem;
+  color: var(--text-2);
+}
+.lead {
+  font-size: clamp(1.1rem, 1.6vw, 1.4rem);
+  color: var(--text-2);
+  max-width: 60ch;
+}
+
+a {
+  color: var(--hs-blue);
+}
+
+/* Navy rule under headlines; red reserved for emphasis */
+.rule {
+  width: 64px;
+  height: 3px;
+  background: var(--rule);
+  border: 0;
+  margin: 0 0 1.5rem;
+}
+.rule--red {
+  background: var(--hs-red);
+}
+
+.accent {
+  color: var(--hs-red);
+}
+
+/* Layout */
+.wrap {
+  max-width: var(--maxw);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+section {
+  padding-block: clamp(4.5rem, 9vw, 8rem);
+}
+.section--accent {
+  background: var(--bg-accent);
+}
+.section--navy {
+  background: var(--bg-navy);
+  color: #fff;
+}
+.section--navy p,
+.section--navy .lead {
+  color: #cdd8ec;
+}
+.section--navy .h-eyebrow {
+  color: var(--hs-sky);
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  border: 2px solid var(--hs-navy);
+  background: var(--hs-navy);
+  color: #fff;
+  padding: 0.85rem 1.5rem;
+  border-radius: 999px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.btn:hover {
+  transform: translateY(-2px);
+}
+.btn--red {
+  background: var(--btn-red);
+  border-color: var(--btn-red);
+}
+.btn--ghost {
+  background: transparent;
+  color: var(--hs-navy);
+}
+.btn--ghost:hover {
+  background: var(--hs-navy);
+  color: #fff;
+}
+.section--navy .btn--ghost {
+  color: #fff;
+  border-color: #fff;
+}
+.section--navy .btn--ghost:hover {
+  background: #fff;
+  color: var(--hs-navy);
+}
+
+/* Cards */
+.card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  box-shadow: var(--shadow);
+}
+
+/* Stage accent helpers.
+   --acc = decorative (borders, bars); --acc-ink = AA-contrast for text on white.
+   sky and orange are too light for text, so their ink variants are darkened. */
+.acc-sky {
+  --acc: var(--hs-sky);
+  --acc-ink: #0e7490;
+}
+.acc-teal {
+  --acc: var(--hs-teal);
+  --acc-ink: var(--hs-teal);
+}
+.acc-blue {
+  --acc: var(--hs-blue);
+  --acc-ink: var(--hs-blue);
+}
+.acc-wine {
+  --acc: var(--hs-wine);
+  --acc-ink: var(--hs-wine);
+}
+.acc-orange {
+  --acc: var(--hs-orange);
+  --acc-ink: #a85f00;
+}
+
+/* Utility */
+.grid {
+  display: grid;
+  gap: clamp(1rem, 2.5vw, 1.75rem);
+}
+.cols-2 {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+}
+.cols-3 {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+}
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: 0.85rem;
+}
+.tag {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  background: var(--hs-gray);
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+}
+
+/* Accessibility: visible focus + skip link */
+:focus-visible {
+  outline: 3px solid var(--hs-blue);
+  outline-offset: 2px;
+}
+.skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--hs-navy);
+  color: #fff;
+  padding: 0.75rem 1rem;
+  z-index: 100;
+  border-radius: 0 0 8px 0;
+}
+.skip:focus {
+  left: 0;
+}
+
+.clean {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}

@@ -1,0 +1,568 @@
+---
+// My Team for the HealthFirst rep app (slice 5, spec v3 section 2, D4, D16, D18). Rendered
+// only when REP_APP_ENABLED is on and HSBS 1F lookup says this person is the manager on
+// at least one Active row of Brian's Team Roster (refer/[key].astro showTeam). Nobody
+// confirms anything (Brian, 11/9). The tab loads on first open from /api/team, which
+// returns display values only: no rep email, no key, only the name for a rep not
+// signed up yet, and no dollar amount unless REP_PAY_ENABLED is on. A rep's referrals
+// use the same compact rows and lead screen the rep sees (LeadStyles.astro), without
+// the contact or the partner's update text. Needs JavaScript; everything starts hidden.
+//
+// Asset rule (test 12): no bundled <style> here, only is:inline, and the script imports
+// nothing, so the rep app's bundle never moves. The script holds no dollar sign.
+// Contract: docs/field-flow-contract.md.
+
+interface Props {
+  referralKey: string;
+  host: 'rep';
+  /** Pay on: the dollar tiles and the own-pay block render. */
+  pay: boolean;
+}
+
+const { referralKey, host, pay } = Astro.props;
+---
+
+<section id="team-panel" hidden data-team-key={referralKey} data-team-host={host} data-team-pay={pay ? 'true' : 'false'}>
+  <div class={pay ? 'team-tiles team-tiles--4' : 'team-tiles'} id="team-tiles">
+    <p><strong data-team-tile="referrals">--</strong> Team referrals</p>
+    <p><strong data-team-tile="signed">--</strong> Signed</p>
+    {pay && <p><strong data-team-tile="earned">--</strong> Team earned</p>}
+    {pay && <p><strong data-team-tile="paid">--</strong> Team paid</p>}
+  </div>
+  {
+    pay && (
+      <div class="team-own" id="team-own" hidden>
+        <p id="team-own-sentence"></p>
+        <button type="button" class="team-link" id="team-own-toggle" hidden>See each award</button>
+        <ul class="team-lines" id="team-own-lines" hidden></ul>
+        {/* Board 5b award lines on each person (slice S5). Inline and only with pay on. */}
+        <style is:inline>
+          .team-row .team-award { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px solid var(--line); }
+          .team-row .team-award__co { display: block; color: var(--muted); font-size: 0.85rem; }
+          .team-row .team-award__amt { color: #1a5c2e; font-weight: 600; white-space: nowrap; }
+        </style>
+      </div>
+    )
+  }
+  <div id="team-list" hidden>
+    <h2>Your team</h2>
+    <ul class="team-list" id="team-rows"></ul>
+    <ul class="team-list" id="team-new"></ul>
+  </div>
+  <div id="team-rep" hidden>
+    <button type="button" class="lead-back" id="team-back">Back to your team</button>
+    <h2 id="team-rep-title" class="lead-title" tabindex="-1"></h2>
+    <ul class="lead-list" id="team-rep-cards"></ul>
+  </div>
+  <section class="lead-screen" id="team-lead" hidden aria-labelledby="team-lead-title">
+    <button type="button" class="lead-back" id="team-lead-back"></button>
+    <h2 class="lead-title" id="team-lead-title" tabindex="-1"></h2>
+    <div id="team-lead-body"></div>
+  </section>
+  <p class="team-status" id="team-status" role="status">Open this tab to load your team.</p>
+  <button type="button" class="team-link" id="team-refresh">Refresh</button>
+</section>
+
+
+<style is:inline>
+  #team-panel { margin-top: 0.5rem; }
+  #team-panel h2 { font-size: 1.05rem; margin: 1.25rem 0 0.5rem; }
+  #team-panel p { overflow-wrap: anywhere; }
+  .team-tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; margin-top: 1rem; }
+  .team-tiles--4 { grid-template-columns: repeat(4, 1fr); }
+  .team-tiles p { background: #fff; border: 1px solid var(--line); border-radius: 12px; margin: 0; padding: 0.6rem 0.3rem; text-align: center; font-size: 0.82rem; }
+  .team-tiles strong { display: block; font-size: 1.35rem; color: var(--hs-navy); }
+  .team-own { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 0.75rem 0.9rem; margin-top: 0.75rem; }
+  .team-own p { margin: 0 0 0.3rem; }
+  .team-note, .team-status, .team-msg { color: var(--muted); }
+  #team-panel .team-note, #team-panel .team-status { margin: 0.3rem 0; }
+  .team-list, .team-lines { list-style: none; margin: 0; padding: 0; }
+  .team-lines li { padding: 0.4rem 0; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
+  .team-new { background: #fff; border: 1px dashed var(--line); border-radius: 12px; padding: 0.7rem 0.9rem; margin-bottom: 0.5rem; }
+  #team-panel .team-new p { margin: 0; }
+  .team-row { all: unset; box-sizing: border-box; display: block; width: 100%; min-height: 44px; cursor: pointer; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 0.7rem 0.9rem; margin-bottom: 0.5rem; }
+  .team-row:focus-visible { outline: 3px solid var(--hs-sky); outline-offset: 2px; }
+  .team-row span { display: block; font-size: 0.92rem; }
+  .team-row .team-name { font-weight: 700; color: var(--hs-navy); font-size: 1rem; }
+  .team-meta { color: var(--muted); font-size: 0.88rem; }
+  #team-panel .team-money { color: #1a5c2e; font-weight: 600; }
+  #team-panel .team-red { color: var(--btn-red); font-weight: 600; }
+  .team-link { all: unset; cursor: pointer; color: var(--hs-blue); font-weight: 600; margin-top: 0.5rem; display: inline-block; }
+  .team-link:focus-visible { outline: 3px solid var(--hs-sky); outline-offset: 2px; }
+  nav.rep-tabs.rep-tabs--4 { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 380px) {
+    .team-tiles--4 { grid-template-columns: repeat(2, 1fr); }
+    nav.rep-tabs.rep-tabs--4 button { font-size: 0.85rem; padding-left: 0.2rem; padding-right: 0.2rem; }
+  }
+</style>
+
+<script>
+  // No imports (test 12). Render with textContent only. No dollar sign in this script:
+  // every amount comes from /api/team as a ready string, and only with pay on.
+  type Step = { on?: unknown; label?: unknown };
+  type Card = { id?: unknown; office?: unknown; sentLabel?: unknown; company?: unknown; companyLine?: unknown; chip?: unknown; tone?: unknown; stale?: unknown; steps?: unknown; money?: unknown };
+  type Award = { office?: unknown; company?: unknown; amount?: unknown };
+  type Member = { id?: unknown; name?: unknown; head?: unknown; counts?: unknown; money?: unknown; awards?: unknown; last?: unknown; nudge?: unknown; cards?: unknown };
+  type Team = {
+    tiles?: Record<string, unknown>;
+    team?: Member[];
+    notSignedUp?: { name?: unknown }[];
+    own?: { sentence?: unknown; lines?: unknown };
+  };
+
+  const WORDS = {
+    loading: 'Loading your team.',
+    failed: 'Your team did not load. Try again in a minute.',
+    none: 'No one is on your team in the HSBS app right now.',
+    tooMany: 'Too many tries. Please wait a few minutes.',
+    notSignedUp: 'Not signed up yet.',
+  };
+
+  const panel = document.getElementById('team-panel');
+  if (panel instanceof HTMLElement) {
+    const referralKey = panel.dataset.teamKey || '';
+    const host = panel.dataset.teamHost || '';
+    const pay = panel.dataset.teamPay === 'true';
+    const nav =
+      host === 'rep' ? document.getElementById('rep-tabs') : null;
+    const el = (id: string) => document.getElementById(id) as HTMLElement;
+    const tiles = el('team-tiles');
+    const own = document.getElementById('team-own');
+    const listBox = el('team-list');
+    const rowsList = el('team-rows');
+    const newList = el('team-new');
+    const repBox = el('team-rep');
+    const cardsList = el('team-rep-cards');
+    const leadBox = el('team-lead');
+    const leadTitle = el('team-lead-title');
+    const status = el('team-status');
+
+    const str = (v: unknown) => (typeof v === 'string' ? v : '');
+    const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
+    const node = (tag: string, text: string, className = '') => {
+      const n = document.createElement(tag);
+      if (className) n.className = className;
+      n.textContent = text;
+      return n;
+    };
+    const say = (text: string) => {
+      status.textContent = text;
+      status.hidden = !text;
+    };
+
+    let data: Team | null = null;
+    let openId = '';
+    let openCard = '';
+    // What the manager saw when opening a rep and an office. m0 and c0 are positions in one
+    // answer, not identities, and a refresh can reorder them (Codex P1 on 90fa372), so a
+    // refresh reopens a screen only when exactly one rep and office still match these.
+    let openRepName = '';
+    let openCardKey = '';
+    // The phone's own Back (Android button, iOS swipe) steps back from a lead to the rep,
+    // and from the rep to the team. Opening each screen from a tap adds one history entry
+    // with the same URL: no new route, no key anywhere new. repEntry and leadEntry are
+    // those entries' stamps (0 when none); skipPop marks the popstate our own
+    // history.back() causes.
+    let repEntry = 0;
+    let leadEntry = 0;
+    let skipPop = false;
+    let lastStamp = 0;
+    const pushEntry = () => {
+      lastStamp = Math.max(Date.now(), lastStamp + 1);
+      history.pushState({ hsbsScreen: lastStamp }, '');
+      return lastStamp;
+    };
+    const takeBack = (entry: number) => {
+      if (entry && history.state?.hsbsScreen === entry) {
+        skipPop = true;
+        history.back();
+      }
+    };
+
+    // A failed or refused load shows "--", never a 0 that only means it did not load.
+    const showTiles = (t: Record<string, unknown> | null) => {
+      tiles.querySelectorAll<HTMLElement>('[data-team-tile]').forEach((tile) => {
+        const v = t ? t[tile.dataset.teamTile || ''] : undefined;
+        tile.textContent = typeof v === 'number' && Number.isFinite(v) ? String(v) : typeof v === 'string' && v ? v : '--';
+      });
+    };
+    // Hides and empties every block, so nothing from an earlier load stays in the page.
+    const hideAll = () => {
+      if (own) own.hidden = true;
+      document.getElementById('team-own-lines')?.replaceChildren();
+      const sentence = document.getElementById('team-own-sentence');
+      if (sentence) sentence.textContent = '';
+      rowsList.replaceChildren();
+      newList.replaceChildren();
+      cardsList.replaceChildren();
+      el('team-lead-body').replaceChildren();
+      listBox.hidden = true;
+      repBox.hidden = true;
+      leadBox.hidden = true;
+    };
+
+    const renderOwn = () => {
+      if (!own) return;
+      const o = pay && data ? data.own : undefined;
+      if (!o || typeof o !== 'object') {
+        own.hidden = true;
+        return;
+      }
+      own.hidden = false;
+      el('team-own-sentence').textContent = str(o.sentence);
+      const lines = Array.isArray(o.lines) ? o.lines.map(str).filter(Boolean) : [];
+      const toggle = el('team-own-toggle');
+      const list = el('team-own-lines');
+      list.replaceChildren(...lines.map((l) => node('li', l)));
+      if (lines.length === 0) {
+        toggle.hidden = true;
+        list.hidden = true;
+      } else if (list.hidden) {
+        toggle.hidden = false;
+      }
+    };
+
+    const members = () => (data && Array.isArray(data.team) ? data.team : []);
+    const member = (id: string) => members().find((x) => str(x.id) === id) ?? null;
+    const cardsOf = (m: Member) => (Array.isArray(m.cards) ? (m.cards as Card[]) : []);
+    const cardKey = (c: Card) => str(c.office) + '|' + str(c.sentLabel);
+    const chip = (c: Card) => {
+      const tone = str(c.tone);
+      return node('span', str(c.chip), `lead-chip lead-chip--${tone === 'signed' || tone === 'closed' ? tone : 'open'}`);
+    };
+
+    // The same compact rows the rep sees on Track: office, sent date and the status chip.
+    const renderCards = (m: Member) => {
+      const name = str(m.name);
+      el('team-rep-title').textContent = name + "'s referrals";
+      const cards = cardsOf(m);
+      if (cards.length === 0) {
+        cardsList.replaceChildren(node('li', firstName(name) + " hasn't sent a referral yet.", 'team-note'));
+        return;
+      }
+      cardsList.replaceChildren(
+        ...cards.map((c) => {
+          const li = document.createElement('li');
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'lead-row';
+          b.dataset.card = str(c.id);
+          const meta = document.createElement('span');
+          meta.className = 'lead-row__meta';
+          meta.append(node('span', str(c.sentLabel)), chip(c));
+          b.append(node('span', str(c.office) || 'Office', 'lead-row__office'));
+          if (str(c.companyLine)) b.append(node('span', str(c.companyLine), 'lead-sub lead-row__company'));
+          b.append(meta);
+          if (str(c.stale)) b.append(node('span', str(c.stale), 'lead-stale'));
+          b.addEventListener('click', () => {
+            openLead(str(c.id));
+            if (openCard && !leadEntry) leadEntry = pushEntry();
+          });
+          li.append(b);
+          return li;
+        }),
+      );
+    };
+
+    // The same lead screen the rep sees, without the contact or the partner's update.
+    const drawLead = (m: Member, c: Card) => {
+      el('team-lead-back').textContent = 'Back to ' + str(m.name) + "'s referrals";
+      leadTitle.textContent = str(c.office) || 'Office';
+      const parts: HTMLElement[] = [node('p', str(c.sentLabel) + '. ' + (str(c.company) || 'HealthFirst') + '.', 'lead-sub')];
+      const now = document.createElement('p');
+      now.className = 'lead-now';
+      now.append(chip(c));
+      if (str(c.stale)) now.append(node('span', str(c.stale), 'lead-stale'));
+      parts.push(now, node('h3', 'Where it stands', 'lead-h3'));
+      const steps = document.createElement('ol');
+      steps.className = 'lead-steps';
+      for (const s of Array.isArray(c.steps) ? (c.steps as Step[]) : []) {
+        const label = str(s.label);
+        if (!label) continue;
+        const li = document.createElement('li');
+        if (str(s.on)) li.append(node('span', str(s.on), 'lead-step__on'), document.createTextNode(' '));
+        li.append(document.createTextNode(label));
+        steps.append(li);
+      }
+      parts.push(steps);
+      if (pay && str(c.money)) parts.push(node('p', str(c.money), 'lead-money'));
+      el('team-lead-body').replaceChildren(...parts);
+    };
+
+    const openLead = (cardId: string) => {
+      const m = member(openId);
+      const c = m ? cardsOf(m).find((x) => str(x.id) === cardId) : undefined;
+      if (!m || !c) return;
+      openCard = cardId;
+      openCardKey = cardKey(c);
+      drawLead(m, c);
+      repBox.hidden = true;
+      leadBox.hidden = false;
+      window.scrollTo({ top: 0 });
+      leadTitle.focus();
+    };
+    const closeLead = () => {
+      const back = openCard;
+      openCard = '';
+      openCardKey = '';
+      leadEntry = 0;
+      leadBox.hidden = true;
+      repBox.hidden = false;
+      const row = Array.from(cardsList.querySelectorAll<HTMLElement>('.lead-row')).find((r) => r.dataset.card === back);
+      row?.focus();
+    };
+    const leaveLead = () => {
+      const entry = leadEntry;
+      closeLead();
+      takeBack(entry);
+    };
+    el('team-lead-back').addEventListener('click', leaveLead);
+    leadBox.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') leaveLead();
+    });
+
+    const openRep = (id: string) => {
+      const m = member(id);
+      if (!m) {
+        closeRep();
+        return;
+      }
+      openId = id;
+      openRepName = str(m.name);
+      renderCards(m);
+      if (own) own.hidden = true;
+      listBox.hidden = true;
+      leadBox.hidden = true;
+      repBox.hidden = false;
+      el('team-rep-title').focus();
+    };
+    const closeRep = () => {
+      const back = openId;
+      openId = '';
+      openCard = '';
+      openRepName = '';
+      openCardKey = '';
+      repEntry = 0;
+      leadEntry = 0;
+      repBox.hidden = true;
+      leadBox.hidden = true;
+      render();
+      const row = Array.from(rowsList.querySelectorAll<HTMLElement>('.team-row')).find((r) => r.dataset.member === back);
+      row?.focus();
+    };
+    const leaveRep = () => {
+      const entry = repEntry;
+      closeRep();
+      takeBack(entry);
+    };
+    el('team-back').addEventListener('click', leaveRep);
+    repBox.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') leaveRep();
+    });
+    window.addEventListener('popstate', (event) => {
+      if (skipPop) {
+        skipPop = false;
+        return;
+      }
+      const at = Number(event.state?.hsbsScreen) || 0;
+      if (leadEntry && leadEntry > at) closeLead();
+      if (repEntry && repEntry > at) closeRep();
+    });
+
+    const renderTeam = () => {
+      const list = members();
+      rowsList.replaceChildren();
+      for (const m of list) {
+        const li = document.createElement('li');
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'team-row';
+        b.dataset.member = str(m.id);
+        b.append(node('span', str(m.head), 'team-name'), node('span', str(m.counts)));
+        if (pay && str(m.money)) b.append(node('span', str(m.money), 'team-money'));
+        // One line per earned award, naming its company (board 5b). Server strings only.
+        if (pay && Array.isArray(m.awards)) {
+          for (const a of m.awards as Award[]) {
+            if (!a || !str(a.amount)) continue;
+            const line = document.createElement('span');
+            line.className = 'team-award';
+            const what = document.createElement('span');
+            what.append(document.createTextNode(str(a.office) || 'Office'));
+            if (str(a.company)) what.append(node('span', str(a.company), 'team-award__co'));
+            line.append(what, node('span', str(a.amount), 'team-award__amt'));
+            b.append(line);
+          }
+        }
+        if (str(m.last)) b.append(node('span', str(m.last), m.nudge === true ? 'team-red' : 'team-meta'));
+        b.addEventListener('click', () => {
+          openRep(str(m.id));
+          if (openId && !repEntry) repEntry = pushEntry();
+        });
+        li.append(b);
+        rowsList.append(li);
+      }
+      // D4, D18: a rep on Brian's roster who hasn't signed up shows the name and nothing else.
+      const fresh = data && Array.isArray(data.notSignedUp) ? data.notSignedUp.map((x) => str(x && x.name)).filter(Boolean) : [];
+      newList.replaceChildren(
+        ...fresh.map((name) => {
+          const li = document.createElement('li');
+          li.className = 'team-new';
+          li.append(node('p', name + '. ' + WORDS.notSignedUp, 'team-who'));
+          return li;
+        }),
+      );
+      listBox.hidden = list.length === 0 && fresh.length === 0;
+      if (listBox.hidden) say(WORDS.none);
+    };
+
+    const render = () => {
+      if (!data) return;
+      tiles.hidden = false;
+      showTiles(data.tiles ?? null);
+      say('');
+      renderTeam();
+      repBox.hidden = true;
+      leadBox.hidden = true;
+      renderOwn();
+      if (openId) reopen();
+    };
+
+    // After a refresh: the same rep and office, matched by name and by office and date
+    // sent, or back to the team list (and off the history entries those screens added).
+    const reopen = () => {
+      const reps = members().filter((x) => str(x.name) === openRepName);
+      const rep = reps.length === 1 ? reps[0] : null;
+      const wanted = openCard ? openCardKey : '';
+      const cards = rep && wanted ? cardsOf(rep).filter((x) => cardKey(x) === wanted) : [];
+      const drop = (n: number) => {
+        const top = history.state?.hsbsScreen;
+        if (n > 0 && top && (top === leadEntry || top === repEntry)) {
+          skipPop = true;
+          history.go(-n);
+        }
+      };
+      if (!rep) {
+        drop((leadEntry ? 1 : 0) + (repEntry ? 1 : 0));
+        openId = '';
+        openCard = '';
+        openRepName = '';
+        openCardKey = '';
+        repEntry = 0;
+        leadEntry = 0;
+        return;
+      }
+      openCard = '';
+      openRep(str(rep.id));
+      if (!wanted) return;
+      if (cards.length === 1) {
+        openLead(str(cards[0].id));
+        return;
+      }
+      drop(leadEntry ? 1 : 0);
+      openCardKey = '';
+      leadEntry = 0;
+    };
+
+    const fail = (text: string) => {
+      data = null;
+      openId = '';
+      openCard = '';
+      openRepName = '';
+      openCardKey = '';
+      repEntry = 0;
+      leadEntry = 0;
+      tiles.hidden = false;
+      showTiles(null);
+      hideAll();
+      say(text);
+    };
+
+    const fetchTeam = async () => {
+      say(WORDS.loading);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30_000);
+      try {
+        const res = await fetch('/api/team', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ referralKey }),
+          signal: controller.signal,
+        });
+        const body = await res.json().catch(() => null);
+        // Every answer names the pay terms it was worded from; the rep app's page compares
+        // them with its own and drops stale promises (Codex P1s on #113).
+        if (body && typeof body.terms === 'string') document.dispatchEvent(new CustomEvent('hsbs:pay-terms', { detail: body.terms })); // PAY_TERMS_EVENT, rep-pay-plan.mjs (no imports here)
+        if (res.status === 404 && body && body.none === true) {
+          data = null;
+          openId = '';
+          openCard = '';
+          repEntry = 0;
+          leadEntry = 0;
+          hideAll();
+          tiles.hidden = true;
+          say(WORDS.none);
+          return;
+        }
+        if (res.status === 429) return fail(WORDS.tooMany);
+        if (res.status !== 200 || !body || typeof body !== 'object' || !Array.isArray(body.team) || !Array.isArray(body.notSignedUp)) {
+          return fail(WORDS.failed);
+        }
+        data = body as Team;
+        render();
+      } catch {
+        fail(WORDS.failed);
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
+    // One load at a time. A plain call while one runs waits for it. Refresh while a load
+    // runs queues one more read after it, so it always shows a read that started after
+    // the tap. At most one queued.
+    let inflight: Promise<void> | null = null;
+    let queued: Promise<void> | null = null;
+    let loadedOnce = false;
+    const start = (): Promise<void> => {
+      const run = fetchTeam().finally(() => {
+        if (inflight === run) inflight = null;
+      });
+      inflight = run;
+      return run;
+    };
+    const load = (force = false): Promise<void> => {
+      if (inflight) {
+        if (!force) return inflight;
+        if (!queued) {
+          queued = inflight
+            .catch(() => {})
+            .then(() => {
+              queued = null;
+              return start();
+            });
+        }
+        return queued;
+      }
+      if (loadedOnce && !force) return Promise.resolve();
+      loadedOnce = true;
+      return start();
+    };
+
+    el('team-refresh').addEventListener('click', () => load(true));
+    const ownToggle = document.getElementById('team-own-toggle');
+    ownToggle?.addEventListener('click', () => {
+      const list = el('team-own-lines');
+      list.hidden = false;
+      ownToggle.hidden = true;
+    });
+
+    const show = (tab: string) => {
+      const team = tab === 'team';
+      panel.hidden = !team;
+      if (team) load();
+    };
+
+    if (nav instanceof HTMLElement) {
+      nav.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => b.addEventListener('click', () => show(b.dataset.tab || 'send')));
+    }
+  }
+</script>

@@ -1,0 +1,1166 @@
+---
+// HealthFirst rep app (spec v3 section 2). Shown only after HSBS 1F lookup returns role
+// Rep, which it does only while REP_APP_ENABLED is on. Names on screen come from that
+// lookup. The form works without JavaScript: it POSTs back to /refer/<key>, and the
+// server runs the same path as /api/referral (src/lib/rep-submit.ts). Track My Referrals
+// needs JavaScript: one compact row per office that opens its lead screen in the app
+// (Brian, 11/9), drawn from the list answer (src/lib/rep-lead.mjs). Dollar amounts show
+// only when REP_PAY_ENABLED is on (D14), worded from the SPIFF plan in REP_PAY_PLAN
+// (src/lib/rep-pay-plan.mjs). New styles go in LeadStyles.astro (is:inline), never in
+// the bundled <style> below.
+import { GUIDE, PREFERRED_CONTACTS, REP_CONSENT, repReceipt, repSendLabel } from '../lib/rep-referral-form.mjs';
+import { EARNINGS_FOOTER } from '../lib/rep-earnings.mjs';
+import { emptyEarnings, payLine, payTerms, type PayPlan, type StaffingPayPlan } from '../lib/rep-pay-plan.mjs';
+import { companyName } from '../lib/rep-companies.mjs';
+import { staffingReceipt, staffingTerms } from '../lib/rep-staffing-form.mjs';
+import MyTeam from './MyTeam.astro';
+import LeadStyles from './LeadStyles.astro';
+import RepCompanyPanel from './RepCompanyPanel.astro';
+import RepStaffingSend from './RepStaffingSend.astro';
+
+interface Props {
+  repName: string;
+  referralKey: string;
+  submissionId: string;
+  /**
+   * The SPIFF plan that words every promise, or null: with pay off, or with pay on and
+   * REP_PAY_PLAN not parsing (then ledger amounts still show and nothing is promised).
+   */
+  payPlan: PayPlan | null;
+  /** REP_PAY_ENABLED: ledger amounts and My Earnings. Defaults to a plan being given. */
+  pay?: boolean;
+  result?: { status: number; ok?: true; error?: string; errors?: { field: string; message: string }[] };
+  values?: Record<string, unknown>;
+  /** Slice 5: the lookup says this rep is a manager (and REP_APP_ENABLED is on). */
+  showTeam?: boolean;
+  /**
+   * Field two-track spec, section 4: the company keys REP_APP_COMPANIES switches on, in
+   * table order (src/lib/rep-companies.mjs). ['HealthFirst'] is today's Send tab, as on main.
+   */
+  companies?: string[];
+  /** With more than one company, the one whose form is open; '' opens the company choice. */
+  picked?: string;
+  /**
+   * The staffing pay plan (REP_PAY_PLAN_STAFFING, all three parts), or null. With null, or
+   * with pay off, the staffing form and receipt show no dollar amount. It is also named in
+   * the page's pay terms, so a staffing plan change drops this page's promises (slice S5).
+   */
+  staffingPlan?: StaffingPayPlan | null;
+}
+
+const { repName, referralKey, submissionId, payPlan, pay, result, values = {}, showTeam = false, companies = ['HealthFirst'], picked = '', staffingPlan = null } = Astro.props;
+// classic: HealthFirst only, the Send tab exactly as on main. Otherwise the Send tab names
+// each company, and with two or more it opens on a choice.
+const classic = companies.length === 1 && companies[0] === 'HealthFirst';
+const choice = companies.length > 1;
+const open = choice ? (companies.includes(picked) ? picked : '') : companies[0];
+const hasHealthFirst = companies.includes('HealthFirst');
+const hasStaffing = companies.includes('Staffing');
+const payEnabled = pay ?? payPlan !== null;
+// Two or three tabs keep today's labels. Four (pay on and My Team) use short ones.
+const tabCount = 2 + (payEnabled ? 1 : 0) + (showTeam ? 1 : 0);
+const shortTabs = tabCount === 4;
+const tabClass = tabCount === 4 ? 'rep-tabs rep-tabs--4' : tabCount === 3 ? 'rep-tabs rep-tabs--3' : 'rep-tabs';
+const sent = result?.ok === true;
+// A staffing send's answer is worded for Direct Dental, never HealthFirst. No dollars
+// unless pay is on and a staffing plan is set.
+const staffingSend = values.company === 'Staffing';
+// The form a no-JavaScript post came from: Staffing, or else HealthFirst (a post naming no
+// company, two, or one that is not offered is treated as the HealthFirst form, the only
+// form main has). Its answer shows inside that form only when that form is the open panel.
+// Otherwise (REP_APP_COMPANIES changed between page load and post, or the post named no
+// company, two or an unknown one) the refusal shows above the panels, so it is never dropped.
+const postedPanel = staffingSend ? 'Staffing' : 'HealthFirst';
+const ownPanel = Boolean(result) && postedPanel === open;
+const refusedHere = Boolean(result?.error) && !ownPanel;
+// Names the company whose referral was refused when it is not the one on screen.
+const refusedName = refusedHere && typeof values.company === 'string' && values.company !== open ? companyName(values.company) : '';
+// The HealthFirst form keeps only its own answer and values: never a staffing post's
+// errors, consent or fields.
+const hfResult = ownPanel && !staffingSend ? result : undefined;
+const hfValues = ownPanel && !staffingSend ? values : {};
+const fieldError = (f: string) => hfResult?.errors?.find((e) => e.field === f)?.message ?? '';
+const v = (k: string) => (sent ? '' : typeof hfValues[k] === 'string' ? (hfValues[k] as string) : '');
+const sPlan = payEnabled ? staffingPlan : null;
+const receipt = staffingSend
+  ? staffingReceipt({ contactName: values.contactName, practiceType: values.practiceType, plan: sPlan })
+  : repReceipt({ contactName: values.contactName, plan: payPlan });
+const label = repSendLabel(sent ? {} : hfValues);
+// Each company form has its own submission id, so a send from one never reuses the other's
+// (1F remembers a good send by its id). The id the server holds belongs to the form that was
+// posted; the other form gets a fresh one.
+const healthFirstId = staffingSend ? crypto.randomUUID() : submissionId;
+const staffingId = staffingSend ? submissionId : crypto.randomUUID();
+---
+
+<div class="rep" id="rep-app" data-referral-key={referralKey} data-pay-plan={payTerms(payEnabled, payPlan, sPlan)} data-staffing-plan={staffingTerms(sPlan) || undefined}>
+  <header class="rep-who">
+    <h1>{classic ? 'HealthFirst compliance referral' : 'Send a referral'}</h1>
+    <p>Sending as {repName}.</p>
+    {classic && payPlan && <p class="rep-pay">{payLine(payPlan)}</p>}
+  </header>
+  {
+    !classic && (
+      <style is:inline>
+        .rep-pick-list { display: grid; gap: 0.6rem; }
+        .rep-pick-company { display: flex; align-items: center; justify-content: center; min-height: 52px; border: 1.5px solid var(--hs-navy); border-radius: 12px; background: #fff; color: var(--hs-navy); font-weight: 600; font-size: 1.05rem; text-decoration: none; }
+        .rep-pick-company:focus-visible { outline: 3px solid var(--hs-sky); outline-offset: 2px; }
+        .rep-pick-again { display: inline-block; margin: 0.75rem 0 0; color: var(--hs-blue); font-weight: 600; }
+        .rep-company-pay { margin: 0.4rem 0 0; font-weight: 600; font-size: 0.92rem; }
+      </style>
+    )
+  }
+
+  <section id="rep-send" hidden={sent}>
+    {/* A refused send whose form is not the open panel (a page loaded before the company
+      rule posts no company, so the choice opens; or REP_APP_COMPANIES changed between page
+      load and post): its error shows here, or the rep would see nothing. A form that is
+      the open panel shows its own (#rep-alert, #staffing-alert). */}
+    {
+      refusedHere && (
+        <p class="rep-alert" id="rep-refused" role="alert">{refusedName ? `Your ${refusedName} referral did not send. ` : ''}{result?.error}</p>
+      )
+    }
+    {
+      choice && (
+        <div id="rep-pick" hidden={Boolean(open)}>
+          <h2 class="rep-h2" id="rep-pick-title">Who is this referral for?</h2>
+          <div class="rep-pick-list" role="group" aria-labelledby="rep-pick-title">
+            {companies.map((k) => (
+              <a class="rep-pick-company" href={`/refer/${referralKey}?company=${k}`} data-company={k}>
+                {companyName(k)}
+              </a>
+            ))}
+          </div>
+        </div>
+      )
+    }
+    {hasHealthFirst && (
+    <RepCompanyPanel wrap={!classic} company="HealthFirst" open={open === 'HealthFirst'}>
+    {choice && <a class="rep-pick-again" href={`/refer/${referralKey}`} data-pick-again>Pick another company</a>}
+    {!classic && <h2 class="rep-h2">HealthFirst compliance referral</h2>}
+    {!classic && payPlan && <p class="rep-company-pay">{payLine(payPlan)}</p>}
+    <div class="rep-guide" aria-label="Before you send">
+      {GUIDE.map((line) => <p>{line}</p>)}
+    </div>
+
+    <form id="rep-form" method="post" action={`/refer/${referralKey}`} novalidate>
+      <input type="hidden" name="app" value="rep" />
+      <input type="hidden" name="company" value="HealthFirst" />
+      <input type="hidden" name="submissionId" value={healthFirstId} />
+
+      <label class="rep-field">
+        Contact name
+        <input name="contactName" value={v('contactName')} maxlength="120" autocomplete="off" required />
+        <span class="rep-err" data-for="contactName">{fieldError('contactName')}</span>
+      </label>
+      <label class="rep-field">
+        Practice name
+        <input name="practiceName" value={v('practiceName')} maxlength="160" autocomplete="off" required />
+        <span class="rep-err" data-for="practiceName">{fieldError('practiceName')}</span>
+      </label>
+      <label class="rep-field">
+        JDE #
+        <input name="jde" value={v('jde')} inputmode="numeric" pattern="[0-9]*" maxlength="40" autocomplete="off" required />
+        <span class="rep-err" data-for="jde">{fieldError('jde')}</span>
+      </label>
+      <label class="rep-field">
+        Best phone
+        <input name="officePhone" value={v('officePhone')} type="tel" inputmode="tel" maxlength="40" autocomplete="off" required />
+        <span class="rep-err" data-for="officePhone">{fieldError('officePhone')}</span>
+      </label>
+      <label class="rep-field">
+        Email (optional)
+        <input name="email" value={v('email')} type="email" inputmode="email" maxlength="320" autocomplete="off" />
+        <span class="rep-err" data-for="email">{fieldError('email')}</span>
+      </label>
+
+      <fieldset class="rep-field rep-choices">
+        <legend>Best way to reach them</legend>
+        {
+          PREFERRED_CONTACTS.map((c) => (
+            <label class="rep-choice">
+              <input type="radio" name="preferredContact" value={c} checked={v('preferredContact') === c} />
+              {c}
+            </label>
+          ))
+        }
+        <span class="rep-err" data-for="preferredContact">{fieldError('preferredContact')}</span>
+      </fieldset>
+
+      <label class="rep-field">
+        Notes (optional)
+        <textarea name="notes" maxlength="2000" rows="3">{v('notes')}</textarea>
+        <span class="rep-err" data-for="notes">{fieldError('notes')}</span>
+      </label>
+
+      <label class="rep-ok">
+        <input type="checkbox" name="permission" value="yes" checked={!sent && hfValues.permission === true} />
+        {REP_CONSENT}
+      </label>
+      <span class="rep-err" data-for="permission">{fieldError('permission')}</span>
+
+      <p class="rep-alert" id="rep-alert" role="alert" hidden={!hfResult?.error}>{hfResult?.error ?? ''}</p>
+      <button class="rep-send" type="submit" id="rep-send-button">{label}</button>
+    </form>
+    </RepCompanyPanel>
+    )}
+    {
+      hasStaffing && (
+        <RepCompanyPanel wrap company="Staffing" open={open === 'Staffing'}>
+          {choice && <a class="rep-pick-again" href={`/refer/${referralKey}`} data-pick-again>Pick another company</a>}
+          <RepStaffingSend
+            repName={repName}
+            referralKey={referralKey}
+            submissionId={staffingId}
+            plan={sPlan}
+            result={ownPanel && staffingSend ? result : undefined}
+            values={ownPanel && staffingSend ? values : {}}
+          />
+        </RepCompanyPanel>
+      )
+    }
+  </section>
+
+  <section class="rep-receipt" id="rep-receipt" hidden={!sent} tabindex="-1">
+    <p class="rep-check" aria-hidden="true">&#10003;</p>
+    <h2>{receipt.title}</h2>
+    <p id="rep-receipt-calls">{receipt.calls}</p>
+    <p id="rep-receipt-money" hidden={!receipt.money}>{receipt.money}</p>
+    <button type="button" class="rep-send" id="rep-track-this" hidden>Track this referral</button>
+    <a class="rep-another" href={`/refer/${referralKey}`}>Send another referral</a>
+  </section>
+
+  <section id="rep-track" hidden>
+    <div id="rep-track-main">
+      <div class={payEnabled ? 'rep-tiles rep-tiles--4' : 'rep-tiles'}>
+        <p><strong data-count="sent">0</strong> Sent</p>
+        <p><strong data-count="inProgress">0</strong> In progress</p>
+        <p><strong data-count="signed">0</strong> Signed</p>
+        {payEnabled && (
+          <p><strong data-money="earned">--</strong> Earned<span class="rep-sub" data-money-paid>Paid --</span></p>
+        )}
+      </div>
+      {payEnabled && <p class="rep-status" id="rep-money-status" role="status" hidden>Your earnings did not load. Try again in a minute.</p>}
+      <h2 class="rep-h2">Your referrals</h2>
+      <p class="rep-status" id="rep-track-status" role="status">Open this tab to load your referrals.</p>
+      <ul class="lead-list" id="rep-track-list"></ul>
+      <button type="button" class="rep-link" id="rep-refresh">Refresh</button>
+      <h2 class="rep-h2">Latest updates</h2>
+      <ul class="rep-feed" id="rep-feed"></ul>
+      <button type="button" class="rep-link" id="rep-feed-all" hidden>See all</button>
+    </div>
+    <section class="lead-screen" id="rep-lead" hidden aria-labelledby="rep-lead-title">
+      <button type="button" class="lead-back" id="rep-lead-back">Back to Track</button>
+      <h2 class="lead-title" id="rep-lead-title" tabindex="-1"></h2>
+      <div id="rep-lead-body"></div>
+    </section>
+  </section>
+
+  {
+    payEnabled && (
+      <section id="rep-earnings" hidden>
+        <div class="rep-tiles">
+          <p><strong data-money="earned">--</strong> Earned</p>
+          <p><strong data-money="waiting">--</strong> Waiting</p>
+          <p><strong data-money="paid">--</strong> Paid</p>
+        </div>
+        <p class="rep-status" id="rep-pending" hidden></p>
+        <p class="rep-status" id="rep-upto" hidden></p>
+        <p class="rep-status" id="rep-earnings-status" role="status">Open this tab to load your earnings.</p>
+        <ul class="rep-feed" id="rep-earnings-lines"></ul>
+        <p class="rep-foot" id="rep-earnings-foot">{EARNINGS_FOOTER}</p>
+        {/* Board 5a lines (slice S5). Inline and only with pay on, so a pay-off page is unchanged. */}
+        <style is:inline>
+          #rep-earnings-lines .rep-earn__top { display: flex; justify-content: space-between; gap: 0.5rem; font-weight: 600; }
+          #rep-earnings-lines .rep-earn__amt { color: #1a5c2e; font-variant-numeric: tabular-nums; white-space: nowrap; }
+          #rep-earnings-lines .rep-earn__co { display: block; color: var(--muted); font-size: 0.9rem; }
+          #rep-earnings-lines .rep-earn__what, #rep-earnings-lines .rep-earn__status { display: block; font-size: 0.95rem; }
+          #rep-earnings-lines .rep-earn__status { color: var(--muted); }
+        </style>
+        <template id="rep-empty-earnings">{emptyEarnings(payPlan)}</template>
+      </section>
+    )
+  }
+
+  {showTeam && <MyTeam host="rep" referralKey={referralKey} pay={payEnabled} />}
+  <LeadStyles />
+
+  <nav class={tabClass} id="rep-tabs" aria-label="Rep app" hidden>
+    <button type="button" data-tab="send" aria-current="page">{shortTabs ? 'Send' : 'Send a Referral'}</button>
+    <button type="button" data-tab="track" aria-current="false">{shortTabs ? 'Track' : 'Track My Referrals'}</button>
+    {payEnabled && <button type="button" data-tab="earnings" aria-current="false">{shortTabs ? 'Earnings' : 'My Earnings'}</button>}
+    {showTeam && <button type="button" data-tab="team" aria-current="false">{shortTabs ? 'Team' : 'My Team'}</button>}
+  </nav>
+</div>
+
+<script>
+  import { CLIENT_WAIT_MS, SENDING_MESSAGE, TIMEOUT_MESSAGE } from '../lib/field-form.mjs';
+  import { repReceipt, repSendLabel, validateRepReferral } from '../lib/rep-referral-form.mjs';
+  import { PAY_TERMS_EVENT, TERMS_CHANGED, healthFirstTerms, parsePayPlan } from '../lib/rep-pay-plan.mjs';
+  import { staffingReceipt, staffingSendLabel, validateStaffingReferral } from '../lib/rep-staffing-form.mjs';
+
+  const root = document.getElementById('rep-app');
+  if (root) {
+    const referralKey = root.dataset.referralKey ?? '';
+    // The pay terms the server rendered with (payTerms in rep-pay-plan.mjs). Empty means pay
+    // is off. "none" means pay is on with no plan: ledger amounts, no promise.
+    const pageTerms = root.dataset.payPlan ?? '';
+    const payEnabled = pageTerms !== '';
+    // The HealthFirst part of the terms; a staffing plan, when set, follows it (slice S5).
+    const payPlan = payEnabled ? parsePayPlan(healthFirstTerms(pageTerms)) : null;
+    // Every money answer and a good send name the server's terms now. When they differ from
+    // the page's, every promise this page worded itself (the pay line, the receipt line) is
+    // out of date: it is replaced by a reload note, and no new one is worded. Lines the
+    // server words (money lines, "Up to", the empty Earnings line) are always current.
+    let termsStale = false;
+    // The staffing promise lines ([data-staffing-pay], RepStaffingSend.astro) are worded
+    // from the staffing plan, which the terms name after ";staffing=" (slice S5). Any money
+    // answer whose staffing part differs from the page's (a changed, bad or unset
+    // REP_PAY_PLAN_STAFFING, or pay turned off) drops every one of them for the reload
+    // words, and no staffing receipt promise is worded after that (Codex P1 on #132).
+    let staffingStale = false;
+    const dropStaffingPromises = () => {
+      if (staffingStale) return;
+      staffingStale = true;
+      root.querySelectorAll<HTMLElement>('[data-staffing-pay]').forEach((el) => (el.textContent = TERMS_CHANGED));
+    };
+    const staffingPart = (t: string) => {
+      const at = t.indexOf(';staffing=');
+      return at < 0 ? '' : t.slice(at);
+    };
+    const noteTerms = (terms: unknown) => {
+      if (typeof terms !== 'string' || terms === pageTerms) return;
+      if (staffingPart(terms) !== staffingPart(pageTerms)) dropStaffingPromises();
+      if (termsStale) return;
+      termsStale = true;
+      root.querySelectorAll<HTMLElement>('.rep-pay, .rep-company-pay').forEach((el) => (el.textContent = TERMS_CHANGED));
+      const receiptLine = document.getElementById('rep-receipt-money');
+      if (receiptLine) {
+        receiptLine.textContent = '';
+        receiptLine.hidden = true;
+      }
+    };
+    // My Team (MyTeam.astro) hands on the terms of each /api/team answer the same way.
+    document.addEventListener(PAY_TERMS_EVENT, (e) => noteTerms((e as CustomEvent).detail));
+    // Absent only when REP_APP_COMPANIES switches HealthFirst off (no HealthFirst form).
+    const form = document.getElementById('rep-form') as HTMLFormElement;
+    const sendButton = document.getElementById('rep-send-button') as HTMLButtonElement;
+    const alertBox = document.getElementById('rep-alert') as HTMLElement;
+    const sendPanel = document.getElementById('rep-send') as HTMLElement;
+    const receipt = document.getElementById('rep-receipt') as HTMLElement;
+    const trackPanel = document.getElementById('rep-track') as HTMLElement;
+    const tabs = document.getElementById('rep-tabs') as HTMLElement;
+    const trackThis = document.getElementById('rep-track-this') as HTMLButtonElement;
+    tabs.hidden = false;
+    trackThis.hidden = false;
+
+    // Company choice (field two-track spec, section 4), on only when REP_APP_COMPANIES lists
+    // two or more. Each choice is a link that works without JavaScript (?company=<key>);
+    // here it opens the panel in place.
+    const pick = document.getElementById('rep-pick');
+    const panels = [...root.querySelectorAll<HTMLElement>('[data-company-panel]')];
+    const openCompany = (key: string) => {
+      document.getElementById('rep-refused')?.setAttribute('hidden', '');
+      if (pick) pick.hidden = Boolean(key);
+      panels.forEach((p) => (p.hidden = p.dataset.companyPanel !== key));
+      const target = key ? panels.find((p) => p.dataset.companyPanel === key) : pick;
+      target?.querySelector<HTMLElement>('h2, a, input')?.focus();
+    };
+    root.querySelectorAll<HTMLAnchorElement>('[data-company]').forEach((a) =>
+      a.addEventListener('click', (event) => {
+        event.preventDefault();
+        openCompany(a.dataset.company ?? '');
+      }),
+    );
+    root.querySelectorAll<HTMLAnchorElement>('[data-pick-again]').forEach((a) =>
+      a.addEventListener('click', (event) => {
+        event.preventDefault();
+        openCompany('');
+      }),
+    );
+
+    const read = () => {
+      const data = new FormData(form);
+      return {
+        contactName: String(data.get('contactName') ?? ''),
+        practiceName: String(data.get('practiceName') ?? ''),
+        jde: String(data.get('jde') ?? ''),
+        officePhone: String(data.get('officePhone') ?? ''),
+        email: String(data.get('email') ?? ''),
+        preferredContact: String(data.get('preferredContact') ?? ''),
+        notes: String(data.get('notes') ?? ''),
+        permission: data.get('permission') === 'yes',
+      };
+    };
+    let sending = false;
+    const refresh = () => {
+      if (!sending) sendButton.textContent = repSendLabel(read());
+    };
+    form?.addEventListener('input', refresh);
+    form?.addEventListener('change', refresh);
+
+    const showErrors = (errors: { field: string; message: string }[]) => {
+      form.querySelectorAll<HTMLElement>('.rep-err').forEach((el) => {
+        el.textContent = errors.find((e) => e.field === el.dataset.for)?.message ?? '';
+      });
+      const first = errors[0]?.field;
+      const el = first ? form.elements.namedItem(first) : null;
+      if (el instanceof HTMLElement) el.focus();
+    };
+    const say = (text: string) => {
+      alertBox.textContent = text;
+      alertBox.hidden = !text;
+    };
+
+    // After a confirmed send, the next referral starts blank with a new id. A failed
+    // send keeps its id, so trying again can't make a second row.
+    const clearForm = () => {
+      form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea').forEach((el) => {
+        if (el instanceof HTMLInputElement && el.type === 'hidden') return;
+        if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) el.checked = false;
+        else el.value = '';
+      });
+      const id = form.elements.namedItem('submissionId');
+      if (id instanceof HTMLInputElement) id.value = crypto.randomUUID();
+    };
+
+    // A confirmed send, from either form: the receipt in that company's words, then
+    // everything held in this page is older than the send.
+    const showSent = (copy: { title: string; calls: string; money: string }) => {
+      (receipt.querySelector('h2') as HTMLElement).textContent = copy.title;
+      (document.getElementById('rep-receipt-calls') as HTMLElement).textContent = copy.calls;
+      const receiptMoney = document.getElementById('rep-receipt-money') as HTMLElement;
+      receiptMoney.textContent = copy.money;
+      receiptMoney.hidden = !copy.money;
+      sendPanel.hidden = true;
+      receipt.hidden = false;
+      receipt.focus();
+      // Drop what was loaded, and make the next Track or Earnings read skip the server's
+      // short cache too (a different serverless instance may still hold the answer from
+      // before the send).
+      loaded = null;
+      money = null;
+      moneyAt = 0;
+      moneyInstalled = ++moneySeq; // every money request already out is now older than the send
+      freshList = true;
+      freshMoney = true;
+      sendGen += 1;
+    };
+
+    // Staffing form (field two-track spec, section 4): the same send path as the form
+    // above, with a practice type, Direct Dental's words, and its own receipt. Absent unless
+    // REP_APP_COMPANIES lists Staffing.
+    const sForm = document.getElementById('staffing-form') as HTMLFormElement | null;
+    if (sForm) {
+      const sButton = document.getElementById('staffing-send-button') as HTMLButtonElement;
+      const sAlert = document.getElementById('staffing-alert') as HTMLElement;
+      const sPlanText = root.dataset.staffingPlan ?? '';
+      const [sPrivate, sGroup] = sPlanText.split(',').map(Number);
+      const sPlan = sPlanText && sPrivate > 0 && sGroup > 0 ? { reachedPrivate: sPrivate, reachedGroup: sGroup } : null;
+      // A good staffing send names the staffing terms the server holds now. When they differ
+      // from the page's, the page's staffing promise is out of date: it is replaced by a
+      // reload note and no new one is worded.
+      const noteStaffingTerms = (terms: unknown) => {
+        if (staffingStale || typeof terms !== 'string' || terms === sPlanText) return;
+        dropStaffingPromises();
+      };
+      const sRead = () => {
+        const data = new FormData(sForm);
+        return {
+          contactName: String(data.get('contactName') ?? ''),
+          practiceName: String(data.get('practiceName') ?? ''),
+          jde: String(data.get('jde') ?? ''),
+          officePhone: String(data.get('officePhone') ?? ''),
+          email: String(data.get('email') ?? ''),
+          preferredContact: String(data.get('preferredContact') ?? ''),
+          practiceType: String(data.get('practiceType') ?? ''),
+          notes: String(data.get('notes') ?? ''),
+          permission: data.get('permission') === 'yes',
+        };
+      };
+      let sSending = false;
+      const sRefresh = () => {
+        if (!sSending) sButton.textContent = staffingSendLabel(sRead());
+      };
+      sForm.addEventListener('input', sRefresh);
+      sForm.addEventListener('change', sRefresh);
+      const sErrors = (errors: { field: string; message: string }[]) => {
+        sForm.querySelectorAll<HTMLElement>('.rs-err').forEach((el) => {
+          el.textContent = errors.find((e) => e.field === el.dataset.for)?.message ?? '';
+        });
+        const first = errors[0]?.field;
+        const el = first ? sForm.elements.namedItem(first) : null;
+        if (el instanceof HTMLElement) el.focus();
+        else if (el instanceof RadioNodeList && el[0] instanceof HTMLElement) el[0].focus();
+      };
+      const sSay = (text: string) => {
+        sAlert.textContent = text;
+        sAlert.hidden = !text;
+      };
+      // A send with no clear answer (a timeout, a dropped connection, a 5xx) may still have
+      // been saved under its id. The retry must resend exactly what was first posted, so
+      // the form is put back to the posted values and the receipt is worded from them,
+      // never from fields changed since. A clear answer (a refusal or a success) ends it.
+      let pending: { id: string; fields: ReturnType<typeof sRead> } | null = null;
+      const sRestore = (fields: ReturnType<typeof sRead>) => {
+        for (const [name, value] of Object.entries(fields)) {
+          const el = sForm.elements.namedItem(name);
+          if (el instanceof RadioNodeList) {
+            el.forEach((r) => {
+              if (r instanceof HTMLInputElement) r.checked = r.value === value;
+            });
+          } else if (el instanceof HTMLInputElement && el.type === 'checkbox') el.checked = value === true;
+          else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) el.value = String(value);
+        }
+      };
+      sForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (sSending) return;
+        if (pending) sRestore(pending.fields);
+        const fields = pending ? pending.fields : sRead();
+        const check = validateStaffingReferral(fields);
+        if (!check.ok) {
+          sErrors(check.errors);
+          sSay('');
+          return;
+        }
+        sErrors([]);
+        sSay('');
+        sSending = true;
+        sButton.disabled = true;
+        sButton.textContent = SENDING_MESSAGE;
+        const submissionId = pending ? pending.id : String(new FormData(sForm).get('submissionId') ?? '');
+        pending = { id: submissionId, fields };
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), CLIENT_WAIT_MS);
+        try {
+          const res = await fetch('/api/referral', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ app: 'rep', company: 'Staffing', referralKey, submissionId, ...fields }),
+            signal: controller.signal,
+          });
+          // Any answer under 500 is clear: it was saved, or it was refused and nothing was.
+          if (res.status < 500) pending = null;
+          const body = await res.json().catch(() => ({}));
+          if (res.ok && body.ok) {
+            // The staffing promise depends only on the staffing terms, never on the
+            // HealthFirst marker (which only words HealthFirst's own lines).
+            noteTerms(body.terms);
+            noteStaffingTerms(body.staffingTerms);
+            showSent(
+              staffingReceipt({
+                contactName: fields.contactName,
+                practiceType: fields.practiceType,
+                plan: payEnabled && !staffingStale ? sPlan : null,
+              }),
+            );
+            // The next referral starts blank with a new id. A failed send keeps its id.
+            sForm.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea').forEach((el) => {
+              if (el instanceof HTMLInputElement && el.type === 'hidden') return;
+              if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) el.checked = false;
+              else el.value = '';
+            });
+            const id = sForm.elements.namedItem('submissionId');
+            if (id instanceof HTMLInputElement) id.value = crypto.randomUUID();
+            return;
+          }
+          if (Array.isArray(body.errors)) sErrors(body.errors);
+          sSay(body.error ?? (body.timeout ? TIMEOUT_MESSAGE : 'This referral did not send.'));
+        } catch {
+          sSay(controller.signal.aborted ? TIMEOUT_MESSAGE : 'This referral did not send. Check your connection and try again.');
+        } finally {
+          clearTimeout(timer);
+          sSending = false;
+          sButton.disabled = false;
+          sRefresh();
+        }
+      });
+    }
+
+    // A send with no clear answer (a timeout, a dropped connection, a 5xx) may still have
+    // been saved under its id. The retry must resend exactly what was first posted, so the
+    // form is put back to the posted values and the receipt is worded from them, never from
+    // fields changed since (Codex P1 on HSBS_HSD_Field#1; the staffing form does the same).
+    // A clear answer (a refusal or a success) ends it.
+    let hfPending: { id: string; fields: ReturnType<typeof read> } | null = null;
+    const restore = (fields: ReturnType<typeof read>) => {
+      for (const [name, value] of Object.entries(fields)) {
+        const el = form.elements.namedItem(name);
+        if (el instanceof RadioNodeList) {
+          el.forEach((r) => {
+            if (r instanceof HTMLInputElement) r.checked = r.value === value;
+          });
+        } else if (el instanceof HTMLInputElement && el.type === 'checkbox') el.checked = value === true;
+        else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) el.value = String(value);
+      }
+    };
+    form?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (sending) return;
+      if (hfPending) restore(hfPending.fields);
+      const fields = hfPending ? hfPending.fields : read();
+      const check = validateRepReferral(fields);
+      if (!check.ok) {
+        showErrors(check.errors);
+        say('');
+        return;
+      }
+      showErrors([]);
+      say('');
+      sending = true;
+      sendButton.disabled = true;
+      sendButton.textContent = SENDING_MESSAGE;
+      const submissionId = hfPending ? hfPending.id : String(new FormData(form).get('submissionId') ?? '');
+      hfPending = { id: submissionId, fields };
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), CLIENT_WAIT_MS);
+      try {
+        const res = await fetch('/api/referral', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ app: 'rep', company: 'HealthFirst', referralKey, submissionId, ...fields }),
+          signal: controller.signal,
+        });
+        // Any answer under 500 is clear: it was saved, or it was refused and nothing was.
+        if (res.status < 500) hfPending = null;
+        const body = await res.json().catch(() => ({}));
+        if (res.ok && body.ok) {
+          noteTerms(body.terms);
+          showSent(repReceipt({ contactName: fields.contactName, plan: termsStale ? null : payPlan }));
+          clearForm();
+          return;
+        }
+        if (Array.isArray(body.errors)) showErrors(body.errors);
+        say(body.error ?? (body.timeout ? TIMEOUT_MESSAGE : 'This referral did not send.'));
+      } catch {
+        say(controller.signal.aborted ? TIMEOUT_MESSAGE : 'This referral did not send. Check your connection and try again.');
+      } finally {
+        clearTimeout(timer);
+        sending = false;
+        sendButton.disabled = false;
+        refresh();
+      }
+    });
+
+    // Track My Referrals: one compact row per office, newest first, and a lead screen
+    // for each (Brian, 11/9). The server sends both ready to draw (src/lib/rep-lead.mjs).
+    type Lead = {
+      id: string;
+      office: string;
+      sentLabel: string;
+      company: string;
+      companyLine?: string;
+      chip: string;
+      tone: string;
+      stale: string;
+      steps: { on: string; label: string }[];
+      contact?: string;
+      update?: { on: string; text: string };
+    };
+    let loaded: { counts?: Record<string, number>; leads?: Lead[]; feed?: { on?: string; label: string; referralId: string }[] } | null = null;
+    type Money = {
+      summary: {
+        earned: number;
+        waiting: number;
+        paid: number;
+        pendingReview: number;
+        upTo: number;
+        upToText?: string;
+        emptyText?: string;
+        footer?: string;
+        lines: { referralId: string; label: string; office?: string; amount?: string; company?: string; what?: string; status?: string }[];
+      };
+      money: { lines: Record<string, string>; feed: { on: string; label: string; referralId: string }[] };
+      terms?: string;
+    };
+    let money: Money | null = null;
+    // When the money was last loaded. The Earnings tab reuses it for 45 seconds instead of
+    // asking again right after Track loaded it; the server keeps its own short cache.
+    let moneyAt = 0;
+    // Every money request takes a number when it STARTS (Track's list-and-money read, and the
+    // Earnings read). A response installs its money only if no newer request has installed
+    // theirs already, so a slow older answer never replaces a newer one, or blanks it. Order is
+    // by start, not by how fresh the data is; the send counter below is what guards a send.
+    let moneySeq = 0;
+    let moneyInstalled = 0;
+    // The money number the installed Track list was read with. The list is valid only for that
+    // money: when Earnings installs newer money on its own, the list is dropped (see loadEarnings).
+    let trackMoneySeq = 0;
+    const MONEY_REUSE_MS = 45_000;
+    // Set by a successful send. Until the list has loaded fresh (Track) and the money has
+    // loaded fresh (Track with pay on, or Earnings), reads ask for a fresh answer, whichever
+    // screen asks first. Kept apart so a ledger that failed after the send is asked fresh again.
+    let freshList = false;
+    let freshMoney = false;
+    // Counts successful sends. A read that began before a send and ends after it is
+    // older than the send, so it is dropped and asked again.
+    let sendGen = 0;
+    // Install a money answer (null means the read failed) unless a newer request already did.
+    const installMoney = (seq: number, m: Money | null): boolean => {
+      if (seq < moneyInstalled) return false;
+      moneyInstalled = seq;
+      if (m) noteTerms(m.terms);
+      money = m;
+      moneyAt = Date.now();
+      return true;
+    };
+    const usd = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
+    const loadMoney = async (fresh = false) => {
+      if (!payEnabled) return null;
+      const res = await fetch('/api/earnings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ referralKey, fresh: fresh || freshMoney }),
+      });
+      if (!res.ok) {
+        // A refusal can still name the terms (pay switched off answers 404 with '').
+        noteTerms(((await res.json().catch(() => null)) as { terms?: unknown } | null)?.terms);
+        throw new Error('earnings');
+      }
+      return (await res.json()) as Money;
+    };
+    let showAllFeed = false;
+    const trackStatus = document.getElementById('rep-track-status') as HTMLElement;
+    const trackList = document.getElementById('rep-track-list') as HTMLElement;
+    const feedList = document.getElementById('rep-feed') as HTMLElement;
+    const feedAll = document.getElementById('rep-feed-all') as HTMLButtonElement;
+
+    // Dollar tiles show the ledger or "--", never a $0 that only means it didn't load.
+    const moneyStatus = document.getElementById('rep-money-status');
+    const showMoney = () => {
+      if (!payEnabled) return;
+      const m = money;
+      root.querySelectorAll<HTMLElement>('[data-money]').forEach((el) => {
+        const k = el.dataset.money as 'earned' | 'waiting' | 'paid';
+        el.textContent = m ? usd(m.summary[k] ?? 0) : '--';
+      });
+      root.querySelectorAll<HTMLElement>('[data-money-paid]').forEach((el) => (el.textContent = m ? `Paid ${usd(m.summary.paid)}` : 'Paid --'));
+      if (moneyStatus) moneyStatus.hidden = Boolean(m);
+    };
+
+    const node = (tag: string, text: string, className = '') => {
+      const n = document.createElement(tag);
+      if (className) n.className = className;
+      n.textContent = text;
+      return n;
+    };
+    const chip = (lead: Lead) => node('span', lead.chip, `lead-chip lead-chip--${lead.tone === 'signed' || lead.tone === 'closed' ? lead.tone : 'open'}`);
+    const trackMain = document.getElementById('rep-track-main') as HTMLElement;
+    const leadPanel = document.getElementById('rep-lead') as HTMLElement;
+    const leadTitle = document.getElementById('rep-lead-title') as HTMLElement;
+    const leadBody = document.getElementById('rep-lead-body') as HTMLElement;
+    // One row per office: a button, so a tap, Enter or Space opens the lead screen.
+    const renderRow = (lead: Lead) => {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'lead-row';
+      b.dataset.leadId = lead.id;
+      const meta = document.createElement('span');
+      meta.className = 'lead-row__meta';
+      meta.append(node('span', lead.sentLabel), chip(lead));
+      b.append(node('span', lead.office, 'lead-row__office'));
+      if (lead.companyLine) b.append(node('span', lead.companyLine, 'lead-sub lead-row__company'));
+      b.append(meta);
+      if (lead.stale) b.append(node('span', lead.stale, 'lead-stale'));
+      b.addEventListener('click', () => openLead(lead.id));
+      li.append(b);
+      return li;
+    };
+    const findLead = (id: string) => (loaded?.leads ?? []).find((l) => l.id === id) ?? null;
+    let openId = '';
+    let listScroll = 0;
+    // The phone's own Back (Android button, iOS swipe) closes the lead screen. Opening it
+    // adds one history entry with the same URL: no new route, no key anywhere new.
+    // leadEntry is that entry's stamp (0 when none); skipPop marks the popstate our own
+    // history.back() causes. A lead closed any other way (a tab tap) leaves its entry,
+    // which a later Back passes over.
+    let leadEntry = 0;
+    let skipPop = false;
+    let lastStamp = 0;
+    const stamp = () => (lastStamp = Math.max(Date.now(), lastStamp + 1));
+    const drawLead = (lead: Lead) => {
+      leadTitle.textContent = lead.office;
+      const parts: HTMLElement[] = [node('p', `${lead.sentLabel}. ${lead.company}.`, 'lead-sub')];
+      if (lead.contact) parts.push(node('p', `Contact: ${lead.contact}`, 'lead-sub'));
+      const now = document.createElement('p');
+      now.className = 'lead-now';
+      now.append(chip(lead));
+      if (lead.stale) now.append(node('span', lead.stale, 'lead-stale'));
+      parts.push(now, node('h3', 'Where it stands', 'lead-h3'));
+      const steps = document.createElement('ol');
+      steps.className = 'lead-steps';
+      for (const step of lead.steps) {
+        const li = document.createElement('li');
+        if (step.on) li.append(node('span', step.on, 'lead-step__on'), document.createTextNode(' '));
+        li.append(document.createTextNode(step.label));
+        steps.append(li);
+      }
+      parts.push(steps);
+      if (lead.update) {
+        parts.push(node('h3', `Latest from ${lead.company}`, 'lead-h3'));
+        parts.push(node('p', lead.update.on ? `${lead.update.on}. ${lead.update.text}` : lead.update.text, 'lead-update'));
+      }
+      const line = money?.money.lines[lead.id];
+      if (line) parts.push(node('p', line, 'lead-money'));
+      leadBody.replaceChildren(...parts);
+    };
+    // The lead screen opens inside the app: no new URL, no key anywhere new. Focus moves
+    // to its heading; Back puts the list back where the rep left it, focus on the row.
+    const openLead = (id: string) => {
+      const lead = findLead(id);
+      if (!lead) return;
+      const opening = !openId;
+      if (opening) listScroll = window.scrollY;
+      openId = id;
+      drawLead(lead);
+      trackMain.hidden = true;
+      leadPanel.hidden = false;
+      if (opening && !leadEntry) {
+        leadEntry = stamp();
+        history.pushState({ hsbsScreen: leadEntry }, '');
+      }
+      window.scrollTo({ top: 0 });
+      leadTitle.focus();
+    };
+    const closeLead = (refocus = true) => {
+      if (!openId) return;
+      const back = openId;
+      openId = '';
+      leadEntry = 0;
+      leadPanel.hidden = true;
+      trackMain.hidden = false;
+      if (!refocus) return;
+      window.scrollTo({ top: listScroll });
+      const row = Array.from(trackList.querySelectorAll<HTMLElement>('.lead-row')).find((r) => r.dataset.leadId === back);
+      row?.focus({ preventScroll: true });
+    };
+    // Back to Track (and Escape) closes at once, then takes back the entry it added.
+    const leaveLead = () => {
+      const entry = leadEntry;
+      closeLead();
+      if (entry && history.state?.hsbsScreen === entry) {
+        skipPop = true;
+        history.back();
+      }
+    };
+    (document.getElementById('rep-lead-back') as HTMLButtonElement).addEventListener('click', leaveLead);
+    leadPanel.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') leaveLead();
+    });
+    window.addEventListener('popstate', (event) => {
+      if (skipPop) {
+        skipPop = false;
+        return;
+      }
+      const at = Number(event.state?.hsbsScreen) || 0;
+      if (leadEntry && leadEntry > at) closeLead();
+    });
+
+    const renderTrack = () => {
+      const rows = loaded?.leads ?? [];
+      const counts = loaded?.counts ?? {};
+      root.querySelectorAll<HTMLElement>('[data-count]').forEach((el) => {
+        el.textContent = String(counts[el.dataset.count ?? ''] ?? 0);
+      });
+      // With pay on, the earnings answer has the whole feed, money joined onto each event.
+      const feed = money ? money.money.feed : (loaded?.feed ?? []);
+      showMoney();
+      feedList.replaceChildren();
+      for (const item of showAllFeed ? feed : feed.slice(0, 10)) {
+        const li = document.createElement('li');
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'rep-feed__item';
+        b.textContent = item.label;
+        if (item.referralId) b.addEventListener('click', () => openLead(item.referralId));
+        li.append(b);
+        feedList.append(li);
+      }
+      if (feed.length === 0) {
+        const li = document.createElement('li');
+        li.textContent = 'No updates yet.';
+        feedList.append(li);
+      }
+      feedAll.hidden = showAllFeed || feed.length <= 10;
+      trackList.replaceChildren(...rows.map(renderRow));
+      trackStatus.hidden = rows.length > 0;
+      trackStatus.textContent = 'No referrals yet. Send one and it will show up here.';
+      // An open lead screen redraws from the new answer, or closes if the office is gone.
+      const open = openId ? findLead(openId) : null;
+      if (open) drawLead(open);
+      else closeLead(false);
+    };
+
+    // One load at a time: a second call while one runs (a tab tap, then "Track this
+    // referral" or an earnings line) waits for it instead of fetching again.
+    let trackLoad: Promise<void> | null = null;
+    // True while the Track read now out was asked fresh (Refresh, or the first read after a send).
+    // An Earnings open waits for it instead of sending its own money request, which could reach a server holding older money.
+    let trackAskedFresh = false;
+    const loadTrack = (force = false): Promise<void> => {
+      if (trackLoad) return trackLoad;
+      if (loaded && !force) {
+        renderTrack();
+        return Promise.resolve();
+      }
+      trackLoad = fetchTrack(force).finally(() => {
+        trackLoad = null;
+        trackAskedFresh = false;
+      });
+      return trackLoad;
+    };
+    // `fresh` is Refresh, or Track right after a send: skip the server's short cache. A plain
+    // open may be up to 45 seconds old, which is fine for a status screen.
+    // How many times one Track open may start over because its answer was overtaken.
+    const MAX_TRACK_RESTARTS = 2;
+    const fetchTrack = async (force = false, restarts = 0): Promise<void> => {
+      // Refresh, or the first load after a send, even when a plain tab tap started it.
+      const fresh = force || freshList || freshMoney;
+      trackAskedFresh = fresh;
+      const gen = sendGen;
+      const seq = ++moneySeq;
+      trackStatus.hidden = false;
+      trackStatus.textContent = 'Loading your referrals.';
+      try {
+        const res = await fetch('/api/referral-list', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          // One request for the list and the money: the server reads the list once and the
+          // ledger once (plus its own role check, so a cold open is up to three flow runs, a
+          // warm one none). It answers `money: null` when the ledger fails, and Track still loads.
+          body: JSON.stringify({ referralKey, feed: true, earnings: payEnabled, fresh }),
+        });
+        if (!res.ok) throw new Error('load');
+        const list = await res.json();
+        noteTerms(list?.terms);
+        let answer: Money | null = null;
+        let mySeq = seq;
+        if (payEnabled) {
+          if ('money' in list) answer = list.money as Money | null;
+          else if (gen === sendGen) {
+            mySeq = ++moneySeq;
+            answer = await loadMoney(fresh).catch(() => null);
+          }
+        }
+        // The list and its money are ONE snapshot, so they are installed together or not at
+        // all. Overtaken means a send landed while this was out, or newer money (Earnings, or
+        // a later Track read) was installed first: the list is then older than the money on
+        // the page too, so the whole answer is thrown away. Start over once the panel is in
+        // view (a few times at most); a hidden Track just reloads the next time it opens.
+        if (gen !== sendGen || mySeq < moneyInstalled) {
+          if (restarts < MAX_TRACK_RESTARTS && !trackPanel.hidden) return fetchTrack(true, restarts + 1);
+          loaded = null;
+          if (!trackPanel.hidden) throw new Error('overtaken');
+          return;
+        }
+        loaded = list;
+        installMoney(mySeq, answer);
+        trackMoneySeq = mySeq;
+        // The list is fresh now. The money is fresh too only if it loaded (or pay is off).
+        freshList = false;
+        if (!payEnabled || answer) freshMoney = false;
+        renderTrack();
+        // renderTrack() redrew every dollar tile on the page, Earnings' included. If the rep
+        // switched to Earnings while this load was out (and saw the money from before), redraw
+        // that whole screen from the same money, so its tiles and award lines are one snapshot.
+        if (earningsPanel && !earningsPanel.hidden) renderEarnings();
+      } catch {
+        loaded = null;
+        installMoney(seq, null);
+        closeLead(false);
+        if (moneyStatus) moneyStatus.hidden = true;
+        trackList.replaceChildren();
+        feedList.replaceChildren();
+        trackStatus.hidden = false;
+        trackStatus.textContent = 'Your referrals did not load. Try again in a minute.';
+      }
+    };
+    feedAll.addEventListener('click', () => {
+      showAllFeed = true;
+      renderTrack();
+    });
+    document.getElementById('rep-refresh')?.addEventListener('click', () => loadTrack(true));
+
+    const earningsPanel = document.getElementById('rep-earnings') as HTMLElement | null;
+    const renderEarnings = () => {
+      if (!earningsPanel) return;
+      const status = document.getElementById('rep-earnings-status') as HTMLElement;
+      const list = document.getElementById('rep-earnings-lines') as HTMLElement;
+      const pending = document.getElementById('rep-pending') as HTMLElement;
+      const upTo = document.getElementById('rep-upto') as HTMLElement;
+      list.replaceChildren();
+      showMoney();
+      if (!money) {
+        pending.hidden = true;
+        upTo.hidden = true;
+        status.hidden = false;
+        status.textContent = 'Your earnings did not load. Try again in a minute.';
+        return;
+      }
+      const sm = money.summary;
+      pending.hidden = !sm.pendingReview;
+      pending.textContent = `${usd(sm.pendingReview)} pending review.`;
+      // Worded by the server from the plan that counted the amount, never from this page's plan.
+      upTo.hidden = !sm.upTo || !sm.upToText;
+      upTo.textContent = sm.upToText ?? '';
+      // The footer names the partners this rep's money follows (server words, slice S5).
+      const foot = document.getElementById('rep-earnings-foot');
+      if (foot && typeof sm.footer === 'string' && sm.footer) foot.textContent = sm.footer;
+      if (sm.lines.length === 0) {
+        status.hidden = false;
+        // Worded by the server from the plan that counted the money; the template is only a fallback.
+        status.textContent = typeof sm.emptyText === 'string' ? sm.emptyText : ((document.getElementById('rep-empty-earnings') as HTMLTemplateElement).content.textContent ?? '');
+        return;
+      }
+      status.hidden = true;
+      for (const item of sm.lines) {
+        const li = document.createElement('li');
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'rep-feed__item';
+        // Board 5a: the office and its amount, the company, what it was for, where it
+        // stands. All words and amounts come from the server; the label is the whole line.
+        if (typeof item.office === 'string' && typeof item.status === 'string') {
+          b.setAttribute('aria-label', item.label);
+          const top = document.createElement('span');
+          top.className = 'rep-earn__top';
+          top.append(node('span', item.office));
+          if (item.amount) top.append(node('span', item.amount, 'rep-earn__amt'));
+          b.append(top);
+          if (item.company) b.append(node('span', item.company, 'rep-earn__co'));
+          if (item.what) b.append(node('span', item.what, 'rep-earn__what'));
+          b.append(node('span', item.status, 'rep-earn__status'));
+        } else {
+          b.textContent = item.label;
+        }
+        b.addEventListener('click', async () => {
+          showTab('track');
+          await loadTrack();
+          openLead(item.referralId);
+        });
+        li.append(b);
+        list.append(li);
+      }
+    };
+    const loadEarnings = async (): Promise<void> => {
+      const status = document.getElementById('rep-earnings-status') as HTMLElement;
+      status.hidden = false;
+      status.textContent = 'Loading your earnings.';
+      // A fresh Track read is out (Refresh, or the first one after a send). Its money is the newest
+      // there will be, so Earnings waits for it and draws from that, instead of asking a server
+      // instance that may hold older money and, being later, overwriting the fresh answer.
+      // If Track's money failed, the check below asks for it as before.
+      if (trackLoad && trackAskedFresh) await trackLoad;
+      if (!money || Date.now() - moneyAt > MONEY_REUSE_MS) {
+        const gen = sendGen;
+        const seq = ++moneySeq;
+        let answer: Money | null = null;
+        try {
+          answer = await loadMoney();
+        } catch {
+          answer = null;
+        }
+        if (gen !== sendGen) return loadEarnings(); // a send landed while this was loading
+        // A Track refresh that started after this and finished first has already installed
+        // newer money; then this answer is dropped and Earnings draws from what is installed.
+        const installed = installMoney(seq, answer);
+        if (installed && answer) freshMoney = false; // loaded fresh
+        // The Track list was read with older money than this. Drop it, so Track never shows the
+        // newer totals beside older statuses. If Track is the screen in view, read it again now
+        // and leave the redraw to that read (a Track read already out does that by itself).
+        if (installed && loaded && seq > trackMoneySeq) {
+          loaded = null;
+          if (!trackPanel.hidden) {
+            if (!trackLoad) void loadTrack();
+            return;
+          }
+        }
+      }
+      renderEarnings();
+    };
+
+    // My Team (slice 5) shows and loads itself (MyTeam.astro); here it only hides the rest.
+    const showTab = (tab: string) => {
+      const track = tab === 'track';
+      const earn = tab === 'earnings';
+      const team = tab === 'team';
+      closeLead(false);
+      trackPanel.hidden = !track;
+      if (earningsPanel) earningsPanel.hidden = !earn;
+      sendPanel.hidden = track || earn || team || !receipt.hidden;
+      if (track || earn || team) receipt.hidden = true;
+      tabs.querySelectorAll<HTMLButtonElement>('button').forEach((b) =>
+        b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'),
+      );
+      if (track) loadTrack();
+      else if (earn) loadEarnings();
+      else if (tab === 'send' && receipt.hidden) sendPanel.hidden = false;
+    };
+    tabs.querySelectorAll<HTMLButtonElement>('button').forEach((b) =>
+      b.addEventListener('click', () => showTab(b.dataset.tab ?? 'send')),
+    );
+    trackThis.addEventListener('click', () => {
+      receipt.hidden = true;
+      showTab('track');
+      loadTrack(true);
+    });
+  }
+</script>
+
+<style>
+  .rep { max-width: 34rem; margin: 0 auto; padding: 0 0 6rem; }
+  .rep-who h1 { font-size: 1.4rem; color: var(--hs-navy); margin: 0 0 0.2rem; }
+  .rep-who p { margin: 0; color: var(--muted); }
+  .rep-who .rep-pay { margin-top: 0.4rem; color: var(--text); font-weight: 600; font-size: 0.92rem; }
+  .rep-guide { background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--hs-blue); border-radius: 12px; padding: 0.75rem 0.9rem; margin: 1rem 0; }
+  .rep-guide p { margin: 0.25rem 0; font-size: 0.95rem; }
+  .rep-field { display: grid; gap: 0.2rem; margin-top: 0.75rem; font-weight: 600; font-size: 0.92rem; border: 0; padding: 0; }
+  .rep-field input, .rep-field textarea {
+    font: inherit; font-weight: 400; font-size: 1rem; padding: 0.65rem 0.75rem; min-height: 44px;
+    border: 1px solid #c3cad6; border-radius: 10px; background: #fff; color: var(--text); width: 100%; box-sizing: border-box;
+  }
+  .rep-choices { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .rep-choices legend { width: 100%; padding: 0; margin-bottom: 0.2rem; }
+  .rep-choice { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 500; border: 1px solid #c3cad6; border-radius: 999px; padding: 0.45rem 0.9rem; min-height: 44px; box-sizing: border-box; background: #fff; }
+  .rep-ok { display: flex; gap: 0.6rem; align-items: flex-start; margin-top: 1rem; font-weight: 600; }
+  .rep-ok input { width: 1.4rem; height: 1.4rem; margin-top: 0.1rem; flex: none; }
+  .rep-err { font-weight: 500; font-size: 0.85rem; color: var(--btn-red); }
+  .rep-err:empty { display: none; }
+  .rep-alert { margin: 1rem 0 0; color: var(--btn-red); font-weight: 500; }
+  .rep-send {
+    display: block; width: 100%; margin-top: 1rem; min-height: 48px; border: 0; border-radius: 12px;
+    background: var(--btn-red); color: #fff; font: inherit; font-weight: 600; font-size: 1.05rem; cursor: pointer;
+  }
+  .rep-send:disabled { opacity: 0.6; cursor: default; }
+  .rep-receipt { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 1.25rem 1rem; margin-top: 1rem; }
+  .rep-receipt:focus { outline: none; }
+  .rep-check { font-size: 2rem; color: #1a7f37; margin: 0; }
+  .rep-another { display: block; text-align: center; margin-top: 0.9rem; font-weight: 600; color: var(--hs-navy); }
+  .rep-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-top: 1rem; }
+  .rep-tiles p { background: #fff; border: 1px solid var(--line); border-radius: 12px; margin: 0; padding: 0.6rem; text-align: center; font-size: 0.85rem; }
+  .rep-tiles strong { display: block; font-size: 1.4rem; color: var(--hs-navy); }
+  .rep-h2 { font-size: 1.05rem; margin: 1.25rem 0 0.5rem; }
+  .rep-feed { list-style: none; margin: 0; padding: 0; }
+  .rep-feed__item { all: unset; display: block; cursor: pointer; padding: 0.45rem 0; border-bottom: 1px solid var(--line); width: 100%; }
+  .rep-link { all: unset; cursor: pointer; color: var(--hs-blue); font-weight: 600; margin-top: 0.5rem; display: inline-block; }
+  .rep-card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 0.75rem 0.9rem; margin-bottom: 0.6rem; }
+  .rep-card__top { display: flex; justify-content: space-between; gap: 0.5rem; }
+  .rep-card__meta { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.88rem; }
+  .rep-line { margin: 0.4rem 0 0; }
+  .rep-pill { background: var(--bg-accent); border-radius: 999px; padding: 0.1rem 0.6rem; font-size: 0.85rem; font-weight: 600; }
+  .rep-stale { margin: 0.4rem 0 0; color: var(--btn-red); font-weight: 600; font-size: 0.88rem; }
+  .rep-status { color: var(--muted); }
+  .rep-tabs { position: fixed; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: 1fr 1fr; background: #fff; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+  .rep-tabs button { all: unset; text-align: center; padding: 0.9rem 0.5rem; font-weight: 600; cursor: pointer; }
+  .rep-tabs button[aria-current='page'] { color: var(--hs-navy); box-shadow: inset 0 3px 0 var(--btn-red); }
+  .rep-tabs[hidden] { display: none; }
+  .rep-tabs--3 { grid-template-columns: 1fr 1fr 1fr; }
+  .rep-tiles--4 { grid-template-columns: repeat(4, 1fr); }
+  .rep-sub { display: block; font-size: 0.75rem; color: var(--muted); }
+  .rep-money { margin: 0.45rem 0 0; font-weight: 600; color: #1a5c2e; }
+  .rep-foot { margin-top: 1rem; font-size: 0.85rem; color: var(--muted); }
+  @media (max-width: 380px) { .rep-tiles--4 { grid-template-columns: repeat(2, 1fr); } }
+</style>

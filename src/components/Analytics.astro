@@ -1,0 +1,91 @@
+---
+// Vercel Web Analytics loader, for public pages only (issue #47, threat model T2 and T6).
+//
+// The Vercel adapter's own injection (webAnalytics in astro.config.mjs) puts the loader
+// on every page, including /refer/<key>, /confirm/<token> and /leads/<key>, where the
+// page URL is the credential. It is off. Public layouts and pages include this
+// component instead; the private pages never do.
+//
+// Belt and braces, in case this component is ever added to a private page or a public
+// page is reached from one:
+// - It does nothing on a private path.
+// - A referrer that points at a private path is blanked before the Vercel script reads
+//   it. If the browser will not let it be blanked, analytics does not load on that page.
+// - beforeSend drops any event whose URL is a private path.
+// - A `rid` (email recipient key) query value is removed from every event URL, and a
+//   referrer carrying one is blanked like a private one.
+// Public page URLs, utm_source=qr included, are sent as before.
+const src = import.meta.env.DEV ? 'https://va.vercel-scripts.com/v1/script.debug.js' : '/_vercel/insights/script.js';
+---
+
+<script is:inline define:vars={{ src }}>
+  (function () {
+    var PRIVATE = /^\/(refer|confirm|leads)(\/|$)/i;
+    function isPrivate(url) {
+      var path = '';
+      try {
+        path = new URL(url, location.href).pathname;
+      } catch (e) {
+        return true;
+      }
+      try {
+        path = decodeURIComponent(path);
+      } catch (e) {
+        return true;
+      }
+      return PRIVATE.test(path);
+    }
+    // The query names that are an email recipient key (rid, on /compliance links), read
+    // the way the browser reads them: decoded (%72id is rid) and in any letter case.
+    // null when the URL can't be read, so the caller treats it as unsafe.
+    function ridKeys(url) {
+      var keys = [];
+      try {
+        new URL(url, location.href).searchParams.forEach(function (v, k) {
+          if (k.toLowerCase() === 'rid' && keys.indexOf(k) < 0) keys.push(k);
+        });
+      } catch (e) {
+        return null;
+      }
+      return keys;
+    }
+    function hasRid(url) {
+      var k = ridKeys(url);
+      return k === null || k.length > 0;
+    }
+    if (isPrivate(location.href)) return;
+    // A referrer that is a private path, or that carries an email recipient key (rid),
+    // is blanked before the Vercel script reads it.
+    if (document.referrer && (isPrivate(document.referrer) || hasRid(document.referrer))) {
+      try {
+        Object.defineProperty(document, 'referrer', { configurable: true, get: function () { return ''; } });
+      } catch (e) {
+        // fall through to the check below
+      }
+      if (document.referrer) return;
+    }
+    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+    window.va('beforeSend', function (event) {
+      if (!event || typeof event.url !== 'string' || isPrivate(event.url)) return null;
+      // An email recipient key (rid) is never recorded: every event URL is parsed, the
+      // decoded rid names are removed, and the event is dropped if any is left.
+      var keys = ridKeys(event.url);
+      if (keys === null) return null;
+      if (keys.length) {
+        try {
+          var u = new URL(event.url, location.href);
+          keys.forEach(function (k) { u.searchParams.delete(k); });
+          event.url = u.href;
+        } catch (e) {
+          return null;
+        }
+        if (hasRid(event.url)) return null;
+      }
+      return event;
+    });
+    var script = document.createElement('script');
+    script.defer = true;
+    script.src = src;
+    document.head.appendChild(script);
+  })();
+</script>
