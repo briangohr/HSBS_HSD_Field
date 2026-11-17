@@ -1,0 +1,14 @@
+---
+// One company's part of the rep app's Send tab (field two-track spec, section 4). With
+// `wrap` off it renders its slot and nothing else, so the HealthFirst-only Send tab stays
+// the same HTML as main. The slot is rendered by RepReferral.astro, so its elements keep
+// that component's styles.
+interface Props {
+  wrap: boolean;
+  company: string;
+  open: boolean;
+}
+const { wrap, company, open } = Astro.props;
+---
+
+{wrap ? <div class="rep-company-panel" data-company-panel={company} hidden={!open}><slot /></div> : <slot />}

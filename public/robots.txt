@@ -1,0 +1,4 @@
+# PRE-LAUNCH GUARD: block all crawlers until go-live.
+# At go-live, replace with an allow rule + sitemap.
+User-agent: *
+Disallow: /

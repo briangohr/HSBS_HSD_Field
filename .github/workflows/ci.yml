@@ -1,0 +1,89 @@
+# Runs on every PR and every push to main. A PR is ready for Brian only when
+# this is green. Needs no secrets: the build does not call any flow. The same CI as the
+# HSBS repo (Brian approved it for this repo on 11/17/2026); add no job, matrix or schedule
+# without him.
+#
+# To save Actions minutes (Brian, 11/13/2026, decision 99): checks runs on every PR and
+# every push to main. The browser test (e2e) runs only on PRs, only after checks pass,
+# and only when the PR changes more than docs (src/lib/ci-scope.mjs). A docs-only PR or a
+# push to main shows e2e as skipped.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      e2e: ${{ steps.scope.outputs.e2e }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # PRs only. Prints e2e=false when every changed file is docs; any doubt prints true.
+      - name: Does this PR need the browser test?
+        id: scope
+        if: github.event_name == 'pull_request'
+        run: node scripts/ci-needs-e2e.mjs "$BASE" >> "$GITHUB_OUTPUT"
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+
+      - run: npm ci
+
+      # Only lines this PR or push adds, so a key already in history does not
+      # block an unrelated change. Run `node scripts/scan-secrets.mjs` for a full audit.
+      - name: Secret scan
+        run: node scripts/scan-secrets.mjs --diff "$BASE"
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+
+      - name: Tests
+        run: npm test
+
+      - name: Type check
+        run: npm run check
+
+      - name: Build
+        run: npm run build
+
+  # Browser tests for /join, /confirm and the field app on /refer/<key>, JavaScript off and
+  # on (scripts/e2e/). They run the site against a fake HSBS 1J and a fake HSBS 1F on
+  # localhost; they call no real flow. PRs only, after checks pass, and skipped when the PR
+  # changes only docs (decision 99).
+  e2e:
+    needs: checks
+    if: github.event_name == 'pull_request' && needs.checks.outputs.e2e == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser test
+        run: npm run e2e

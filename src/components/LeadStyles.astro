@@ -1,0 +1,66 @@
+---
+// Styles for Track's compact rows and the lead screen (Brian, 11/9; spec v3 section 2),
+// shared by the Rep app (RepReferral.astro) and a manager's view of a rep (MyTeam.astro).
+// is:inline only, so no bundled stylesheet on /refer moves. Rendered only where those
+// components are.
+---
+
+<style is:inline>
+  .lead-list { list-style: none; margin: 0; padding: 0; }
+  .lead-list > li { margin: 0 0 0.45rem; }
+  .lead-row {
+    all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 0.25rem; width: 100%;
+    min-height: 44px; padding: 0.65rem 2.1rem 0.65rem 0.85rem; position: relative; cursor: pointer;
+    background: #fff; border: 1px solid var(--line); border-radius: 12px; color: var(--text);
+  }
+  .lead-row::after {
+    content: ''; position: absolute; right: 0.9rem; top: 50%; width: 0.5rem; height: 0.5rem;
+    border-top: 2px solid var(--muted); border-right: 2px solid var(--muted); transform: translateY(-50%) rotate(45deg);
+  }
+  .lead-row:focus-visible { outline: 3px solid var(--hs-sky); outline-offset: 2px; }
+  .lead-row__office { font-weight: 700; color: var(--hs-blue); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+  .lead-row__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.6rem; font-size: 0.88rem; color: var(--muted); }
+  .lead-chip {
+    display: inline-block; border-radius: 999px; padding: 0.12rem 0.6rem; font-size: 0.85rem; font-weight: 600;
+    background: var(--bg-accent); color: var(--hs-navy); overflow-wrap: anywhere;
+  }
+  .lead-chip--signed { background: #e3f3e8; color: #1a5c2e; }
+  .lead-chip--closed { background: #eceef2; color: #4a5160; }
+  .lead-stale { color: var(--btn-red); font-weight: 600; font-size: 0.88rem; }
+  .lead-screen { margin-top: 0.5rem; }
+  .lead-back {
+    all: unset; box-sizing: border-box; display: inline-flex; align-items: center; min-height: 44px; padding: 0 0.25rem;
+    cursor: pointer; color: var(--hs-blue); font-weight: 600;
+  }
+  .lead-back::before { content: ''; width: 0.45rem; height: 0.45rem; margin-right: 0.5rem; border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); }
+  .lead-back:focus-visible { outline: 3px solid var(--hs-sky); outline-offset: 2px; }
+  .lead-title { font-size: 1.3rem; color: var(--hs-navy); margin: 0.4rem 0 0.2rem; overflow-wrap: anywhere; }
+  .lead-title:focus { outline: none; }
+  .lead-title:focus-visible { outline: 3px solid var(--hs-sky); outline-offset: 2px; }
+  .lead-sub { margin: 0.15rem 0; color: var(--muted); overflow-wrap: anywhere; }
+  .lead-now { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; margin: 0.6rem 0 0; }
+  .lead-h3 { font-size: 1rem; margin: 1.1rem 0 0.4rem; }
+  .lead-steps { list-style: none; margin: 0; padding: 0 0 0 0.9rem; border-left: 2px solid var(--line); }
+  .lead-steps li { position: relative; padding: 0.3rem 0 0.3rem 0.3rem; overflow-wrap: anywhere; }
+  .lead-steps li::before { content: ''; position: absolute; left: -1.29rem; top: 0.7rem; width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--hs-blue); }
+  .lead-steps li:last-child { font-weight: 600; }
+  .lead-step__on { display: inline-block; min-width: 3.4rem; color: var(--muted); font-weight: 600; }
+  .lead-update { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 0.65rem 0.85rem; margin: 0; overflow-wrap: anywhere; }
+  .lead-money { margin: 1rem 0 0; font-weight: 600; color: #1a5c2e; overflow-wrap: anywhere; }
+  /* Latest updates and My Earnings lines open a lead screen, so each is a full-width tap
+     target. The script builds them, so the bundled .rep-feed__item rule never reaches them. */
+  #rep-feed .rep-feed__item,
+  #rep-earnings-lines .rep-feed__item {
+    all: unset; box-sizing: border-box; display: block; width: 100%; min-height: 44px; padding: 0.6rem 0;
+    border-bottom: 1px solid var(--line); cursor: pointer; color: var(--text); overflow-wrap: anywhere;
+  }
+  #rep-feed .rep-feed__item:focus-visible,
+  #rep-earnings-lines .rep-feed__item:focus-visible { outline: 3px solid var(--hs-sky); outline-offset: 2px; }
+  #rep-refresh, #rep-feed-all { min-height: 44px; display: inline-flex; align-items: center; }
+  #rep-refresh:focus-visible, #rep-feed-all:focus-visible { outline: 3px solid var(--hs-sky); outline-offset: 2px; }
+  #rep-feed-all[hidden] { display: none; }
+  /* The site-wide section padding (global.css, 4.5rem and up) left a blank band under the
+     pay line on every rep tab, doubled on the lead screen. The app's panels sit close. */
+  #rep-send, #rep-receipt, #rep-track, #rep-earnings, #team-panel { padding-block: 1rem 0; }
+  #rep-lead, #team-lead { padding-block: 0; }
+</style>
