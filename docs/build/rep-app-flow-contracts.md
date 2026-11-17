@@ -54,7 +54,7 @@ these keys:
 | `firstName`, `lastName` | 1 to 60 characters: letters, spaces, apostrophes, periods, hyphens. Curly apostrophes arrive as straight ones | Rep Name (first and last) |
 | `email` | Lowercase, ends in `@henryschein.com` | Rep Email (unique) |
 | `mobile` | `NNN-NNN-NNNN` | Mobile |
-| `role` | `AE`, `FSC`, `RM`, `ES`, `EST`, `HSFS`, `Thrive Signature`, `PVA` or `Other` (ES, EST and HSFS added 11/16; the page shows `RM` as RGM and sends `RM`) | Role |
+| `role` | `AE`, `FSC`, `RM`, `ES`, `EST`, `HSFS`, `PVA` or `Other` (ES, EST and HSFS added 11/16; Thrive Signature removed 11/17, a program, not a role; the page shows `RM` as RGM and sends `RM`) | Role |
 | `managerName` | 1 to 120 characters, same character rule as the rep's name. When `role` is `AE`, may be `""` together with `managerEmail` (decision 113) | Manager Name |
 | `managerEmail` | Lowercase, ends in `@henryschein.com`, not equal to `email`. When `role` is `AE`, may be `""` together with `managerName` (decision 113) | Manager Email |
 | `branch` | 1 to 80 characters | Branch |

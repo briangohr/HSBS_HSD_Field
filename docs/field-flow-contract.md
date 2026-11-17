@@ -51,7 +51,8 @@ Request (built only from a validated form, `registerPayload` in
 }
 ```
 
-- `role` is one of `AE`, `FSC`, `RM`, `ES`, `EST`, `HSFS`, `Thrive Signature`, `Other`.
+- `role` is one of `AE`, `FSC`, `RM`, `ES`, `EST`, `HSFS`, `Other`.
+  Thrive Signature is a program, not a role (Brian, 11/17); it stays only as a `source`.
   The page shows `RM` as RGM and sends `RM`.
 - An AE may leave both manager fields blank (decision 113).
 - `source` is `QR`, `AE link`, `Thrive Signature link` or `Other`, from `?src=` on `/join`.
