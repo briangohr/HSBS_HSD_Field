@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { describe, test } from 'node:test';
 import {
+  NOTES_HINT,
   PAY_LINE,
   REP_CONSENT,
   repFlowPayload,
@@ -23,6 +24,11 @@ const good = {
 };
 
 describe('Rep app referral form (spec v3 section 2)', () => {
+  test('the Notes hint asks for what the rep learned, in plain copy', () => {
+    assert.match(NOTES_HINT, /question you asked and their answer/);
+    assert.equal(/[\u2014\u2013\u2192]|HSPA|HSRA|NumbersIQ/.test(NOTES_HINT), false);
+  });
+
   test('a complete referral passes', () => {
     assert.deepEqual(validateRepReferral(good), { ok: true, errors: [] });
   });
