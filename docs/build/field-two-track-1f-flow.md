@@ -1,6 +1,6 @@
 # Field two-track app: build sheet 1F, HSBS 1F Field app
 
-> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and the other team's exact list and column names are only in the old repo's copy.
+> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and names in code quotes are live SharePoint and flow names.
 
 Builder: BB2. Decisions 117 and 119 (Brian, 11/14: "yes, split it now" and "yes, all field
 pieces as copies, prove on preview").

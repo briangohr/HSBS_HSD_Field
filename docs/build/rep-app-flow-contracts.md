@@ -1,6 +1,6 @@
 # Rep app: what the site sends and expects
 
-> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and the other team's exact list and column names are only in the old repo's copy.
+> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and names in code quotes are live SharePoint and flow names.
 
 Written 11/8/2026 for the HealthFirst rep app (spec v3, `docs/build/healthfirst-rep-app-spec.md`).
 Who builds (Brian, 11/8, latest): Claude builds the site. BB1 builds the SharePoint lists
@@ -54,7 +54,7 @@ these keys:
 | `firstName`, `lastName` | 1 to 60 characters: letters, spaces, apostrophes, periods, hyphens. Curly apostrophes arrive as straight ones | Rep Name (first and last) |
 | `email` | Lowercase, ends in `@henryschein.com` | Rep Email (unique) |
 | `mobile` | `NNN-NNN-NNNN` | Mobile |
-| `role` | `AE`, `FSC`, `RM`, `ES`, `EST`, `HSFS`, `Thrive Signature`, the other team's label or `Other` (ES, EST and HSFS added 11/16; the page shows `RM` as RGM and sends `RM`) | Role |
+| `role` | `AE`, `FSC`, `RM`, `ES`, `EST`, `HSFS`, `Thrive Signature`, `PVA` or `Other` (ES, EST and HSFS added 11/16; the page shows `RM` as RGM and sends `RM`) | Role |
 | `managerName` | 1 to 120 characters, same character rule as the rep's name. When `role` is `AE`, may be `""` together with `managerEmail` (decision 113) | Manager Name |
 | `managerEmail` | Lowercase, ends in `@henryschein.com`, not equal to `email`. When `role` is `AE`, may be `""` together with `managerName` (decision 113) | Manager Email |
 | `branch` | 1 to 80 characters | Branch |
@@ -76,9 +76,9 @@ In this order (spec v3, section 3):
    TEST FSC sign-up with both blank gets 400 and no row.
 2. The 10-minute limit lives in the **Link Resends** list (Email, unique; Last Sent).
    It covers every address, whatever roster it's on, and holds no keys.
-3. If the email is on the other team's roster, FSC Roster or Rep Roster: resend that person's
+3. If the email is on the `PVA Roster`, FSC Roster or Rep Roster: resend that person's
    existing link, unless Link Resends shows one went to that email in the last 10
-   minutes. Update Last Sent when a link goes out. Never write to the other team's roster or the FSC Roster.
+   minutes. Update Last Sent when a link goes out. Never write to the `PVA Roster` or the FSC Roster.
    No new row. Answer **200** `{"ok":true}`.
    **A repeat sign-up never changes anything on an existing row, including the
    manager hint.** Anyone can type someone else's email into `/join`. The manager typed
@@ -230,7 +230,7 @@ Request:
 
 `activate` is `true` only while `REP_APP_ENABLED=true` on the site, and `false` otherwise
 (issue #52). Every lookup carries it: `/refer/<key>` and `/api/referral-list`, for other-team,
-FSC and Rep keys alike. Check the other team's roster, then the FSC Roster, then the Rep Roster.
+FSC and Rep keys alike. Check the `PVA Roster`, then the FSC Roster, then the Rep Roster.
 
 - **`activate` false:** a Rep key answers **404** and writes nothing to the Rep Roster:
   no First Opened On, no Status change. Other-team and FSC answers are the same as with `true`.
@@ -277,7 +277,7 @@ can't change them; the server builds them (`src/lib/rep-referral-form.mjs`):
   "jde": "001234",
   "companies": ["HealthFirst"],
   "needs": ["OSHA and HIPAA compliance"],
-  "the permission column": true,
+  "`PVApermission`": true,
   "contactFirst": false,
   "preferredContact": "Text",
   "consentText": "The office agreed to a call from HealthFirst.",
@@ -345,7 +345,7 @@ unchanged: it carries the company's Solutions value in `companies`, as today.
   - `consentText`: the words next to the permission box, word for word: "The customer gave
     permission for Direct Dental to contact them about staffing.*" An unticked box is
     refused 422;
-  - `route` "Partner", `referrerRole` "Rep", `source` "Rep app", the permission column true,
+  - `route` "Partner", `referrerRole` "Rep", `source` "Rep app", `PVApermission` true,
     `contactFirst` false. No one outside the field build is named. The rep's name and email still come from the Rep
     Roster row, never the request.
   A good staffing send answers `{"ok":true}`, with `terms` and `staffingTerms` named by the
@@ -564,7 +564,7 @@ The other team's pages and the FSC pages then match `main` byte for byte. Dollar
 
 ### Team Roster (Brian's list)
 
-A new list, **Team Roster** (on the shared SharePoint site), holds Brian's roster of managers
+A new list, **Team Roster** (site `HSBSPVAReferrals`), holds Brian's roster of managers
 and the reps (FSCs, AEs and others) on their teams:
 
 | Column | Type | Rule |
@@ -627,8 +627,8 @@ new column. It sends nobody else anything, and the hint never sets a manager on 
 Request unchanged. Every 200 answer gains `isManager`:
 
 ```json
-{ "<other-team name, email and slug keys>": "...", "isManager": true }
-{ "role": "FSC", "fscName": "...", "fscEmail": "...", "<other-team name, email and slug keys>": "...", "isManager": false }
+{ "pvaName": "...", "pvaEmail": "...", "pvaSlug": "...", "isManager": true }
+{ "role": "FSC", "fscName": "...", "fscEmail": "...", "pvaName": "...", "pvaEmail": "...", "pvaSlug": "...", "isManager": false }
 { "role": "Rep", "repName": "...", "repEmail": "...", "services": ["HealthFirst"], "isManager": false }
 ```
 
@@ -637,10 +637,10 @@ The flow:
 1. **isManager** is true when at least one Team Roster row has Manager Email equal to
    `toLower(this person's roster email)` and Active = Yes (D18). TEST pairs count only
    for a TEST person (TEST in their roster name or email, or Rep Roster Test = Yes). The
-   the other team's roster stores mixed-case emails, so `toLower` is required.
+   `PVA Roster` stores mixed-case emails, so `toLower` is required.
 2. Set that Get items step's run-after to succeeded, failed and timed out, and default
    isManager to false. A slow read never turns a working other-team or FSC link into an error.
-3. Never send a manager's email, a Confirm Token or anyone's key. Never write to the other team's roster,
+3. Never send a manager's email, a Confirm Token or anyone's key. Never write to the `PVA Roster`,
    the FSC Roster or the Team Roster.
 
 The site:
@@ -651,7 +651,7 @@ The site:
 ### team (new, read only)
 
 ```json
-{ "action": "team", "referralKey": "<a key from the other team's roster, FSC Roster or Rep Roster>" }
+{ "action": "team", "referralKey": "<a key from the `PVA Roster`, FSC Roster or Rep Roster>" }
 ```
 
 **200**:

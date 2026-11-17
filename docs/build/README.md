@@ -9,14 +9,11 @@ How to read them:
 
 - `docs/field-flow-contract.md` is the site side and wins over anything here. When a sheet
   and the contract disagree, stop and ask Brian.
-- The field repo carries no text about the other team (Brian, 11/17: anything that
-  mentions it stays on its own SharePoint site and in its own repo, `briangohr/HSBS`).
-  Where a step still reads or writes one of that team's lists, columns or values, it says
-  so in plain words ("the other team's roster", "the shared update column", "the shared
-  site"). The exact names are in the old repo's copy of the same sheet. Each one is a shared
+- The wording is field only. Where a live SharePoint list, column, flow or value still
+  carries the other team's name (for example `PVA Roster`, `PVA Slug`, `PVA page`,
+  `Update for PVA`, the site `HSBSPVAReferrals`), the real name is kept in code quotes so a
+  bot's steps still match what it sees in SharePoint and Power Automate. Each one is a shared
   touchpoint: a defect to remove, not a feature to keep (`CLAUDE.md`, Scope).
-- Today the field lists (Rep Roster, Team Roster, Referrals, Service Cases) sit on that
-  shared SharePoint site. Moving them to a field-only site is a live change for Brian.
 - Paths such as `src/...`, `AGENTS.md` rule numbers, and `docs/...` files that are not in
   `docs/build/` refer to the old repo, `briangohr/HSBS`.
 - Env names: on this site the 1F address is `FIELD_FLOW_URL` and the 1J address is

@@ -1,6 +1,6 @@
 # Field two-track app: sheet LD, link delivery to roster-loaded people
 
-> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and the other team's exact list and column names are only in the old repo's copy.
+> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and names in code quotes are live SharePoint and flow names.
 
 Builder: BB2. Written 11/15/2026 by Claude for BB2 and Brian.
 Status: draft for Brian's approval. Step R4 in `docs/build/field-two-track-remaining-work.md`.
@@ -18,7 +18,7 @@ This is that step.
   (`/HSBS_BOT/build/2026-11-09_BB1_Build_Sheet_1_Addendum_Welcome_Sender_v2.1.md`) designs
   "HSBS 1J welcome sender". It reads Link Resends rows with Send Status Pending, oldest first,
   15 a minute, and sends each person their personal link. For Kind Welcome it reads the Rep
-  Roster first, so a loaded person gets their new Rep Roster link, not an older link from the other team's roster or the FSC
+  Roster first, so a loaded person gets their new Rep Roster link, not an older link from the `PVA Roster` or the FSC
   Roster. It also has the alarm flow and the gap check lines.
 - **LD adds one small flow, "HSBS LD queue welcomes".** It creates the Pending rows on Link
   Resends for one team at a time. It sends nothing itself. The sender does the sending.
@@ -34,9 +34,9 @@ Claude asks these one at a time.
    The sender's 30-a-minute limit counts against whichever account's connection sends.
    Claude's recommendation: their own short welcome, from the same mailbox the field intros
    already use, so replies reach one place.
-2. **The resend order for people on two rosters.** A loaded RGM still has an other-team roster row,
+2. **The resend order for people on two rosters.** A loaded RGM still has a `PVA Roster` row,
    and a pilot FSC still has an FSC Roster row (F5 leaves both in place). If one of them signs
-   up at `/join`, 1J queues a Kind Resend, and the sender reads the other team's roster, then the FSC
+   up at `/join`, 1J queues a Kind Resend, and the sender reads the `PVA Roster`, then the FSC
    Roster, then the Rep Roster. They get their old link back. The choices:
    - A. Leave it. They use the welcome LD sends. A `/join` resend gives the old link until the
      old rows are retired (a later sheet, after Brian says the new app is staying).
@@ -141,7 +141,7 @@ On TEST people only, with the sender's TestMode on, so every email reaches Brian
   Roster. Run LD with the RGM's email: three Link Resends rows, Kind Welcome, Pending. Within
   five minutes Brian gets three welcomes, and each row says Sent, with Welcome Sent On set on
   the Rep Roster.
-- **L2. The right link.** The TEST RGM also has a TEST other-team roster row. Brian opens the RGM's
+- **L2. The right link.** The TEST RGM also has a TEST `PVA Roster` row. Brian opens the RGM's
   welcome link: it opens the rep app (Send, Track, Earnings, Team), not the old field app. No
   key is read out or written down.
 - **L3. Run twice.** Run LD again for the same team: no new rows, no row changed, no email.
@@ -159,7 +159,7 @@ On TEST people only, with the sender's TestMode on, so every email reaches Brian
   the run stops. Put the RGM back to Test = No.
 - **L6. Wrong input.** Run LD with a TEST FSC's email instead of an RGM's: nothing is queued.
 - **L7. LD wrote only Link Resends.** In every LD run from L1 to L6, run history shows no
-  Create item, Update item or Delete item on the other team's roster, FSC, Rep or Team Roster. Roster changes
+  Create item, Update item or Delete item on the `PVA Roster`, FSC, Rep or Team Roster. Roster changes
   made by others during the checks are expected: the sender sets Welcome Sent On (L1), opening
   a link sets First Opened On and Status (L2), and Brian changes Test values (L5). No email
   went to anyone but Brian, the alarm flow sent nothing, and run history shows "Content not
@@ -175,5 +175,5 @@ On TEST people only, with the sender's TestMode on, so every email reaches Brian
 ## What must not change
 
 - HSBS 1J, the welcome sender and the alarm flow.
-- The other team's roster and the FSC, Rep and Team Rosters. LD only reads them.
+- The `PVA Roster` and the FSC, Rep and Team Rosters. LD only reads them.
 - Recipients. LD adds none, and the sender's TestMode stays on until Brian's go.

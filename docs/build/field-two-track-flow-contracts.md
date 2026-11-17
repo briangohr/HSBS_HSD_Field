@@ -1,6 +1,6 @@
 # Field two-track app: flow build sheets F1, F2 and F6
 
-> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and the other team's exact list and column names are only in the old repo's copy.
+> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and names in code quotes are live SharePoint and flow names.
 
 Builder: BB2 (decision 91).
 
@@ -89,7 +89,7 @@ appear in the repo, a sheet, a log or a build report.
 - **A field or FSC case** is a Service Case whose linked Referrals row (its Referral link)
   has Source `Rep app` or `FSC app`. **A other-team case** is any other Service Case. 7B
   reads the linked Referrals row's Source to tell them apart (it already reads that row to
-  write the shared update column, fact R9). Decisions 102, 104 and 105 change field and FSC cases
+  write `Update for PVA`, fact R9). Decisions 102, 104 and 105 change field and FSC cases
   only; a other-team case keeps today's 7B behavior.
 - **A field case** is a Service Case whose linked Referrals row has Source `Rep app`
   exactly. It is the narrower group: decision 135 ("F2 at launch") changes field cases
@@ -149,7 +149,7 @@ Read from the FSC copies of 1R, 7A and 7B (PB1 says what still has to be read).
 | 6 | R6 | `company` on a `list` line is the case's `Service` Value (or `Service` itself when the Value is missing). In the FSC copy, `list` answers only an FSC key; any other role gets HTTP 400 "list is FSC only" | Match. F6.1 rule 1 applies: add no `solutions` key, unless PB1 finds the Rep 1R differs |
 | 7 | R7 | A refused submit is HTTP 400 `{"error":"missing or invalid fields"}`. Also: 404 unknown key, 400 unknown action, 500 when the roster lookup, the dedupe or the create fails, 200 on success and on a repeat (`ok` true, `duplicate` true). Every trigger property is optional | Match. F1.4 uses that 400 |
 | 8 | R8 | 7A reads Service Cases, not a Status column. Get open cases keeps cases whose Partner Status is not `Close won`, `Close loss`, `Returned to HSBS`, `Signed`, `Not moving forward` or `Hand back to HSBS`. A second loop keeps only cases whose `Service` is on the partner's Services, with a Referral link, Partner Status not `Close won`, `Close loss` or `Returned to HSBS`, whose linked Referrals row's Test matches the partner (Partner Links Title contains `TEST`), and whose Referrals row has Introduced On set. `Held` and `Not a Fit` are not left out | Mismatch with `docs/partner-status-flow.md`. F2 "what exists today" is rewritten; F2.5 rule 4 and F2.6 rule 3 use this test; PB6 |
-| 9 | R9 | An update with no `choice`, no `Stand` and no answer still passes (unless it is `signed` with no dates or `no change this week` with no LastTouch). 7B patches the case, adds a Service Case Status Log line, stamps Last Partner Update, may send the other-team sender update email, writes the shared update column on the Referrals row, and answers `saved` = the number of items in `updates`. `notified` is always `[]`. The 200 answer and the update loop appear to start together | Mismatch: today nothing is skipped. Stop item ST2; F2.9 rule 3; PB5 |
+| 9 | R9 | An update with no `choice`, no `Stand` and no answer still passes (unless it is `signed` with no dates or `no change this week` with no LastTouch). 7B patches the case, adds a Service Case Status Log line, stamps Last Partner Update, may send the other-team sender update email, writes `Update for PVA` on the Referrals row, and answers `saved` = the number of items in `updates`. `notified` is always `[]`. The 200 answer and the update loop appear to start together | Mismatch: today nothing is skipped. Stop item ST2; F2.9 rule 3; PB5 |
 | 10 | R10 | 7B's HTTP trigger concurrency is off (unset). Its validate and update loops run one item at a time inside a run. 1R and 7A triggers are also unset | Match. "One request at a time" is still a build step |
 | 11 | R11 | The package cannot show whether the trigger takes a limit of 1, or how long a run takes | Pending: PB4 |
 | 12 | R12 | Recorded during the F2 TEST checks, not from the definition | Pending, as item 12 says |
@@ -157,11 +157,12 @@ Read from the FSC copies of 1R, 7A and 7B (PB1 says what still has to be read).
 ### Pre-build checks (read only, before the part each one guards)
 
 - **PB1 (before any step).** Facts R1 to R12 come from "HSBS 1R (FSC copy)", "HSBS 7A
-  Partner leads (FSC copy)" and "HSBS 7B Partner save (FSC copy)". The On flows the live 1R, "HSBS 7A Partner leads read" and "HSBS 7B Partner status save" were not
+  Partner leads (FSC copy)" and "HSBS 7B Partner save (FSC copy)". The On flows `HSBS 1R
+  PVA referral`, "HSBS 7A Partner leads read" and "HSBS 7B Partner status save" were not
   exported. BB2 finds which flow the rep app submit, the partner page load and the partner
   save each reach (by run history after a TEST call, never by URL), exports those, and
   confirms R1 to R12 on them. For 1R also record: whether it writes Source `Rep app` (the
-  FSC copy writes only `FSC app` or the other team's app Source value, fact F7-0.11), and whether `list`, `team` and
+  FSC copy writes only `FSC app` or `PVA app`, fact F7-0.11), and whether `list`, `team` and
   `earnings` answer a Rep key (the FSC copy's `list` refuses every non-FSC key, fact R6).
 - **PB2 (before F2.4, F2.10 and F6.2).** List read: whether a Closed Reason column exists,
   on which list, and its type and choices (fact R2).
@@ -257,7 +258,7 @@ check M23.
 - **Referrals and Service Cases:** no Practice Type column in any doc on `main`. Not in the
   repo copy whether the live lists have one.
 - **7A:** today's 7A sends the keys `PartnerLead` held before S6 (id, referralId, doctor,
-  practice, the other team's key, helpArea, introducedOn, stage, lastUpdate, nextUpdateDue, talkedToDoctor,
+  practice, `pva`, helpArea, introducedOn, stage, lastUpdate, nextUpdateDue, talkedToDoctor,
   stand, lastTouch, preferredContact, phone, jde, nextStepDate, dealValue, contactFirst,
   contactName, contactPhone). No practice type and no company key. Since S6 (PR #116) the
   site's `PartnerLead` (`src/lib/partner-flow.ts` lines 79 to 121) also reads `company`,
@@ -286,7 +287,7 @@ specialty; this sheet's Practice Type is ownership (`Private practice` or `Group
 column can't hold both. So the field app gets its own column, and BB1's column is left
 exactly as it is (not read, not written, not changed by any field sheet).
 
-On the Referrals list (on the shared SharePoint site) add:
+On the Referrals list (site `HSBSPVAReferrals`) add:
 
 | Column | Internal name | Type | Choices, spelled exactly | Required | Default | Fill-in |
 |---|---|---|---|---|---|---|
@@ -443,7 +444,7 @@ key (before S6; the site reads it since PR #116, `src/lib/partner-flow.ts` lines
   "jde": "001234",
   "companies": ["HS Staffing / Recruiting Services (including GoTu)"],
   "needs": ["Staffing"],
-  "the permission column": true,
+  "`PVApermission`": true,
   "contactFirst": false,
   "preferredContact": "Call",
   "consentText": "<the words on the screen>",
@@ -666,7 +667,7 @@ the subject and body as built.
 
 **L6. Not changed at launch.**
 - FSC app and other-team cases: every email, recipient and line exactly as today's FSC copy.
-- the shared update column on the Referrals row is written as today. It is a column on the list, not
+- `Update for PVA` on the Referrals row is written as today. It is a column on the list, not
   shown on the partner page and not in any field email. Renaming it would change the
   live flows.
 - Stage, Status and Pipeline Stage stay unwritten for every case, as today.
@@ -742,7 +743,7 @@ TEST field case for each of L-a to L-d.
   7D works only on open items (same file, "HSBS 7D").
 - **7B today (fact R9):** every update that passes validation is saved, even one with no
   `choice`, no `Stand` and no answer: the case is patched, a Status Log line is added, Last
-  Partner Update is stamped, the other-team sender update email may go, and the shared update column is written on
+  Partner Update is stamped, the other-team sender update email may go, and `Update for PVA` is written on
   the **Referrals row** as `<partner> (<Service>): <label or status>. <note>`.
 - **Service Cases:** no Qualified, Not Qualified Reason or Not Qualified Note column in any
   doc on `main`.
@@ -837,7 +838,7 @@ write. Stop at the first rule that refuses.
    #151, 11/14). Before the company check, read the linked Referrals row's Source. On a
    **field or FSC case** (Source `Rep app` or `FSC app`) of **any** company, an update that
    is **genuinely untouched** is skipped: no case write, no Last Partner Update stamp, no
-   Status Log line, no email, no Referrals write (the shared update column included), not counted in
+   Status Log line, no email, no Referrals write (`Update for PVA` included), not counted in
    `saved`. Genuinely untouched means `Stand` and `choice` are both missing or `""`, and
    on a HealthFirst or staffing case `Qualified`, `NotQualifiedReason`, `NotQualifiedNote`,
    `ClosedReason` and `PracticeTypeConfirmed` are each missing or `""`, and so is
@@ -883,10 +884,10 @@ write. Stop at the first rule that refuses.
    it is ignored, so a HealthFirst update that carries only `PracticeType` is a nothing to
    save update. **Recorded 11/13 (fact R9): today's 7B does not skip it.** It patches the
    case, adds a Status Log line, stamps Last Partner Update, may send the other-team sender update email,
-   writes the shared update column on the Referrals row, and counts it in `saved`.
+   writes `Update for PVA` on the Referrals row, and counts it in `saved`.
    **Decided 11/14: decision 104** ("Skip untouched leads"). Build: on a **field or FSC
    case**, the new 7B skips such an update: no case write, no Last Partner Update stamp, no
-   Status Log line, no email, no Referrals write (the shared update column included), and it is not
+   Status Log line, no email, no Referrals write (`Update for PVA` included), and it is not
    counted in `saved`. On a **other-team case** 7B keeps today's full save, unchanged. 7B
    reads the linked Referrals row's Source to choose ("Words used"). The skip runs in rule
    1a, before the company check, so it covers field and FSC cases of every company. BB2
@@ -941,7 +942,7 @@ regression for every partner at go-live step 7. Build, from v2.2:
   in one request. If `Update_doctor` writes a value worked out from all of the doctor's
   cases, a `Reroll_doctors` loop (one at a time, after the update loop) writes those values
   again for each referral that appeared twice, so the parallel passes can't leave a stale
-  roll-up. the shared update column is not rewritten; it holds the last update either way.
+  roll-up. `Update for PVA` is not rewritten; it holds the last update either way.
 - The site already refuses two updates for the same case in one request
   (`src/pages/api/partner-update.ts`), so no case is written twice in parallel.
 - Imported as Update over "HSBS 7B Field copy", so its trigger address doesn't change.
@@ -1005,7 +1006,7 @@ standalone step in F2.9):
 4. **Question 1 is not required on a not-qualified save.** The live 7B does not refuse an
    empty `TalkedToDoctor` (fact R5), so change nothing.
 5. **The note is not a status, and never goes in mail.** Never put `NotQualifiedNote` in
-   the shared update column, `label`, the Status Log, any column other than Not Qualified Note, or
+   `Update for PVA`, `label`, the Status Log, any column other than Not Qualified Note, or
    the subject or body of any email 7B sends (the update email on an FSC or other-team case,
    the Return to HSBS email, or any other). A field case gets no update email (L3).
 6. The success answer is unchanged: 200 `{"saved": n, "notified": [...]}`.
@@ -1037,9 +1038,9 @@ On a HealthFirst or staffing case that passed F2.6:
    owes a status.
 3. Leave every other field of the case as it is: Stage, Status, Partner Status, Talked To
    Doctor, Last Touch, First Touch, Next Step Date, Pipeline Stage, Closed Reason, Last
-   Notified Status and the deal value columns. the shared update column is on the Referrals row, not
+   Notified Status and the deal value columns. `Update for PVA` is on the Referrals row, not
    the case, and today 7B writes it on every save, one with no Stand included (facts R9,
-   F7-0.9). Build: a standalone save does not write the shared update column on the Referrals row. **The one exception is Award
+   F7-0.9). Build: a standalone save does not write `Update for PVA` on the Referrals row. **The one exception is Award
    Practice Type:** when this save carries a `PracticeTypeConfirmed` value and leaves a
    staffing case with reached Yes and Qualified Yes, and Award Practice Type is blank, 7B
    stamps it from that value in the same write (sheet F1, F1.6 rule 9). With no
@@ -1080,7 +1081,7 @@ A Qualified No is never a standalone save; one that arrives with no Stand is ref
 `bad_value` (F2.6 rule 4).
 
 **F2.11 Hand Back Note** (decision 105, Brian 11/14: "Own Service Case column"). Today 7B
-writes the partner's hand-back note only to the shared update column on the Referrals row, shared by
+writes the partner's hand-back note only to `Update for PVA` on the Referrals row, shared by
 every company on that doctor, and every later save rewrites it (fact F7-0.9). Build:
 
 1. On Service Cases add Hand Back Note: **Multiple lines of text, plain text** (not rich
@@ -1091,7 +1092,7 @@ every company on that doctor, and every later save rewrites it (fact F7-0.9). Bu
 3. **Never overwritten.** No other save writes Hand Back Note, and a hand back save on a
    case whose Hand Back Note already holds a value leaves it as it is. Brian's own edit in
    SharePoint is the only other change.
-4. the shared update column on the Referrals row is written exactly as today, on every case. On a
+4. `Update for PVA` on the Referrals row is written exactly as today, on every case. On a
    **other-team case** 7B writes no Hand Back Note: its hand back is saved exactly as today.
 5. Sheet F7 (Part D, step D3) reads the note from Hand Back Note for a field or FSC case.
 
@@ -1268,7 +1269,7 @@ FSC 7B does not have (desk 008), so they are reworded before `EnforceQualify` go
    7A no longer returns the case. 7D sends no reminder for it on its next run. (S6 "No with
    a reason closes the case"; M16 third case, flow side.)
 7. The same save with reason `Other` and a TEST note stores the note in Not Qualified Note.
-   The note is not in the shared update column, the other-team sender's email or the Status Log (the tail says
+   The note is not in `Update for PVA`, the other-team sender's email or the Status Log (the tail says
    `Qualified No (Other)`). (S6 TEST Other note, flow side; the exceptions part is F4.)
 7a. On a TEST FSC app case, open the TEST update email 7B sent for that not-qualified
    close (reason `Other`, TEST note), where today's TEST rule sends it: the note text is in
@@ -1399,18 +1400,18 @@ FSC 7B does not have (desk 008), so they are reworded before `EnforceQualify` go
     as BB2 recorded under item 9). The same update on an open TEST staffing case stores
     `Group` (F2 check 18 pattern). Both TEST cases are field or FSC cases (decision 104).
 21c. **A other-team case keeps today's save** (decision 104 scope). On an open TEST case
-    whose Referrals row has Source the other team's app Source value (or the other team's page Source value), a request with one update
+    whose Referrals row has Source `PVA app` (or `PVA page`), a request with one update
     carrying only `id` (no `choice`, no Stand, no answer) is saved exactly as today's 7B
     saves it (fact R9): the case patched, one Status Log line, Last Partner Update stamped,
-    the shared update column written on the Referrals row, and counted in `saved`. The same update on
+    `Update for PVA` written on the Referrals row, and counted in `saved`. The same update on
     an open TEST field case (Source `Rep app`) writes nothing, adds no log line, sends no
-    email, leaves the shared update column as it was, and is not counted in `saved`.
+    email, leaves `Update for PVA` as it was, and is not counted in `saved`.
 21d. **The untouched skip covers every company** (decision 104, F2.6 rule 1a). On an open
     TEST case for Unitas whose Referrals row has Source `FSC app`, a request with one update
     carrying only `id` (no `choice`, no Stand) writes nothing to the case, adds no Status Log
-    line, stamps no Last Partner Update, sends no email, leaves the shared update column as it was, and
+    line, stamps no Last Partner Update, sends no email, leaves `Update for PVA` as it was, and
     is not counted in `saved`. The same update on an open TEST Unitas case whose Referrals
-    row has Source the other team's app Source value is saved exactly as today (as in check 21c).
+    row has Source `PVA app` is saved exactly as today (as in check 21c).
 22. No email went out from any check above except what today's TEST rule already sends,
     and on a field case none except the Return to HSBS email to Brian (L3, L5).
 23. **`EnforceQualify` off, site switch off.** With the new 7B copy at `EnforceQualify` off
@@ -1435,13 +1436,13 @@ FSC 7B does not have (desk 008), so they are reworded before `EnforceQualify` go
     keep Brian's values. (The award row is sheet F4's; see open items.)
 26. **Hand Back Note** (decision 105). On an open TEST field case (Referrals Source `Rep
     app`), a hand back save with the note `TEST note one` stores `TEST note one` in Hand
-    Back Note; the shared update column on the Referrals row is written as today. A later save on
-    another company's TEST case for the same doctor rewrites the shared update column but leaves the
+    Back Note; `Update for PVA` on the Referrals row is written as today. A later save on
+    another company's TEST case for the same doctor rewrites `Update for PVA` but leaves the
     first case's Hand Back Note as `TEST note one`. A direct second hand back post on the
     first case with `TEST note two` leaves `TEST note one` stored (and is refused `closed`
     once `EnforceQualify` is on).
 27. **A other-team hand back is as today** (decision 105 scope). On an open TEST case whose
-    Referrals Source is the other team's app Source value, a hand back save writes the shared update column exactly as
+    Referrals Source is `PVA app`, a hand back save writes `Update for PVA` exactly as
     today's 7B does, and Hand Back Note stays blank.
 28. **Closed reason on field and FSC cases only** (decision 102). A lost save with
     `ClosedReason` `Price` on an open TEST field case stores `Price` in the Service Cases
@@ -1465,7 +1466,7 @@ slice S4, check M12.
 ### F6: what exists today
 
 - **1R `list`:** `{"referrals":[...]}`, each referral with `id`, `doctorName`,
-  `practiceName`, `sentOn`, `route`, the other team's name key, `closed`, `signed`, `lines` and `history`;
+  `practiceName`, `sentOn`, `route`, `pvaName`, `closed`, `signed`, `lines` and `history`;
   each line has `company`, `status`, `detail`, `updatedOn` (`docs/fsc-flow-contracts.md`,
   "1R list"). On an other-team sender-first referral one line names the other-team sender in `company`. The site keeps
   only those line keys (`src/lib/fsc-track.mjs` lines 110 to 121) and picks the HealthFirst
@@ -1555,7 +1556,7 @@ Requests are unchanged:
       "practiceName": "TEST North Side Dental",
       "sentOn": "2026-11-13",
       "route": "Partner",
-      "<other-team name key>": "",
+      "pvaName": "",
       "closed": true,
       "signed": false,
       "lines": [
