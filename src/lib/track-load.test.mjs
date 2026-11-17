@@ -279,17 +279,17 @@ describe('a cold Track open costs up to three flow posts, a warm one costs none'
     }
   });
 
-  test('FLOW_CACHE_SECONDS=0 turns the cache off: no hold, and no role check beside each read', async () => {
+  test('FLOW_CACHE_SECONDS=0 turns the cache off: no hold, but one key check per read', async () => {
     process.env.FLOW_CACHE_SECONDS = '0';
     const flow = await listen(fakeFlow());
     try {
       const k = key('RepOff');
       await track(k);
       await track(k);
-      // No cache means no hold and no role check from the cache: the list and the ledger,
-      // twice. 1F still checks the key on each read.
-      assert.equal(total(flow), 4);
-      assert.equal(actions(flow).filter((a) => a === 'lookup').length, 0);
+      // No cache means no hold and no role check from the cache, so the route asks the
+      // lookup itself before it returns anything: the list, the ledger and the lookup, twice.
+      assert.equal(total(flow), 6);
+      assert.equal(actions(flow).filter((a) => a === 'lookup').length, 2);
     } finally {
       await close(flow);
     }
@@ -305,7 +305,8 @@ describe('a cold Track open costs up to three flow posts, a warm one costs none'
     );
     try {
       const k = key('NotRepGone');
-      assert.equal((await call(listRoute, '/api/referral-list', { referralKey: k })).status, 200);
+      // Not a Rep: refused from the first read (fails closed), so nothing is ever held.
+      assert.equal((await call(listRoute, '/api/referral-list', { referralKey: k })).status, 404);
       disabled = true;
       assert.equal((await call(listRoute, '/api/referral-list', { referralKey: k })).status, 404);
     } finally {
@@ -337,6 +338,76 @@ describe('a cold Track open costs up to three flow posts, a warm one costs none'
       await track(k);
       await earn(k);
       assert.equal(flow.posts.length, 3, 'repeats cost nothing');
+    } finally {
+      await close(flow);
+    }
+  });
+});
+
+describe('fail closed: nothing is returned unless the lookup confirms a Rep (Codex P0 on #1)', { concurrency: false }, () => {
+  beforeEach(() => {
+    clearFlowCache();
+    process.env.REP_APP_ENABLED = 'true';
+    process.env.REP_PAY_ENABLED = 'true';
+    process.env.REP_PAY_PLAN = 'signed:150';
+    delete process.env.FLOW_CACHE_SECONDS;
+  });
+  afterEach(restore);
+
+  const ROWS = { referrals: [{ id: 'R1', doctorName: 'TEST Secret Office', practiceName: 'TEST Dental', sentOn: '2026-11-01' }] };
+  const LEDGER = { rows: [{ referralId: 'R1', practiceName: 'TEST Dental', event: 'Reached', payeeRole: 'Rep', amount: 50, earnedOn: '2026-11-04', status: 'Waiting' }] };
+
+  for (const cacheSeconds of [undefined, '0']) {
+    const label = cacheSeconds === '0' ? 'cache off' : 'cache on';
+    test(`${label}: a lookup that answers another role gets 404 and no rows, on Track and Earnings`, async () => {
+      if (cacheSeconds) process.env.FLOW_CACHE_SECONDS = cacheSeconds;
+      const flow = await listen(
+        fakeFlow({ lookup: () => [200, NOT_REP_LOOKUP], list: () => [200, ROWS], earnings: () => [200, LEDGER] }),
+      );
+      try {
+        for (const r of [
+          await call(listRoute, '/api/referral-list', { referralKey: key(`NotRep${label.length}`) }),
+          await track(key(`NotRep${label.length}`)),
+          await earn(key(`NotRep${label.length}`)),
+        ]) {
+          assert.equal(r.status, 404);
+          assert.equal(JSON.stringify(r.body).includes('TEST Secret Office'), false);
+          assert.equal(JSON.stringify(r.body).includes('TEST Dental'), false);
+        }
+      } finally {
+        await close(flow);
+      }
+    });
+
+    test(`${label}: a lookup that fails gets 502 and no rows, and a later good lookup serves them`, async () => {
+      if (cacheSeconds) process.env.FLOW_CACHE_SECONDS = cacheSeconds;
+      let down = true;
+      const flow = await listen(
+        fakeFlow({ lookup: () => (down ? [500, ''] : [200, REP_LOOKUP]), list: () => [200, ROWS], earnings: () => [200, LEDGER] }),
+      );
+      try {
+        for (const r of [await track(key(`Down${label.length}`)), await earn(key(`Down${label.length}`))]) {
+          assert.equal(r.status, 502);
+          assert.equal(JSON.stringify(r.body).includes('TEST Dental'), false);
+        }
+        down = false;
+        clearFlowCache();
+        const ok = await track(key(`Down${label.length}`));
+        assert.equal(ok.status, 200);
+        assert.equal(JSON.stringify(ok.body).includes('TEST Dental'), true);
+      } finally {
+        await close(flow);
+      }
+    });
+  }
+
+  test('a warm read needs no new lookup: only a confirmed Rep key is ever held', async () => {
+    const flow = await listen(fakeFlow({ list: () => [200, ROWS], earnings: () => [200, LEDGER] }));
+    try {
+      assert.equal((await track(key('Warm'))).status, 200);
+      const before = total(flow);
+      assert.equal((await track(key('Warm'))).status, 200);
+      assert.equal(total(flow), before, 'served from memory, no flow post');
     } finally {
       await close(flow);
     }

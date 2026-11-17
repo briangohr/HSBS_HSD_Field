@@ -10,7 +10,7 @@ import {
 import { isReferralKey } from '../../lib/field-form.mjs';
 import { repAppEnabled, repPayEnabled, repPayPlan, repStaffingPlan, repPayTerms } from '../../lib/register-flow.mjs';
 import { payTerms } from '../../lib/rep-pay-plan.mjs';
-import { LedgerReadError, cachedReferrals, cachedSnapshot, moneyView } from '../../lib/rep-reads.mjs';
+import { LedgerReadError, RepUnverifiedError, cachedReferrals, cachedSnapshot, confirmRep, moneyView } from '../../lib/rep-reads.mjs';
 import { leadViews } from '../../lib/rep-lead.mjs';
 import { repFeed } from '../../lib/rep-track.mjs';
 
@@ -59,7 +59,7 @@ export const POST: APIRoute = async (context) => {
     // rep's money in the same request (`earnings`), so one Track open is one browser call.
     // A cold open (nothing held) is up to THREE flow runs, started together: the list, the
     // ledger and the role check that decides whether the answer may be held. A warm open is
-    // zero. 1F answers 404 to a key it does not know, so the list itself is the gate.
+    // zero. Nothing is returned until the lookup confirms a Rep key (confirmRep).
     // The ledger is a bonus: if it fails the list still answers, with money null.
     const fresh = data.fresh === true;
     const cache = true;
@@ -68,10 +68,19 @@ export const POST: APIRoute = async (context) => {
     // two always come from the same moment. If the snapshot fails (the ledger is down, say),
     // the list is read on its own and the money is null: the tiles show "--", never a wrong
     // figure, and nothing half-fresh is held.
+    // What the role check found, and whether the read came from memory, for confirmRep.
+    let referrer: unknown;
+    const seen = (r: unknown) => {
+      referrer = r;
+    };
+    let warm = false;
+    const onWarm = () => {
+      warm = true;
+    };
     const read = async () => {
-      if (!wantMoney) return { referrals: await cachedReferrals(key, { fresh, cache }), ledger: null as unknown };
+      if (!wantMoney) return { referrals: await cachedReferrals(key, { fresh, cache, seen, onWarm }), ledger: null as unknown };
       try {
-        return await cachedSnapshot(key, { fresh, cache });
+        return await cachedSnapshot(key, { fresh, cache, seen, onWarm });
       } catch (err) {
         if (!(err instanceof LedgerReadError)) throw err; // a bad link, a timeout: as it was
         // The list loaded and the ledger did not: use the list as it is (still three flow runs when cold).
@@ -79,6 +88,8 @@ export const POST: APIRoute = async (context) => {
       }
     };
     const { referrals, ledger } = await read();
+    // Nothing is returned unless the 1F lookup confirms a Rep key (fails closed).
+    await confirmRep(key, { referrer, warm, cache });
     // The Rep app asks for its "Latest updates" feed, and Track's compact rows and lead
     // screens (Brian, 11/9), drawn from these same rows. Other callers get today's shape.
     if (data.feed === true) {
@@ -103,6 +114,7 @@ export const POST: APIRoute = async (context) => {
     }
     return json(decorateReferrals(referrals));
   } catch (err) {
+    if (err instanceof RepUnverifiedError) return json({ error: 'Your referrals did not load.' }, 502);
     if (err instanceof ReferralAppConfigError) {
       console.error('referral list: FIELD_FLOW_URL is not set');
       return json({ error: 'Your referrals did not load.' }, 503);

@@ -8,7 +8,7 @@ import {
 } from '../../lib/field-flow.mjs';
 import { isReferralKey } from '../../lib/field-form.mjs';
 import { repAppEnabled, repPayEnabled, repPayPlan, repStaffingPlan } from '../../lib/register-flow.mjs';
-import { LedgerReadError, cachedSnapshot, moneyView } from '../../lib/rep-reads.mjs';
+import { LedgerReadError, RepUnverifiedError, cachedSnapshot, confirmRep, moneyView } from '../../lib/rep-reads.mjs';
 
 // My Earnings and the money lines for the HealthFirst rep app (slice 4). The browser
 // posts the key; this function asks HSBS 1F for the rep's referrals and their own SPIFF
@@ -52,7 +52,17 @@ export const POST: APIRoute = async (context) => {
 
   try {
     const cache = repAppEnabled(); // the cache belongs to the rep app only
-    const { referrals, ledger } = await cachedSnapshot(String(key), { fresh, cache });
+    let referrer: unknown;
+    let warm = false;
+    const seen = (r: unknown) => {
+      referrer = r;
+    };
+    const onWarm = () => {
+      warm = true;
+    };
+    const { referrals, ledger } = await cachedSnapshot(String(key), { fresh, cache, seen, onWarm });
+    // Nothing is returned unless the 1F lookup confirms a Rep key (fails closed).
+    await confirmRep(String(key), { referrer, warm, cache });
     // Pay is on. A plan that doesn't parse is null: the ledger amounts still show and
     // nothing is promised (field two-track spec, slice S1).
     // The staffing plan (REP_PAY_PLAN_STAFFING) words staffing promises only (slice S5).
@@ -61,6 +71,7 @@ export const POST: APIRoute = async (context) => {
     // A ledger-only failure is wrapped so the list route can keep its list; here it is the ledger's own error.
     const err = caught instanceof LedgerReadError ? caught.cause : caught;
     if (err instanceof ReferralKeyUnknownError) return json({ error: 'This link does not work.' }, 404);
+    if (err instanceof RepUnverifiedError) return json({ error: 'Your earnings did not load.' }, 502);
     if (err instanceof ReferralAppConfigError) {
       console.error('earnings: FIELD_FLOW_URL is not set');
       return json({ error: 'Your earnings did not load.' }, 503);

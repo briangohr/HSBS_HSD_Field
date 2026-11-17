@@ -279,8 +279,13 @@ describe('/api/referral-list: the Rep app gets its rows and lead screens from th
     const server = createServer(async (req, res) => {
       const chunks = [];
       for await (const c of req) chunks.push(c);
-      posts.push(JSON.parse(Buffer.concat(chunks).toString()));
+      const body = JSON.parse(Buffer.concat(chunks).toString());
+      posts.push(body);
       res.writeHead(200, { 'content-type': 'application/json' });
+      if (body.action === 'lookup') {
+        res.end(JSON.stringify({ role: 'Rep', repName: 'TEST Rep', repEmail: 'test.rep@example.com', services: ['HealthFirst'], isManager: false }));
+        return;
+      }
       res.end(JSON.stringify({ referrals: [withStatus('Meeting set')] }));
     });
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -305,8 +310,8 @@ describe('/api/referral-list: the Rep app gets its rows and lead screens from th
       assert.deepEqual(Object.keys(rep), ['counts', 'referrals', 'feed', 'leads']);
       assert.deepEqual(rep.leads.map((l) => [l.office, l.chip]), [['TEST North Side Dental', 'Meeting set']]);
       // One list call each: no new action, no new field asked of the flow.
-      // (The field-key check adds a lookup per read while the cache is off and a field entry is
-      // on test; it is not a new field asked of the list.)
+      // (With the cache off the route asks the lookup once per read to confirm the key; that
+      // is not a new field asked of the list.)
       assert.deepEqual(posts.filter((p) => p.action === 'list'), [{ action: 'list', referralKey: KEY }, { action: 'list', referralKey: KEY }]);
     } finally {
       for (const [k, v] of [['FIELD_FLOW_URL', prior.url], ['REP_APP_ENABLED', prior.app], ['FLOW_CACHE_SECONDS', prior.cache]]) {

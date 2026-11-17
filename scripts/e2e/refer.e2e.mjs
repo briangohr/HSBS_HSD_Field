@@ -2260,6 +2260,52 @@ for (const [plan, label] of [['reached_private:100,reached_group:200,manager:50'
           await ctx.close();
         }
       });
+      await check('HealthFirst, JS on: a retry after a timeout resends what was first posted, and the receipt follows it', async () => {
+        const ctx = await browser.newContext({ ...devices['iPhone 13'], reducedMotion: 'reduce' });
+        try {
+          const page = await ctx.newPage();
+          const posted = [];
+          let first = true;
+          await page.route('**/api/referral', async (route) => {
+            const body = JSON.parse(route.request().postData() || '{}');
+            if (body.company !== 'HealthFirst') return route.continue();
+            posted.push(body);
+            if (first) {
+              first = false;
+              return route.fulfill({ status: 504, contentType: 'application/json', body: JSON.stringify({ timeout: true, error: 'Timed out.' }) });
+            }
+            return route.continue();
+          });
+          await page.goto(`${BASE}/refer/${REP_KEY}?company=HealthFirst`);
+          bodies.length = 0;
+          await page.fill('#rep-form [name=contactName]', 'TEST Office Manager');
+          await page.fill('#rep-form [name=practiceName]', 'TEST North Side Dental');
+          await page.fill('#rep-form [name=jde]', '001234');
+          await page.fill('#rep-form [name=officePhone]', '303-555-0100');
+          await page.check('#rep-form [name=preferredContact][value=Text]');
+          await page.check('#rep-form [name=permission]');
+          await page.click('#rep-send-button');
+          await page.waitForFunction(() => !document.getElementById('rep-alert').hidden);
+          assert.equal(await page.isVisible('#rep-receipt'), false);
+          // Changed since the first post; the retry must not carry it.
+          await page.fill('#rep-form [name=contactName]', 'TEST Someone Else');
+          await page.fill('#rep-form [name=practiceName]', 'TEST Other Dental');
+          await page.check('#rep-form [name=preferredContact][value=Call]');
+          await page.click('#rep-send-button');
+          await page.waitForSelector('#rep-receipt:not([hidden])', { timeout: 10000 });
+          assert.equal(posted.length, 2);
+          assert.equal(posted[1].submissionId, posted[0].submissionId);
+          assert.equal(posted[1].contactName, 'TEST Office Manager');
+          assert.equal(posted[1].practiceName, 'TEST North Side Dental');
+          assert.equal(posted[1].preferredContact, 'Text');
+          const receipt = await page.textContent('#rep-receipt');
+          assert.equal(receipt.includes('TEST Someone Else'), false, receipt);
+          assert.equal(bodies.filter((b) => b.action === 'submit').length, 1);
+          assert.equal(bodies.find((b) => b.action === 'submit')?.doctorName, 'TEST Office Manager');
+        } finally {
+          await ctx.close();
+        }
+      });
       await check('S3 pay on, JS on: the HealthFirst terms changing does not take away the staffing promise', async () => {
         const ctx = await browser.newContext({ ...devices['iPhone 13'], reducedMotion: 'reduce' });
         try {

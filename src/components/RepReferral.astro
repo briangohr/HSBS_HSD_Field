@@ -579,10 +579,28 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
       });
     }
 
+    // A send with no clear answer (a timeout, a dropped connection, a 5xx) may still have
+    // been saved under its id. The retry must resend exactly what was first posted, so the
+    // form is put back to the posted values and the receipt is worded from them, never from
+    // fields changed since (Codex P1 on HSBS_HSD_Field#1; the staffing form does the same).
+    // A clear answer (a refusal or a success) ends it.
+    let hfPending: { id: string; fields: ReturnType<typeof read> } | null = null;
+    const restore = (fields: ReturnType<typeof read>) => {
+      for (const [name, value] of Object.entries(fields)) {
+        const el = form.elements.namedItem(name);
+        if (el instanceof RadioNodeList) {
+          el.forEach((r) => {
+            if (r instanceof HTMLInputElement) r.checked = r.value === value;
+          });
+        } else if (el instanceof HTMLInputElement && el.type === 'checkbox') el.checked = value === true;
+        else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) el.value = String(value);
+      }
+    };
     form?.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (sending) return;
-      const fields = read();
+      if (hfPending) restore(hfPending.fields);
+      const fields = hfPending ? hfPending.fields : read();
       const check = validateRepReferral(fields);
       if (!check.ok) {
         showErrors(check.errors);
@@ -594,7 +612,8 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
       sending = true;
       sendButton.disabled = true;
       sendButton.textContent = SENDING_MESSAGE;
-      const submissionId = String(new FormData(form).get('submissionId') ?? '');
+      const submissionId = hfPending ? hfPending.id : String(new FormData(form).get('submissionId') ?? '');
+      hfPending = { id: submissionId, fields };
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), CLIENT_WAIT_MS);
       try {
@@ -604,6 +623,8 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
           body: JSON.stringify({ app: 'rep', company: 'HealthFirst', referralKey, submissionId, ...fields }),
           signal: controller.signal,
         });
+        // Any answer under 500 is clear: it was saved, or it was refused and nothing was.
+        if (res.status < 500) hfPending = null;
         const body = await res.json().catch(() => ({}));
         if (res.ok && body.ok) {
           noteTerms(body.terms);

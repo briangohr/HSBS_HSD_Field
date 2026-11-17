@@ -5,8 +5,8 @@
 // Cost of a Track open, counted at the flow (counting the role check): a cold open is
 // up to THREE flow runs, started together (list, ledger, and the lookup below that says
 // whether the key is a Rep's). A warm open is zero.
-import { readThrough } from './flow-cache.mjs';
-import { listEarnings, listReferrals, lookupReferral } from './field-flow.mjs';
+import { cacheTtlMs, readThrough } from './flow-cache.mjs';
+import { ReferralKeyUnknownError, listEarnings, listReferrals, lookupReferral } from './field-flow.mjs';
 import { moneyForReferrals, sanitizeLedger, summarizeEarnings } from './rep-earnings.mjs';
 import { DEFAULT_PAY_PLAN, parsePayPlan, payTerms, usableStaffingPlan } from './rep-pay-plan.mjs';
 
@@ -69,13 +69,62 @@ export function classificationFor(key) {
 }
 export const UNKNOWN_CLASS = UNKNOWN;
 
+/** The role check failed (a timeout, a 5xx), so the read is not served: try again. */
+export class RepUnverifiedError extends Error {
+  constructor() {
+    super('rep check failed');
+    this.name = 'RepUnverifiedError';
+  }
+}
+
+/**
+ * Fail closed: a list or ledger read is served only for a key the 1F lookup confirms as a
+ * Rep (Codex P0 on HSBS_HSD_Field#1). The cache's role check (isRepKey) only decides
+ * whether an answer may be held; this decides whether it may be returned at all.
+ *   - A warm read came from memory, and only confirmed Rep keys are ever held: served.
+ *   - Otherwise this caller's own role check, or the one a shared read ran, decides. A
+ *     check still running is waited on (no new flow run).
+ *   - The cache is off (`cache` false, or FLOW_CACHE_SECONDS=0): no check ran beside the
+ *     read, so the lookup is asked now. An older check is never reused then.
+ * A lookup that refuses the key throws ReferralKeyUnknownError (404). One that failed
+ * throws RepUnverifiedError (502). Nothing is returned for a key that was not confirmed.
+ * @param {string} key
+ * @param {{ referrer?: unknown, warm?: boolean, cache?: boolean }} seen
+ */
+export async function confirmRep(key, { referrer, warm, cache = true } = {}) {
+  if (warm) return;
+  const cacheOn = cache && cacheTtlMs() > 0;
+  let r = referrer ?? (cacheOn ? classificationFor(key) : undefined);
+  if (!r && cacheOn) {
+    const running = classificationInFlight(key);
+    if (running) {
+      try {
+        r = await running;
+      } catch {
+        r = UNKNOWN;
+      }
+    }
+  }
+  if (r === UNKNOWN) {
+    // The check failed. Ask once more, so a refused key is a 404 and not a 502.
+    try {
+      r = await lookupReferral(key);
+    } catch (err) {
+      if (err instanceof ReferralKeyUnknownError) throw err;
+      throw new RepUnverifiedError();
+    }
+  }
+  if (!r) r = await lookupReferral(key);
+  if (/** @type {any} */ (r).role !== 'Rep') throw new ReferralKeyUnknownError('flow-identity', 'role:bad');
+}
+
 /** @param {string} key @param {{ fresh?: boolean, cache?: boolean, seen?: (referrer: unknown) => void, onWarm?: () => void }} [opts] */
 export const cachedReferrals = (key, opts = {}) =>
   readThrough('list', key, () => listReferrals(key), { ...opts, mayStore: isRepKey(key, opts.seen) });
 
-/** @param {string} key @param {{ fresh?: boolean, cache?: boolean }} [opts] */
+/** @param {string} key @param {{ fresh?: boolean, cache?: boolean, seen?: (referrer: unknown) => void, onWarm?: () => void }} [opts] */
 export const cachedEarnings = (key, opts = {}) =>
-  readThrough('earnings', key, () => listEarnings(key), { ...opts, mayStore: isRepKey(key) });
+  readThrough('earnings', key, () => listEarnings(key), { ...opts, mayStore: isRepKey(key, opts.seen) });
 
 /** Only the ledger half of a snapshot failed. The list is fine and can be read on its own. */
 export class LedgerReadError extends Error {

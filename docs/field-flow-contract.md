@@ -182,8 +182,13 @@ what the browser gets (no rep email, no key).
 
 - The key is a secret in the URL. Pages that carry it set `Cache-Control: no-store`,
   `X-Robots-Tag: noindex, nofollow` and load no analytics.
+- Track and Earnings return rows only for a key the lookup confirms as a Rep. A key the
+  lookup refuses gets 404 and a failed lookup gets 502, even when `list` or `earnings`
+  answered (`confirmRep` in `src/lib/rep-reads.mjs`).
 - The Track and Earnings cache holds an answer only after the lookup confirms a Rep key;
   errors are never held, and a send clears that key's entries.
+- A send with no clear answer (a timeout, a dropped connection, a 5xx) keeps its
+  `submissionId` and the exact fields first posted, so a retry resends the same referral.
 - Rate limits are per key with a per-IP backstop, so many people behind one office IP are
   never limited, while one key or one address cycling keys is.
 - No key, flow URL, email or office detail is ever logged.
