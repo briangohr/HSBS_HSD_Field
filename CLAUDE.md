@@ -27,7 +27,8 @@ touches another team's flow or list is a defect to remove, not a feature to keep
   pages or components. `field-flow.mjs` is the only module that posts to 1F;
   `register-flow.mjs` the only one that posts to 1J.
 - `docs/`: the contract. A change to what a route sends to or expects from a flow updates
-  `docs/field-flow-contract.md` in the same PR.
+  `docs/field-flow-contract.md` in the same PR. `docs/build/` holds the flow-side build
+  sheets moved from the old repo; read its README first.
 - `scripts/`: the secret scan, the test loader and the browser tests. Browser tests use a
   local fake flow, never a live one.
 

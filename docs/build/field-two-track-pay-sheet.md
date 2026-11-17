@@ -1,0 +1,1336 @@
+# Field two-track app: build sheet F4, the pay flow and the ledger per company
+
+> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and names in code quotes are live SharePoint and flow names.
+
+Builder: BB2 (decision 91).
+
+Checked against BB2 step 1 facts v2 (11/13): R2, R8, F3-0.5, F3-0.6, and the v2 decision 97
+checks (3F's Test_mode reads the row's Test; no Test column on Service Cases). See "Step 1
+facts" under "Stop rules".
+
+**Read the live flows and lists first. Before building any step, BB2 reads (read only) the
+SPIFF Ledger, every flow that reads or writes it, and every Service Cases, Referrals,
+Rep Roster, Team Roster and Routing column this sheet names, and writes every "BB2 records
+before building" line in the build report. If any stop rule holds, BB2 builds nothing and
+reports which rule and why. This is money: where this sheet does not give a value, BB2
+stops and asks. He never guesses.**
+
+Written 11/13/2026 by Claude for BB2, from the approved spec "Field two-track app: team
+members and managers (v1)" (`docs/build/field-two-track-spec.md`, approved by Brian 11/13:
+"approve the spec"). Section numbers (4, 6, 9, 10, 13), check names (M1 to M27) and the
+letters T and D are that spec's and rep app v3's (`docs/build/healthfirst-rep-app-spec.md`). This
+sheet builds row F4 of spec section 9 and the F4 items of section 13. It also follows
+`docs/build/rep-app-flow-contracts.md` ("HSBS 1R earnings", "Manager pay (HSBS 10)"), sheets F1,
+F2 and F6 in `docs/build/field-two-track-flow-contracts.md`, `docs/threat-model.md` T9 to T11, the
+plan keys in `src/lib/rep-pay-plan.mjs` (PR #113), and decisions 65, 73, 75, 76, 77, 82
+and 84 (`docs/claude-code/DECISIONS.md`; 75 to 84 as recorded on PR #121).
+
+This is a build sheet. BB2 builds it in Power Automate and SharePoint. The repo never edits
+a flow. It never contains a flow URL, key, email address or phone number, and neither does
+the build report.
+
+## Brian's decisions this sheet rests on (11/13)
+
+**Gate G0: this sheet is not built until PR #121 is merged to `main`.** Decisions 75, 76,
+77, 82 and 84 below are recorded in `docs/claude-code/DECISIONS.md` on PR #121, which is
+not merged as this sheet is written. Until it is, BB2 builds nothing from this sheet and
+says so in the build report. Brian or Claude tells BB2 in writing when #121 is merged,
+with its merge commit.
+
+| # | Decision, with Brian's words | What it means here |
+|---|---|---|
+| 65 | Pay needs reached and qualified, for both partners | The Reached award is written only when Talked To Doctor is Yes and Qualified is Yes |
+| 73 | A group is 3 or more locations | Practice type `Group` earns the group amount |
+| 75 | Matt Penny at Direct Dental gets the staffing payout list. Direct Dental pays the staffing awards (T13). His address goes into Routing in SharePoint, never into the repo. Brian: "Matt Penny for the payout list too" | The staffing payout batch is built here (F4.7). Its recipient is read from Routing |
+| 76 | Katy knows staffing goes to field sales before 12/31, and staffing award pay is cleared as HealthFirst's was on 11/8. Brian: "Already cleared" | Nothing in this sheet waits on Katy |
+| 77 | The manager and plan on file when the pay run handles a sign are the ones that count. Nothing is stamped at the sign. Brian: "Keep today's process" | The sign run reads the Team Roster and the amounts as they are when it runs (F4.4, rule B) |
+| 82 | The partner confirms the practice type when answering "Does this lead qualify?". The partner page stops preselecting the rep's pick, and 7B stamps Award Practice Type only from that confirmation. Both land before F4 turns staffing awards on. Brian: "Yes, partner confirms it" | Staffing award creation sits behind `StaffingAwardsOn`, off by default, and stays off until that follow-up is live (gate G3) |
+| 90 | In the 12 month once-per-office check, TEST and real referrals never block each other: TEST rows check only against TEST rows, real only against real. Brian: "Never block each other" | W11 rule 1 |
+| 84 | A staffing case signed in the turn-on gap is fixed by Brian in SharePoint, setting Qualified and Award Practice Type together. Brian: "Yes, I fix it in SharePoint" | The blank Award Practice Type guard lists the case until he does (F4.4 rule G, list X4) |
+
+## What this sheet builds
+
+| Piece | What it is | Writes |
+|---|---|---|
+| SPIFF Ledger | Two new columns, Company and Practice Type. Payer gains `Direct Dental`. Existing rows get Company and Payer filled once | F4.1, F4.2 |
+| HSBS 10 | **The one ledger writer.** An HTTP flow that takes one Service Case ID, reads the case fresh, and writes or voids its ledger rows. One run at a time (trigger concurrency 1) | Ledger rows only |
+| HSBS 10S | On a Service Case save (created or modified), sends that case's ID to HSBS 10 | Nothing |
+| HSBS 10D | Every day at 7:00 AM Eastern: sends each rep app case to HSBS 10, then emails Brian the ledger exceptions | Nothing but its email to Brian |
+| HSBS 10B | Brian's payout batch, one payer per batch. Run by Brian by hand | Payout Batch and Sent On on ledger rows, and the payout list email |
+| HSBS 10P | Brian marks a confirmed batch Paid. Run by Brian by hand | Status and Paid On on ledger rows |
+
+**Why one writer.** Every ledger write goes through HSBS 10, and HSBS 10 runs one request
+at a time. A save and the daily run can never decide the same case at once, so two runs can
+never both find "no row yet" and both write (T9). HSBS 10 reads every fact from SharePoint
+itself: a caller sends only a case ID, so a stray or forged call can make HSBS 10 look at a
+case, never set an answer, an amount or a payee (T10).
+
+## Stop rules
+
+BB2 checks each before building, and again before each go in "Build order" (S1 and S2 as
+noted). If one holds, he builds or turns on nothing further and reports it.
+
+| # | Stop when | Why |
+|---|---|---|
+| S0 | PR #121 is not merged to `main` (gate G0) | Decisions 75, 76, 77, 82 and 84 are not yet on `main` |
+| S1 | Any flow other than the HSBS 10 this sheet builds (and 10B and 10P) writes the SPIFF Ledger and is turned on | A second writer breaks the one-writer rule. Brian decides what happens to it |
+| S2 | Before go-live (build order step 6): the SPIFF Ledger holds any row with Status `Paid` or `Pending review`, or any row with Test = No other than the TEST rows cleared by hand in checks H19 and H25. After go-live, only `Pending review` stops | No payout has run and HSBS 10 was never built (`docs/build/rep-app-flow-contracts.md`, "Open before pay goes live"). Such a row means something paid or wrote real money already |
+| S3 | Award Key is not set to "Enforce unique values", and cannot be set because two rows share a key | The unique key is what stops a second row (D6) |
+| S4 | Any flow has a trigger on the SPIFF Ledger | A ledger write would start it, and it might send mail |
+| S5 | Service Cases is missing any of: Practice Type, Award Practice Type (sheet F1), Qualified, Not Qualified Reason, Not Qualified Note (sheet F2), or BB2 cannot name the exact Service Cases column for: the case's company, Talked To Doctor, Talked On, Closed Reason, Status, Signed Date, Signed Product, Introduced On, Last Partner Update, Test, and the link to its Referrals row | HSBS 10 reads every one of them |
+| S6 | Closed Reason is stored on Referrals, not on the Service Case (sheet F2, "BB2 records", item 2) | Two companies on one referral would share one reason |
+| S7 | Referrals is missing, or BB2 cannot name exactly: Title (the referral ID), Source, Referring Rep Email, JDE (text), Practice Name, the customer name column, Solutions, Test, Created | HSBS 10 reads every one of them |
+| S8 | The HSBS 10 HTTP trigger cannot be set to a concurrency limit of 1 | The one-writer rule needs it |
+| S9 | The address HSBS 10D, 10B or 10P would send Brian's mail to is not the Brian address a live HSBS flow already sends Brian-only mail to (for example the daily gap check) | No new recipient (`AGENTS.md`, check 2) |
+| S10 | Routing has no entry holding the staffing payout list contact (decision 75), or it holds more than one address | Only Brian adds a recipient. BB2 never types an address into a flow, the sheet or the report |
+| S11 | The live 3F decides a TEST row with a rule that marks a row Test when this sheet's "TEST case" rule (Words used) would not | A row that gets no live email because it is TEST must never earn real money |
+| S12 | The daily catch-up in F4.6 would post more than 5,000 cases in one run | Ask Brian how to split it across days first; never skip a case |
+| S13 | Any step needs a value this sheet does not give | Never guess on money |
+
+**Step 1 facts (11/13) and Brian's answers (11/14).** On 11/13 S5 held for Test: Service
+Cases had no Test column (v2 check 5), and neither 3F nor HSBS 3 writes Test on a case (fact
+F3-0.5). **Decided: decision 101** ("Add a Test column"): sheet F3, Part T adds a Yes/No
+Test column, default No, and 3F copies the Referrals row's Test onto each field or FSC case
+it makes. "TEST case" (Words used) and exceptions X11 and X16 read that column, and pay
+filters on it. S5 is checked again once Part T is built. On Closed Reason: 7B wrote none
+anywhere (fact R2). **Decided: decision 102** ("Service Cases column"): the Closed Reason
+column is on Service Cases (sheet F2, F2.4), written by 7B on a close of a field or FSC
+case, so S6 does not hold once F2.4 is built. Every rep app case is a field case. S11 does
+not hold since 11/13: 3F's Test_mode reads the Referrals row's Test (decision 97), which
+"TEST case" already covers; before 11/13 it was the literal `true`.
+
+## Rules for every step
+
+1. Build each new flow turned off. Turn one on only at its step in "Build order".
+2. TEST rows only while testing (decision 48): a Referrals row with Test = Yes, TEST in the
+   practice name, a made-up contact, its Service Case under the TEST Partner link, sent by
+   a TEST rep (Rep Roster Test = Yes). BB2 deletes TEST rows, cases and ledger rows when the
+   checks are done and reported.
+3. No live sends. Nothing in this sheet emails a rep, a manager, a partner or a customer.
+   HSBS 10D and 10P email Brian only. HSBS 10B emails Brian, and on Brian's own send run the
+   payer contact read from Routing (F4.7). No dollar amount goes in any email to a rep or a
+   manager (D15).
+4. No new recipient beyond those two, and no address typed into a flow.
+5. No secrets anywhere: no flow URL, key, token or password in a sheet, report, Status Log
+   line, test note or commit. HSBS 10's trigger URL lives only in the HTTP steps of 10S and
+   10D, with Secure inputs on.
+6. Escape `'` as `''` in every Filter Query. Compare emails with `toLower` and trimmed.
+7. Every Get items step has a Filter Query on an indexed column or a Top Count, and
+   pagination where more than 100 items can come back. Nothing may fail past 5,000 items.
+8. HSBS 10 never writes Service Cases, Referrals, the Rep Roster, the Team Roster or
+   Routing. It writes ledger rows, Sign Log rows and Ledger Run Errors rows, nothing else.
+
+## Words used in this sheet
+
+- **The two companies.** One table ties every name together. Nothing else maps them.
+
+  | Company key (ledger Company) | Solutions value on the case, exactly | Name in words (void reasons, lists) | Payer (ledger Payer) |
+  |---|---|---|---|
+  | `HealthFirst` | `HealthFirst` | HealthFirst | `HealthFirst` |
+  | `Staffing` | `HS Staffing / Recruiting Services (including GoTu)` | Direct Dental | `Direct Dental` |
+
+  A case whose company column holds any other value is not a company in this sheet, and
+  HSBS 10 writes nothing for it.
+- **A rep app case** is a HealthFirst or staffing Service Case whose Referrals row has
+  Source exactly `Rep app`. Only a rep app case can have a ledger row (T24, M13).
+- **The rep** is the Referrals row's Referring Rep Email, trimmed and lowercased.
+- **Reached**: Talked To Doctor is exactly `Yes`.
+- **Qualified**: Qualified is exactly `Yes`. **Not qualified**: Qualified is exactly `No`.
+- **Signed**: Status is `Closed - Won`, and Signed Date and Signed Product are both set
+  ("Signed" with a date and a product, spec section 6).
+- **Open**: the case passes the test the live 7A uses to decide which cases to list (sheet
+  F2, "BB2 records", item 8).
+- **Award type**: the Service Case's Award Practice Type. **Valid award type**: exactly
+  `Private practice` or exactly `Group`. HSBS 10 reads Award Practice Type only, never
+  Practice Type, for an amount, a row's Practice Type or any guard, and never falls back to
+  it. Since PR #137 (decision 82), 7B writes Award Practice Type only from the partner's
+  `PracticeTypeConfirmed` (sheet F1, F1.6 rules 2a and 9).
+- **TEST case**: any of these holds: the Referrals row's Test is Yes; the Service Case's
+  Test is Yes; the rep's Rep Roster row has Test = Yes; the Referrals Practice Name or
+  customer name contains `TEST` in capitals (D8).
+- **TEST person** (rep or manager): their Rep Roster row has Test = Yes, or `test` appears
+  in their roster name or email in any letter case (`docs/build/rep-app-flow-contracts.md`,
+  lookup step 1).
+- **TEST pair**: a Team Roster row with `test` in both emails, in any letter case. It
+  counts only when the rep is a TEST person.
+- **Eastern date**: `convertFromUtc(utcNow(), 'Eastern Standard Time', 'yyyy-MM-dd')`.
+- **Business day**: Monday to Friday, by Eastern date. "N business days after a date" counts
+  weekdays strictly after that date. An intro on a Monday is five business days old on the
+  next Monday.
+- **The three keys** of a case with Service Case ID `<id>`:
+
+  | Key | Award Key, exactly | Event | Payee Role |
+  |---|---|---|---|
+  | K_R | `<id>\|Reached\|Rep` | `Reached` | `Rep` |
+  | K_M | `<id>\|Signed\|Manager` | `Signed` | `Manager` |
+  | K_S | `<id>\|Signed\|Rep` | `Signed` | `Rep` |
+
+  (`<id>` is the Service Case ID as Sheet 4 Part A defined Case ID; BB2 records it. The `\|`
+  in this table is a plain `|`.)
+
+## BB2 records before building
+
+1. Every flow that reads or writes the SPIFF Ledger, with its state (on or off), its
+   trigger, and what it writes (S1, S4).
+2. The SPIFF Ledger as it is live: every column with its exact name and type, the choices
+   on Status, Event, Payee Role and Payer, whether Award Key enforces unique values, which
+   columns are indexed, and the count of rows by Status and Test (S2, S3). If the list does
+   not exist, say so: F4.1 creates it.
+3. How Sheet 4 Part A defined Case ID (the Service Case item ID, or a text ID).
+4. The exact Service Cases and Referrals column names in S5 and S7, the type of Solutions
+   (text, single choice or multiple choice) and how a row naming two companies stores
+   them, and how a Service Case links to its Referrals row.
+5. The live 7A open-case test, word for word (sheet F2, item 8). Recorded 11/13 from the 7A
+   FSC copy (fact R8): Partner Status, not Status, decides; see sheet F2, "Step 1 results",
+   item 8.
+6. The live 3F TEST rule, word for word (S11). Recorded 11/13:
+   `equals(triggerOutputs()?['body/Test'], true)` (decision 97).
+7. Which column 7B writes the partner's talked date to (Talked On), and whether it is a
+   date.
+8. Where Brian-only mail is sent from today and to which mailbox, named by flow, never by
+   address (S9). The Routing entry for the staffing payout list contact, named by its row
+   and column, never by address (S10). Whether Routing has a HealthFirst payout list
+   contact (F4.7; Ask Brian A6).
+9. How live flows put a failed run in front of Brian today, if any do (F4.4, failure). The
+   Ledger Run Errors list is added either way.
+10. How many Referrals rows have Source `Rep app`, split by Test, and the highest Referrals
+    item ID (S12, F4.6).
+11. The status of decision 82's follow-up: whether the S6 page change and the 7B
+    confirmation stamp are live, by PR number and sheet name, from Brian or Claude in
+    writing (gate G3).
+12. Pre-build check, read only: which Service Cases column and value a signed save leaves
+    ("Signed" in Words used says Status `Closed - Won`). 3F and HSBS 3 make a case with
+    Status `Sent` or `Held` (fact F3-0.5), and 7A tests Partner Status `Signed` and `Close
+    won` (fact R8). Read it from the 7B export before HSBS 10's signed rule is built.
+
+## What exists today (from the repo)
+
+- **HSBS 10 is not built.** `docs/build/rep-app-flow-contracts.md`, "Open before pay goes live":
+  "HSBS 10 is not built, and Sheet 4 is on hold". Brian allowed Sheet 4 Part A alone on
+  11/9 (decision log: "the empty pay ledger list, no pay flow, no earnings action"), so the
+  SPIFF Ledger may exist and be empty. Not in the repo copy: whether it does (record 2).
+- **SPIFF Ledger columns** (rep app v3, section 3, "New flow: HSBS 10"): Award Key (unique:
+  Case ID + Event + Payee Role, D6), Referral ID, Service Case ID, Practice Name, Rep Email,
+  Payee Email, Payee Role (Rep, Manager), Event (Reached, Signed), Amount, Earned On, Status
+  (Pending review, Waiting, Paid, Void), Void Reason, Disputed (yes/no), Dispute Note,
+  Payout Batch, Paid On, Payer (HealthFirst), Test (yes/no). No Company and no Practice
+  Type.
+- **Who reads it:** 1R `earnings` and `team` (`docs/build/rep-app-flow-contracts.md`), and the
+  site, which drops any row whose amount is not a whole number 1 to 1000, whose event is
+  not `Reached` or `Signed`, or whose dates are not `YYYY-MM-DD`
+  (`src/lib/rep-earnings.mjs`, `sanitizeLedgerRow`). So every row this sheet writes, Void
+  rows included, has a whole-dollar amount from 1 to 1000. The site adds the period after a
+  Void Reason, so a Void Reason never ends in one.
+- **Plan keys** (`src/lib/rep-pay-plan.mjs`, merged in #113): `REP_PAY_PLAN` is the
+  HealthFirst plan (Brian's 11/11 plan `reached:100,manager:50`); `REP_PAY_PLAN_STAFFING` is
+  `reached_private:100,reached_group:200,manager:50`, all three parts required. The site's
+  plan words promises only. HSBS 10 holds its own copy of the amounts (spec section 6), and
+  Brian changes both together.
+- **Sheets F1 and F2** (on `main`) add Practice Type, Award Practice Type, Qualified, Not
+  Qualified Reason and Not Qualified Note to Service Cases, and the Closed Reason choices
+  `Not qualified` and `Already a customer`. 7B writes no ledger row (F2, "what must not
+  change"). Sheet F6 step F6.4 reads the ledger's Company, which this sheet adds.
+
+## Shared switches: the Ledger Settings list
+
+The three switches are **shared state, never a per-flow variable**, so every flow that acts
+on one reads the same value. They live in one row of a new SharePoint list, Ledger Settings
+(the shared SharePoint site, `HSBSPVAReferrals`), Title `Live`, with these Yes/No columns:
+
+| Column | Value at build | Read by | What it does |
+|---|---|---|---|
+| LedgerTestOnly | Yes | HSBS 10 (W7), HSBS 10D (step 1 filter and the lists) | While Yes, HSBS 10 acts only on a TEST case and writes nothing for any other, and 10D posts and lists TEST cases only |
+| StaffingAwardsOn | No | HSBS 10 (W9), HSBS 10D (X5) | While No, HSBS 10 creates no ledger row for a staffing case (F4.4, step W9); rule V still voids or disputes one written while it was on. 10D lists X5 only while it is No. What turns it on: F4.9 |
+| RealPayoutsOn | No | HSBS 10B, HSBS 10P | While No, nothing is sent to a payer and no Real batch is marked Paid (F4.7, F4.8) |
+
+- In this sheet, a switch "true" or "on" means Yes in this row, and "false" or "off" means
+  No. Setting a switch always means editing this row, never a flow.
+- **Every run reads the row fresh**, as its first step after the trigger (Get items, Title
+  eq `Live`, Top Count 2), and shows the three values it read in a Compose step named
+  `Settings read`. HSBS 10S reads none of them: it only forwards a case ID, and HSBS 10
+  applies the switches.
+- **Fail safe.** No row, two rows, or a blank value: the run uses LedgerTestOnly Yes,
+  StaffingAwardsOn No, RealPayoutsOn No, and records a Ledger Run Errors row (X1).
+- **Who changes it.** BB2 only, at its step in "Build order" or F4.9, on Brian's go in chat
+  quoted in the build report. List permissions: BB2 and Brian may edit; every flow reads
+  only. Nobody edits the row while an HSBS 10, 10D, 10B or 10P run is in progress.
+- **How BB2 confirms the change took.** Right after each change: post one TEST case to HSBS
+  10 (through 10S, by saving it), run 10D by hand, and run a 10B `New` dry run and a 10P on
+  an empty or unknown batch (which stops at its checks). In each run's history the
+  `Settings read` step shows the new value. BB2 writes the four run times and values in the
+  build report. Any flow that shows the old value: set the row back and stop.
+
+## Amount settings in HSBS 10
+
+Initialize variable steps at the very top of HSBS 10. Only HSBS 10 reads them. They are
+plain settings, not secrets. BB2 changes one only on Brian's word in chat, after the freeze
+check and the plan equality check (F4.4, "The freeze"), and writes the change in the build
+report.
+
+| Name | Type | Value at build | What it does |
+|---|---|---|---|
+| `HF_Reached` | Integer | `100` | HealthFirst Reached award, the rep (`reached` in `REP_PAY_PLAN`) |
+| `HF_Signed` | Integer | `0` | HealthFirst award to the rep at the sign (`signed`). 0 under Brian's 11/11 plan |
+| `HF_Manager` | Integer | `50` | HealthFirst manager award at the sign (`manager`) |
+| `ST_ReachedPrivate` | Integer | `100` | Staffing Reached award on award type `Private practice` (`reached_private`) |
+| `ST_ReachedGroup` | Integer | `200` | Staffing Reached award on award type `Group` (`reached_group`, decision 73) |
+| `ST_Manager` | Integer | `50` | Staffing manager award at the sign (`manager`) |
+
+**Amount check, every run.** Each amount is a whole number from 0 to 1000. `HF_Reached` or
+`HF_Signed` is at least 1. A plan may pay nothing at the sign: the Sign Log records that
+the sign was handled, so raising the plan later never pays it (contract, "Open before pay
+goes live", item 2). The three `ST_` amounts
+are each 1 to 1000. Staffing has no award to the rep at the sign. If any of this fails, the
+run fails before any write.
+
+## Build order
+
+1. **Read and record** everything above. Check every stop rule.
+2. **F4.1 and F4.2**: ledger columns, then the one-time fill. No flow writes the ledger
+   during F4.2 (S1).
+3. **Build HSBS 10, 10S, 10D, 10B and 10P**, all off, with the settings at their build
+   values.
+4. **Turn on HSBS 10, then 10S, then 10D, then 10B and 10P**, with `LedgerTestOnly` true,
+   `StaffingAwardsOn` false and `RealPayoutsOn` false in the Ledger Settings row. So nothing can be
+   sent to a payer and no Real batch can be marked Paid. 10B and 10P stay on from here:
+   they run only when started by hand. Run the TEST checks in groups A, H and G.
+5. **Once decision 82's follow-up is built on the TEST copies** of the partner page and
+   7B (so the checks use the partner's confirmed type), and only while `LedgerTestOnly` is
+   true, BB2 sets `StaffingAwardsOn` true in the Ledger Settings row and runs group S. Only TEST cases can
+   be written while `LedgerTestOnly` is true. He sets it back to false after group S.
+6. **Go live (Brian's go, in chat, quoted in the build report).** BB2 sets `LedgerTestOnly`
+   false. Before that: every check in groups A, H, G and S passed; Brian has set
+   `REP_PAY_PLAN` on the site to the same HealthFirst amounts as HSBS 10 (spec section 6),
+   or said in chat that the mismatch is accepted; and the ledger holds no row with Test =
+   No (S2). `StaffingAwardsOn` stays false.
+6a. **Real payouts on (Brian's go, in chat, quoted; a separate go from step 6).** BB2 sets
+   `RealPayoutsOn` true in the Ledger Settings row. Before that, Brian has named the HealthFirst
+   payout contact or accepted the default (Ask Brian A6).
+7. **Staffing awards on**: F4.9, a separate go.
+8. Sheet F6 step F6.4 may be built once F4.1 is done.
+
+At every step: no protected change (an amount setting in HSBS 10, a pay plan value, a
+Team Roster pair) is made unless the freeze check passes right before it ("The freeze",
+F4.4).
+
+## F4.1 SPIFF Ledger columns
+
+If the SPIFF Ledger does not exist, create it with the rep app v3 columns ("What exists
+today") plus the two below, Award Key set to enforce unique values. If it exists, add:
+
+| Column | Type | Choices, spelled exactly | Required | Default | Fill-in |
+|---|---|---|---|---|---|
+| Company | Choice (single, drop-down) | `HealthFirst`, `Staffing` | No | none | No |
+| Practice Type | Choice (single, drop-down) | `Private practice`, `Group` | No | none | No |
+| Sent On | Date only | none | No | none | No |
+| Office Check | Choice (single, drop-down) | `Cleared` | No | none | No |
+
+**Two new lists** on the same site, written only by the flows named:
+
+| List | Columns | Written by |
+|---|---|---|
+| Sign Log | Case ID (number, unique, indexed), Started On (date and time, indexed), Plan Manager (number), Plan Rep Sign (number), Handled On (date and time, indexed) | HSBS 10 only (W16) |
+| Ledger Settings | Title (`Live`, one row), LedgerTestOnly, StaffingAwardsOn, RealPayoutsOn (Yes/No) | BB2 only, by hand ("Shared switches") |
+| Payout Batches | Batch ID (Title, unique), Payer (text), Kind (text: `TEST` or `Real`), Created On, Send Started On, Sent On, Confirmed On (date and time, Send Started On and Sent On indexed), Paid On (date), Send Run ID (text), Rows Sent (multiple lines, plain), Not Paid (multiple lines, plain) | HSBS 10B and 10P only; Brian may clear Send Started On by hand (F4.7) |
+
+Payer: if it is a Choice column, add the choice `Direct Dental`, keeping `HealthFirst`. If it
+is text, add nothing and record its type. Status keeps `Pending review` as a choice so the
+site's reads do not change; this sheet never writes it.
+
+Indexes (add any that are missing, record which already existed): Award Key, Service Case
+ID, Status, Payer, Company, Payout Batch, Sent On, Office Check, Disputed, Test, Rep Email,
+Payee Email.
+
+On Referrals, Source, JDE and Created must be indexed; on Service Cases, the company
+column, the link to Referrals, Qualified and Last Partner Update. Add any that are missing
+(an index changes no data) and record it.
+
+A blank Company reads as `HealthFirst` everywhere: in HSBS 10, 10B, 1R and the site (spec
+section 6, "Ledger").
+
+## F4.2 Fill Company and Payer on existing rows, once
+
+With no flow writing the ledger (S1), for every existing row:
+
+1. Company blank: set `HealthFirst`. Every row written before the column existed is
+   HealthFirst (spec section 6).
+2. Payer blank: set `HealthFirst`.
+3. Change nothing else: Status, Amount, Paid On, Payout Batch, Payee Email, Test, Disputed
+   and every other column stay as they are. Paid rows included (D3): only Company and Payer
+   are filled.
+4. Record the count of rows changed, and export the list (Award Key, Company, Payer, Status,
+   Amount) before and after. The two exports differ only in Company and Payer.
+
+## F4.3 HSBS 10S: on a Service Case save
+
+1. Trigger: SharePoint "When an item is created or modified", Service Cases, on the shared SharePoint site
+   (`HSBSPVAReferrals`).
+2. Condition: the case's company column is exactly `HealthFirst` or exactly
+   `HS Staffing / Recruiting Services (including GoTu)`. Otherwise end, Succeeded.
+3. HTTP POST to HSBS 10, body `{"caseId": <the item ID>}`, Secure inputs on. Wait for the
+   answer. Anything other than 200 with `{"ok":true}`: record the failure (F4.4,
+   "Failure") and end Failed.
+4. 10S reads nothing else and writes nothing. Brian's own SharePoint edits to a case (a
+   Qualified correction after a sign, an Award Practice Type fill under decision 84) are
+   saves, so they reach HSBS 10 this way.
+
+## F4.4 HSBS 10: the ledger writer
+
+**Trigger.** "When a HTTP request is received", method POST, schema
+`{"type":"object","properties":{"caseId":{"type":"integer"}},"required":["caseId"]}`.
+Concurrency control on, limit 1. Any other key in the body is ignored. HSBS 10 answers 200
+`{"ok":true}` at the end of every run that finishes, whether or not it wrote anything.
+
+Steps W1 to W17, in this order. "End" means: answer 200 `{"ok":true}` and write nothing
+more in this run.
+
+**W1 Settings.** Read the Ledger Settings row (fail safe as above), then the amount settings and the amount check.
+
+**W2 Read the case** by ID, fresh. Not found: end.
+
+**W3 Company.** Map the company column through the company table. Not one of the two: end.
+
+**W4 Read its Referrals row** through the case's link. Not found: fail the run.
+
+**W5 Source.** Source is not exactly `Rep app`: end. A field page lead, an other-team lead, a pilot
+FSC app lead, a Salesforce lead or a lead from any other source writes nothing, for a rep
+or a manager, whatever its answers (T24, M13, M20).
+
+**W6 The rep.** The rep (Words used) is blank, or no Rep Roster row has that Rep Email:
+end. It is listed (X14).
+
+**W7 Test.** Work out "TEST case". If `LedgerTestOnly` is true and the case is not a TEST
+case: end.
+
+**W8 One case per referral and company.** If another Service Case links to the same
+Referrals row with the same company: this run creates no row (W15 and W16 are skipped),
+but W10 to W14 still run, so a row that already exists for this case is still voided or
+disputed by rule V. Both cases are listed (X15). A rep app referral names one company
+(sheet F1, F1.4), so this never holds unless data is wrong, and then no one is paid
+twice.
+
+**W9 Staffing switch.** Company is `Staffing` and `StaffingAwardsOn` is false: this run
+creates no row (W15 and W16 are skipped), but W10 to W14 still run. So no staffing row is
+ever written while the switch is off, and a staffing row written while it was on is still
+voided or disputed by rule V if a no-pay reason appears later. Before the switch is first
+turned on there are no staffing rows, so nothing happens. Cases that would earn are listed
+(X5).
+
+**W10 Read the answers** from the case: Reached, Qualified, Not qualified, Not Qualified
+Reason, Closed Reason, Signed, award type. Never Practice Type for an amount, and never
+Not Qualified Note.
+
+**W11 No-pay test** (spec section 6, "A no-pay case pays nobody"). The case is no-pay when
+any of these holds. The first that holds gives the reason, in this order:
+
+1. **Same office, same company, in the last 12 months (D12, per company).** Get items on
+   Referrals with JDE equal to this row's JDE (trimmed, compared as text, leading zeros
+   kept). Keep a row only when all hold:
+   - it is not this Referrals row;
+   - its Solutions names this case's Solutions value exactly (one of its values, if it
+     holds several: a row naming HealthFirst and staffing together counts for each, M17);
+   - it was created before this row (Created earlier, or the same Created and a lower ID);
+   - it was created on or after `addToTime(<this row's Created>, -12, 'Month')`;
+   - it has the same TEST value as this case (decision 90: TEST and real referrals never
+     block each other): the earlier row is TEST when its Test is Yes or its Practice Name
+     or customer name contains `TEST` in capitals.
+
+   Any source counts: the other team's app, the FSC app, the rep app, Salesforce or a page lead. A
+   row with a blank JDE never matches, so a page lead (no JDE) never blocks (M14). An
+   earlier row blocks even though it earned nothing itself. A HealthFirst row never blocks
+   a staffing case, and the reverse (M4).
+   Reason: `this office was referred to <Name in words> in the last 12 months`.
+2. **Already a customer (D7).** Closed Reason is exactly `Already a customer`.
+   Reason: `Already a customer`.
+3. **Not qualified (T16).** Qualified is `No`. Reason:
+   `<Name in words> marked this lead as not qualified (<Not Qualified Reason as stored>)`,
+   for example `Direct Dental marked this lead as not qualified (No permission to contact)`.
+   If the reason is blank (a hand edit), the reason ends after `not qualified`. The note is
+   never used.
+
+A hand back is not a no-pay reason (T22). No flow reads a typed note to decide pay.
+
+**W12 Read the three rows.** Get items on the ledger with Award Key equal to K_R, K_M and
+K_S, one each (Top Count 1). Keep each row's Status, Disputed, Payout Batch and its ETag
+(`@odata.etag`).
+
+**W13 Amounts for this case.**
+
+| | HealthFirst | Staffing |
+|---|---|---|
+| Reached award (A_R) | `HF_Reached` | `ST_ReachedPrivate` when the award type is `Private practice`; `ST_ReachedGroup` when it is `Group`. No valid award type: no Waiting row (rule G) |
+| Rep award at the sign (A_S) | `HF_Signed` | 0 |
+| Manager award (A_M) | `HF_Manager` | `ST_Manager` |
+
+The Practice Type written on a staffing row is the award type when valid, else blank. A
+HealthFirst row's Practice Type is always blank.
+
+**Amount on a staffing Void row** (it never counts and never pays): by the award type when
+valid; with no valid award type, the private practice amount and a blank Practice Type
+(spec section 6, "Practice type", the Already a customer case). Ask Brian A4.
+
+**W14 Void or dispute existing rows (rule V).** Only when the case is no-pay. For each row
+read in W12, by Award Key:
+
+- Status `Waiting`: update it to Status `Void`, Void Reason = the no-pay reason. Nothing
+  else on the row changes.
+- Status `Paid` and Disputed not Yes: set Disputed = Yes and Dispute Note = the no-pay
+  reason. Status, Paid On and Amount stay (D3). It is listed (X7).
+- Status `Void`, or `Paid` and already Disputed: change nothing.
+
+A row's reason is written once. A row already Void keeps the reason it has.
+
+**Every update** in this sheet is a "Send an HTTP request to SharePoint" step, method POST,
+headers `X-HTTP-Method: MERGE` and `IF-MATCH: <the ETag read in this run>`, body naming only
+the columns changed. A 412 (the row changed since it was read) fails the run, and the case
+is picked up again by the next save or by the 7 AM pass. Never update without the ETag, and
+never retry with `IF-MATCH: *`.
+
+**W15 The Reached row (rule R).** Only when no K_R row exists.
+
+| When | Write K_R |
+|---|---|
+| The case is no-pay and A_R is at least 1 | Status `Void`, Void Reason = the no-pay reason, Amount A_R (staffing: the Void amount rule) |
+| The case is no-pay and A_R is 0 | Nothing. The case's closed reason is the record (M18, last part) |
+| Not no-pay, Reached and Qualified, A_R at least 1, and (HealthFirst, or staffing with a valid award type) | Status `Waiting`, Amount A_R |
+| Not no-pay, Reached and Qualified, staffing, no valid award type | Nothing (rule G) |
+| Anything else (reached alone, qualified alone, neither) | Nothing |
+
+So a duplicate gets its Void row on the first run that sees the case, before any partner
+answer, and the rep sees "Not paid" from the start. Reached alone writes nothing.
+Qualified alone writes nothing (M16). No time rule ever writes a row: there is no
+auto-reached award and no `Pending review` row, for either company (T18, M19).
+
+The award is written by the first run that finds Reached and Qualified both true, whatever
+else has happened to the case since: an award earned stands, so a case closed for another
+reason (for example `Price`) or handed back after both answers still gets its Waiting row
+(spec section 6, "Pay on a handed-back case"; M21). A run that is late changes nothing about
+the amount, because it comes from the award type, which 7B stamped at the qualifying save
+and never changes (M3, delayed run).
+
+**W16 The sign (rule B).** Spec section 6, "Manager pay", and the contract's "Manager pay
+(HSBS 10)" points 1 to 8, with these two companies. A sign is handled once, and whether it
+was handled is recorded in the **Sign Log** (F4.1), never worked out from which ledger rows
+exist. So a later plan change can never add a sign row to a sign already handled, whatever
+the plan paid at the time (including nothing). The Sign Log is a separate list, not a
+ledger row: no zero-dollar row is ever written to the ledger (Brian, 11/11).
+
+1. **Both answers are needed.** If Signed and not (Reached and Qualified): write no sign
+   row and no Sign Log row. It is listed (X6). HSBS 10 checks the case itself, whatever 7B
+   allowed.
+2. **Rule G applies.** If Signed, Reached and Qualified, staffing, no valid award type, and
+   not no-pay: write no sign row and no Sign Log row. It is listed (X4).
+3. **Read the case's Sign Log row** (Case ID = this case, Top Count 1, with its ETag). A
+   case reaches steps 4 to 8 only when it is Signed, Reached and Qualified (and, for
+   staffing, rule G passed or the case is no-pay).
+   - **Handled On is set:** the sign is handled. Write no sign row, now or ever, whatever
+     the plan or the Team Roster say (contract point 1).
+   - **No Sign Log row, and a K_M or K_S row already exists** (a row from before this
+     sheet): create the Sign Log row with Handled On = now and the two plan amounts blank,
+     and write no sign row.
+   - **No Sign Log row and no sign row: this is the sign run.** Create the Sign Log row:
+     Case ID, Started On = now, Plan Manager = A_M and Plan Rep Sign = A_S as this run
+     reads them (decision 77: the plan on file when the pay run handles the sign), Handled
+     On blank. Case ID is unique, so a second create fails and writes nothing more.
+   - **A Sign Log row with Handled On blank: a sign run that did not finish** (it failed,
+     or stopped on a roster conflict). Finish it with the amounts stored on that row, Plan
+     Manager and Plan Rep Sign, never the current settings: those are the plan the original
+     run used. Only rows that are missing are written.
+4. **A Void Reached row counts as no-pay at the sign.** If K_R exists with Status `Void`,
+   the sign is no-pay with K_R's Void Reason, even if the reason no longer holds (for
+   example Brian later changed Qualified back to Yes). The office pays no one, so no
+   Waiting sign row follows (contract point 1). HSBS 10 never turns a Void row back to
+   Waiting; that correction is Brian's, by hand.
+5. **Manager first** (contract point 4). When the Sign Log's Plan Manager is at least 1 and
+   no K_M row exists, read the rep's Team Roster rows now (decision 77): Get items, Rep
+   Email = the rep (`toLower`), Active = Yes, Top Count 2.
+   - **Two rows: a roster conflict.** Write no K_M and no K_S. Leave Handled On blank: the
+     sign is not handled yet. The case is listed (X18) until Brian leaves exactly one
+     Active row for the rep; the next run (his edit to the case, or the 7 AM pass) finishes
+     the sign with the stored plan. Fixing a conflict listed in X18 is the one Team Roster
+     change the freeze allows for that rep, once X1 shows nothing for that rep's cases.
+   - **No row:** no manager.
+   - **One row:** the manager is that row's Manager Email, trimmed and lowercased, when it
+     is not blank, it is not the rep, and the row is not a TEST pair, or it is a TEST pair
+     and the rep is a TEST person. Otherwise: no manager.
+
+   Then write K_M, Amount = Plan Manager:
+
+   | Case | Status | Payee Email | Void Reason |
+   |---|---|---|---|
+   | No-pay, manager found | `Void` | the manager | the no-pay reason |
+   | No-pay, no manager | `Void` | blank | the no-pay reason |
+   | Not no-pay, manager found | `Waiting` | the manager | |
+   | Not no-pay, no manager | `Void` | blank | `no manager on the team roster when the office signed` |
+
+   No Manager row is ever `Pending review`. A manager's own referral has no manager award
+   to themselves: the rep's own row naming the rep, or no Active row, is the "no manager"
+   case above.
+6. **Then the rep's sign row.** When Plan Rep Sign is at least 1 and no K_S row exists: K_S
+   with Status `Void` and the no-pay reason when no-pay, else `Waiting`, Amount = Plan Rep
+   Sign. Staffing never writes K_S (its Plan Rep Sign is 0).
+7. **Mark it handled.** Only when every row the stored plan calls for exists (K_M when Plan
+   Manager is at least 1, K_S when Plan Rep Sign is at least 1), set Handled On = now on the
+   Sign Log row, with `IF-MATCH` on its ETag. With both stored amounts 0, that is at once:
+   no sign row, now or ever. If the run fails before this step, the next run finishes the
+   missing rows from the stored plan (step 3).
+8. A Team Roster change after the sign run never adds, moves or re-points a Manager row
+   (D18). A no-pay reason found later voids a Waiting Manager row, and disputes a Paid one,
+   by rule V (M11, second and third orders).
+
+**Rule G, the blank award type guard (spec section 9 row F4; decision 84).** A staffing
+case that is Reached and Qualified with no valid award type gets no Waiting row of any kind
+(no K_R, no K_M), and nothing on it is changed except by rule V. It is listed (X4) every
+day until Brian fills Award Practice Type in SharePoint. His edit is a save, so HSBS 10S
+sends the case to HSBS 10 and the award is written by that run, from the type he set. A
+case that is Qualified but not yet Reached is not a guard case: 7B stamps the award type
+at the save that completes both answers (sheet F1, F1.6 rule 9, which since PR #137
+stamps only the partner's `PracticeTypeConfirmed`), so Brian never fills it early.
+
+**W17 Every row this run writes** carries these values. "Writes" means a Create item
+whose Award Key is the row's key.
+
+| Column | Value |
+|---|---|
+| Award Key | K_R, K_M or K_S |
+| Referral ID | the Referrals row's Title |
+| Service Case ID | the case's ID |
+| Practice Name | the Referrals Practice Name |
+| Rep Email | the rep |
+| Payee Email | Rep rows: the rep. Manager rows: as rule B |
+| Payee Role, Event | from the key table |
+| Amount | as W13 to W16, a whole number 1 to 1000 |
+| Earned On | the Eastern date of this run |
+| Status, Void Reason | as rules R and B. Void Reason blank on a Waiting row |
+| Disputed | No. Dispute Note blank |
+| Payout Batch, Paid On | blank |
+| Company | the company key |
+| Payer | the Payer for that company from the company table |
+| Practice Type | staffing: the award type when valid, else blank. HealthFirst: blank |
+| Test | Rep rows: Yes when the case is a TEST case, else No. Manager rows: Yes when the case is a TEST case or the manager is a TEST person, else No |
+
+A Manager row that is Test only because its manager is a TEST person (the rep is live) is
+kept out of real batches and listed (X11). When Brian sets that manager live, he clears Test
+on that row by hand; it then batches like any other (spec section 6, "Ledger"; M27).
+
+If a Create fails because the Award Key already exists, the run writes nothing more and
+fails. With one writer this happens only if a row was added by hand.
+
+**What HSBS 10 never does.** It never changes an existing row's Award Key, Amount, Payee
+Email, Rep Email, Company, Payer, Practice Type, Test, Earned On, Payout Batch, Sent On,
+Office Check or Paid On.
+The only changes it makes to an existing row are Waiting to Void with a reason, and
+Disputed with a note on a Paid row. It never marks a row Paid. It never deletes a row.
+
+**The freeze (spec section 6, "Manager pay"; decision 77).** The sign run reads the Team
+Roster and the amounts as they are when it runs, so a late run reads late data. So nobody
+makes a **protected change** (a Team Roster pair added, changed or set inactive, a
+`REP_PAY_PLAN` or `REP_PAY_PLAN_STAFFING` value, or an amount setting in HSBS 10) unless the
+**freeze check** passes right before it. The freeze check reads the live state, never the
+last email:
+
+1. Ledger Run Errors has no row with Resolved = No (a filtered view, read at that moment).
+2. HSBS 10 and HSBS 10D have no run in progress or waiting (their run history, at that
+   moment).
+3. Today's HSBS 10D run has finished Succeeded, if it is past 7:00 AM Eastern (it marks its
+   own catch-up row resolved only when every post answered 200; F4.6).
+4. **Plan equality** (before any amount change, and before StaffingAwardsOn is set Yes):
+   Brian or Claude states in writing the site's `REP_PAY_PLAN` and `REP_PAY_PLAN_STAFFING`
+   values (not secrets), and they equal HSBS 10's amounts after the change:
+   `reached:<HF_Reached>,manager:<HF_Manager>` (plus `signed:<HF_Signed>` when it is not 0)
+   and `reached_private:<ST_ReachedPrivate>,reached_group:<ST_ReachedGroup>,manager:<ST_Manager>`,
+   each part's number equal, order ignored. If they differ: **stop and ask Brian** (spec
+   section 6: "Brian changes a plan in both places together"). BB2 writes both values in
+   the build report.
+
+If any part fails, the change waits: let the next save or the 7 AM pass run the case again,
+see it succeed, mark the failure resolved, and run the freeze check again. BB2 runs it
+before every amount setting change and writes the three results in the build report.
+Brian's Team Roster edits follow the same check (the X1 section of the email says so, and
+gives the name of the view).
+
+**Failure.** Every step sits in one scope. A second scope runs after it fails or times out:
+it records the failure (case ID, the step name, the time, never a key or a body) in a new
+list, Ledger Run Errors (Case ID number, Step text, Failed At date and time, Resolved
+yes/no, indexed on Resolved), which only HSBS 10, 10S and 10D create and only Brian or
+BB2 marks resolved. (Record 9 says whether live flows have another place too; if they do,
+both are written. The freeze check reads this list.) Then HSBS 10 answers 500 and ends Failed. No write
+in a failed run is undone, and none needs to be: every write is keyed or ETag checked, so
+the next run picks up where it stopped. **Retry:** a failed case is run again by its next
+save or by the next 7 AM pass, never by hand-made ledger rows. Until that retry succeeds
+and the failure is marked resolved, the freeze above holds: no Team Roster pair, pay plan
+value or amount setting changes.
+
+## F4.5 Pay rules in one table
+
+For checking the build against the spec. Each line is rules R, B, V and G above.
+
+| Case | Ledger result |
+|---|---|
+| Not rep app (field page, other team, pilot FSC app, Salesforce) | No row, ever |
+| Reached, not Qualified (blank) | No row |
+| Qualified, not Reached | No row |
+| Reached and Qualified, not no-pay | One K_R, Waiting, A_R (staffing: by award type) |
+| Reached and Qualified, staffing, no valid award type | No row; listed until Brian fills it |
+| Qualified No, no K_R yet, A_R at least 1 | One K_R, Void, not-qualified reason |
+| Qualified No, K_R Waiting | K_R becomes Void |
+| Qualified No, K_R Paid | K_R stays Paid, Disputed, listed |
+| Already a customer, no K_R, A_R at least 1 | One K_R, Void, `Already a customer` |
+| Duplicate, A_R at least 1 | One K_R, Void, from the first run |
+| No-pay with A_R at 0 | No Reached row; the closed reason is the record |
+| Signed with Reached and Qualified, not no-pay, no Sign Log row | Sign Log row with the plan read now; K_M Waiting (manager found) or Void (no manager); then K_S Waiting if Plan Rep Sign is at least 1; then Handled On |
+| Sign Log Handled On set | No sign row, whatever the plan says now |
+| Sign Log Handled On blank | Only the missing rows, from the stored plan |
+| Signed, duplicate | K_M Void (and K_S Void if A_S is at least 1); nothing Waiting |
+| Signed without both answers | No sign row; listed |
+| Brian sets Qualified No after the sign | Waiting rows Void, Paid rows Disputed; the case's status is not touched |
+| Hand back | No row written, voided or changed |
+| A save or daily run after the row exists | Nothing new |
+
+## F4.6 HSBS 10D: the 7 AM pass and Brian's exceptions
+
+**Trigger.** Recurrence, every day, 7:00 AM, time zone Eastern.
+
+**Step 1, catch-up, every rep app case, no age limit.** First create a Ledger Run Errors
+row, Step `catch-up <Eastern date>`, Resolved No. Mark it Resolved Yes at the end of step 1
+only if every window was read and every post answered 200; otherwise leave it open (it is
+then listed in X1 and fails the freeze check). Then:
+
+1. Read the highest Referrals item ID (Get items, order by ID descending, Top Count 1).
+2. Walk ID windows from 1 to that ID, 5,000 IDs at a time: Get items on Referrals with
+   `ID ge <start> and ID lt <start + 5000> and Source eq 'Rep app'`, Top Count 5000. Every
+   rep app referral, whatever its age, is in exactly one window.
+3. While `LedgerTestOnly` is true, keep only rows that make a TEST case.
+4. For each, find its HealthFirst and staffing Service Cases and post each case ID to HSBS
+   10 exactly as 10S does (Apply to each, concurrency 1, wait for each answer). A failed
+   post is recorded and the loop goes on. More than 5,000 cases in all: stop (S12).
+
+HSBS 10 writes nothing for a case whose rows are already right, so a full pass is safe.
+This picks up a failed run, a save the trigger missed, and every rep app case the first
+time `LedgerTestOnly` goes false (spec section 6: "The rule applies to every case with no
+Reached row at that moment").
+
+**Step 2, the lists.** Built after step 1, so they read the ledger as the catch-up left it.
+Each line names the list, the Referral ID, the case ID, the company in words, the practice
+name and the rep's email, plus what that list adds. No customer phone or email, no
+customer name and no Not Qualified Note except on X10. No dollar amount on any line (Brian
+reads the amount on the row). A line for a TEST case or row starts with `TEST `. While
+`LedgerTestOnly` is true, only TEST lines are listed.
+
+| # | List | A case or row is on it when | It drops off when |
+|---|---|---|---|
+| X1 | Failed or pending runs | A Ledger Run Errors row with Resolved No (a failed run, or a catch-up pass that did not finish). The section starts with the line `Do not change a Team Roster pair or a pay plan while anything is listed here, or before the freeze check passes.` | Brian marks it resolved after a successful retry |
+| X2 | Silent partner: no answer to question 1 (T18) | Rep app, open, Talked To Doctor blank, and five business days or more after Introduced On (Ask Brian A2) | The partner answers question 1, or the case is no longer open |
+| X3 | Silent partner: reached, no qualify answer (T18) | Rep app, open, Reached, Qualified blank, and five business days or more after Talked On (Ask Brian A3) | The partner answers Qualified, or the case is no longer open |
+| X4 | Award type missing (rule G, decision 84) | Rep app, staffing, Reached and Qualified, no valid award type, not no-pay, and no Waiting or Paid K_R. Listed whether `StaffingAwardsOn` is on or off | Brian fills Award Practice Type |
+| X5 | Staffing awards off | Rep app, staffing, Reached and Qualified, while `StaffingAwardsOn` is false | `StaffingAwardsOn` is true |
+| X6 | Signed without both answers | Rep app, and Status `Closed - Won`, and (Reached is not true, or Qualified is not true, or Signed Date is blank, or Signed Product is blank), and no Sign Log row with Handled On set. This is the spec's "every signed case with Qualified blank" list for the turn-on gap (sheet F2, build order step 7), for rep app cases (Ask Brian A2) | The answers are filled (Brian, in SharePoint) and the sign row is written |
+| X7 | Disputed paid award | A ledger row with Status `Paid` and Disputed Yes. The line adds the Award Key and the Dispute Note | Never; Brian reads it each day (rep app v3: "disputed paid awards") |
+| X8 | Waiting award with no qualify answer | Rep app, open, a Waiting K_R, Qualified blank (a row written before the qualify rule; spec section 6, M27) | The partner answers Qualified |
+| X9 | Practice type changed after award (M3) | Staffing, a K_R row exists, and the case's Practice Type differs from its Award Practice Type. The line adds both values | Seven days after the case's Last Partner Update (Ask Brian A5) |
+| X10 | Not qualified, reason Other | A HealthFirst or staffing case, any source, Qualified No, reason `Other`. The line adds the Not Qualified Note word for word | Seven days after Last Partner Update (Ask Brian A5) |
+| X11 | Live rep, Test manager | A K_M row with Test Yes whose manager is a TEST person, on a case whose Referrals Test, Service Case Test and rep's Rep Roster Test are all No (a non-TEST case by its columns; a `TEST` practice name alone does not make it TEST here, which is how check H19 runs). The line adds the Award Key | Brian clears Test on the row |
+| X12 | Payer does not match Company | A ledger row whose Payer is blank, or does not match its Company by the company table (blank Company reads `HealthFirst`). The line adds the Award Key | It is fixed by hand |
+| X13 | Voided after joining a batch | A row with Status `Void` and Payout Batch set and Paid On blank. The line adds the Award Key and the batch | Brian clears its Payout Batch (he takes it off the list he sends) |
+| X14 | Rep not on the Rep Roster | Rep app case whose Referring Rep Email is blank or has no Rep Roster row | The rep has a row |
+| X15 | Two cases for one referral and company | W8 | The data is fixed |
+| X17 | Possible repeat office under another JDE | A Waiting row whose Office Check is blank, on a rep app case that is an **office match**: its Referrals Practice Name, trimmed and compared without regard to letter case, matches an earlier Referrals row for the same company, with the same TEST value (decision 90), created in the 12 months before it, with a different or blank JDE. The line adds both Referral IDs and the Award Key. No row is voided by a flow for it: the JDE the rep typed is not checked against any source, so Brian decides. A row on X17 is held out of every batch (F4.7) | Brian sets Office Check `Cleared` on the row (it may then be batched), or voids it by hand with a reason, or the row is no longer Waiting |
+| X19 | Payout send not finished | A Payout Batches record with Send Started On set and Sent On blank, for a run that has ended. The line adds the batch ID, the Send Run ID and the Award Keys with Sent On set, and the two ways out: if that run's send email step Succeeded, run 10B `Finish`; if not, clear the send by hand (F4.7) | 10B `Finish` sets Sent On, or Brian clears the send by hand |
+| X20 | Sign not finished | A Sign Log row with Handled On blank, Started On before today, that is not on X18 | The next run marks it handled |
+| X18 | Team Roster conflict at a sign | A Sign Log row with Handled On blank whose rep has two or more Active Team Roster rows (rule B, step 5) | Brian leaves exactly one Active row, and the next run writes the sign row |
+| X16 | Test by name only | A ledger row with Test Yes whose case is TEST only because of `TEST` in a name (Referrals Test, Service Case Test and the rep's Rep Roster Test are all No). A real office with TEST in its name would otherwise go unpaid unseen | Never; Brian decides |
+
+The hand-back list is sheet F7's, and the daily gap check is Sheet 1's. Both stay where
+they are; this email sits beside them.
+
+**Step 3, the email.** One email, subject `HSBS ledger exceptions <Eastern date>`, to Brian
+only (S9), sent every day, with each list under its name and `None` under an empty one.
+It is sent from the mailbox Brian's existing daily mail uses.
+
+## F4.7 HSBS 10B: payout batch, one payer at a time
+
+Spec section 6 ("one payout batch per payer"), rep app v3 "Payout, step by step", decisions
+62 and 75. Trigger: manual (instant). Trigger concurrency 1, so two batch runs never
+overlap. Run-only permission: Brian. BB2 runs it as the flow owner while testing, TEST
+batches and dry runs only.
+
+**Its switch, RealPayoutsOn** (Ledger Settings, read fresh at the start of every run;
+No at build). While No, 10B refuses a `Send` run with Dry run No on a `Real` batch, so nothing is ever sent
+to a payer. A `New` run of either kind, every dry run, and a `Send` of a `-TEST` batch
+(which goes to Brian only) still work. BB2 sets it Yes only at build order step 6a, on
+Brian's go, and No first on any rollback.
+
+**The batch record.** Every batch has one row in the Payout Batches list (F4.1): Batch ID
+(Title, unique), Payer, Kind, Created On, Send Started On, Rows Sent (the Award Keys sent,
+comma separated), Sent On, Confirmed On, Paid On, Not Paid (Award Keys). The record, not
+the ledger rows, says whether and what a batch sent. Only 10B and 10P write it; Brian may
+clear Send Started On by hand (X19).
+
+**The row columns it uses**, added in F4.1: Sent On (Date only) and Office Check (Choice,
+`Cleared`). Only 10B writes Sent On, and only 10P clears it (F4.8, unpaid rows). Only Brian
+writes Office Check.
+
+**Batch ID.** `<payer part>-<yyyyMMdd>-<HHmm>` from the Eastern date and time, plus `-TEST`
+on a TEST batch. The payer part is `HealthFirst` or `DirectDental`. A batch ID is valid
+only when it matches exactly `^(HealthFirst|DirectDental)-[0-9]{8}-[0-9]{4}(-TEST)?$` and
+has a batch record whose Payer and Kind agree with it. From a valid ID: the payer is
+`HealthFirst` or `Direct Dental`, and the kind is `TEST` when it ends in `-TEST`, else
+`Real`. **A batch ID is used once:** the record's Title is unique, so a second `New` run in
+the same minute fails to create its record and stamps nothing; Brian runs it again a minute
+later.
+
+**Held out of every batch** (a row is never stamped or sent while any holds): Status is not
+`Waiting`; Disputed is Yes; Sent On is set; the row is on X17 (an office match with Office
+Check blank, tested live at the run, not read from the email); Payer and Company do not
+match by the company table (X12).
+
+**Inputs:**
+
+| Input | Type | Values |
+|---|---|---|
+| Mode | Text | Exactly `New`, `Send` or `Finish`. Anything else: stop, nothing read or written |
+| Payer | Text | `New` only: exactly `HealthFirst` or `Direct Dental`. Anything else: stop. Ignored in `Send` |
+| Kind | Text | `New` only: exactly `TEST` or `Real`. Ignored in `Send` |
+| Dry run | Yes/No | `New`: Yes lists what would be stamped and writes nothing (no record). `Send`: Yes runs checks 1 and 3 to 8 on any valid batch and emails Brian only what would be sent; nothing goes to a payer and nothing is written |
+| Batch | Text | `Send` and `Finish`: a valid batch ID. Ignored in `New` |
+
+**Mode `New`.**
+
+1. Make the batch ID from the Payer and Kind inputs.
+2. Rows: Status `Waiting`, Payout Batch blank, not held out (above), Payer = the input,
+   Company matching that Payer (a blank Company matches `HealthFirst` only), Amount a whole
+   number 1 to 1000, and Test = Yes when Kind is `TEST`, Test = No when Kind is `Real`. A
+   Real batch never holds a Test row, and a TEST batch never holds a real one (D8). A
+   staffing row is never in a HealthFirst batch, and a HealthFirst row is never in a
+   Direct Dental batch (M7). No rows: stop, and email Brian that the batch is empty.
+3. Dry run Yes: email Brian the list (below) headed `DRY RUN` and stop.
+4. Create the batch record (Batch ID, Payer, Kind, Created On). If the create fails (the ID
+   is taken): stop, nothing stamped.
+5. For each row (Apply to each, concurrency 1): set Payout Batch = the batch ID, with
+   `IF-MATCH` on its ETag. A 412 leaves that row out and lists it in the summary.
+6. Email Brian the list: one line per payee (payee email and the Rep Roster name if there
+   is one, the number of awards, the total), and under each payee one line per row (Award
+   Key, office, event, amount, Earned On). Then the batch total, which is the sum of the
+   listed rows. No customer contact detail. Brian checks it against the exceptions email
+   (rep app v3, step 2), X13 and X17 included.
+
+**Mode `Send`.** On Brian's go, after his check. Checks 1 to 8 run before anything is sent
+or written. If any fails, the whole run stops: nothing is sent, nothing changes, and Brian
+is emailed which check failed.
+
+1. Batch is not blank and is a valid batch ID.
+2. Dry run No and kind `Real`: `RealPayoutsOn` is true. A `-TEST` batch runs every step
+   below, but step 12 sends it to Brian only, never to a payer (rep app v3: "A TEST batch
+   ... with Brian as the only recipient").
+3. The batch record's Send Started On and Sent On are blank. (A batch is sent once.)
+4. Read every row with Payout Batch = Batch. There is at least one.
+5. Every row has the same Payer, the payer the batch ID names, and a Company that matches
+   it.
+6. Every row's Test matches the kind (No for `Real`).
+7. No row has Sent On set, and no row has Status `Paid`.
+8. No row is on X17 (tested live).
+
+Then, with Dry run No:
+
+9. **Claim the send.** Set the record's Send Started On = now, with `IF-MATCH` on its ETag.
+   A 412: stop, send nothing.
+10. **Reread and claim each row, right before the email.** Read each row of the batch again
+    (fresh, with its ETag). A row that is no longer `Waiting`, or now fails check 5, 6 or 8,
+    is dropped and named to Brian. For each row kept, set Sent On = today's Eastern date
+    with `IF-MATCH` on the ETag just read. A 412 (HSBS 10 changed it in between, for
+    example a void) drops that row: it is not on the list. **This ETag write is the lock
+    between 10B and HSBS 10:** a void that lands before it makes the stamp fail and the row
+    leaves the list; a void that comes after it is a void after the send, which 10P
+    reconciles (F4.8). No `Waiting` row kept: stop, send nothing, and Brian clears Send
+    Started On by hand (X19).
+11. **Record what is sent.** Set the record's Rows Sent = the Award Keys stamped in step 10,
+    and Send Run ID = this run's ID (`workflow()?['run']?['name']`).
+12. **Send** the list (as in `New`, step 6, for exactly the Rows Sent, with their total).
+    A `-TEST` batch: Brian only. A `Real` batch, by the payer derived from the batch:
+    `Direct Dental`, the staffing
+    payout list contact read from Routing at run time (decision 75; S10); `HealthFirst`,
+    the HealthFirst payout list contact in Routing if Brian has had one added, else Brian
+    only (Ask Brian A6). Brian is copied. No other recipient.
+13. Only after the email step succeeds: set the record's Sent On = now (the update step
+    keeps Power Automate's default retry policy).
+14. Then read each row on Rows Sent again. Any row no longer `Waiting` (voided after its
+    stamp) is named to Brian in a separate email the same minute, so he can tell the payer
+    before payment; 10P records it whatever the payer does (F4.8).
+
+**If the run stops after step 9 and before step 13**, the record has Send Started On and no
+Sent On, and it is listed (X19). The batch is never sent again, and 10P refuses it, until
+one of these two is done:
+
+- **The email did not go out.** Brian opens the 10B run named in Send Run ID. If the send
+  email step did not run or did not succeed, he clears Send Started On, Send Run ID, Rows
+  Sent and the rows' Sent On by hand. The batch can then be sent again.
+- **The email went out, only the last stamp failed.** If that run's history shows the send
+  email step Succeeded, Brian runs 10B in Mode `Finish` with that Batch. `Finish` never
+  sends anything. It checks: the record has Send Started On, Rows Sent and Send Run ID,
+  and Sent On is blank; every row on Rows Sent has Sent On set. Then Brian answers the
+  run's one question, "The send email step of run <Send Run ID> shows Succeeded" (Yes or
+  No), and only on Yes it sets the record's Sent On = Send Started On (no later than the
+  email itself, so 10P's date check stays true). On No, or any failed check, it changes
+  nothing.
+
+A failure can leave a list unsent, never sent twice, and never marked Paid unsent.
+
+10B never marks a row Paid.
+
+## F4.8 HSBS 10P: record the payer's confirmation
+
+Trigger: manual, after the payer confirms payment ("Nothing is marked Paid without a
+confirmed payout", `AGENTS.md`). Trigger concurrency 1. Run-only permission: Brian; BB2 runs
+TEST batches while testing. Switch RealPayoutsOn (Ledger Settings, read fresh at the
+start of every run): while No, 10P refuses a `Real` batch. Inputs:
+
+| Input | Type | Values |
+|---|---|---|
+| Batch | Text | A valid batch ID (F4.7) |
+| Paid On | Text | The payer's confirmed payment date, `YYYY-MM-DD` |
+| Not paid | Text | Blank when the payer confirms it paid every row on the sent list. Otherwise a comma list of the Award Keys on the sent list that the payer says it did not pay |
+
+**The sent list.** The record's Rows Sent: exactly what the list carried. For a `TEST`
+batch that was never sent (Rows Sent blank): on the first confirmation, the Award Keys of
+the rows with Payout Batch = Batch and Status `Waiting`, which 10P writes to the record's
+Rows Sent before any row changes; on a retry, the Rows Sent already stored.
+
+**Checks.** All run before any row is changed. If any fails, the run stops, changes
+nothing, and emails Brian which check failed. A blank Batch never selects anything.
+
+1. Batch is not blank and is a valid batch ID. Its kind and payer come from the ID. A
+   `Real` batch: `RealPayoutsOn` is true.
+2. Paid On is a real date in `YYYY-MM-DD` form and not after today's Eastern date.
+3. A `Real` batch: the record's Sent On is set and Rows Sent is not blank. A Real row is
+   never marked Paid before it was sent.
+4. The sent list is not empty. Each of its Award Keys is a ledger row whose Payer is the
+   payer the ID names, with a Company that matches it, and whose Test matches the kind.
+5. Paid On is on or after the Earned On of every row on the sent list, and, for a `Real`
+   batch, on or after the record's Sent On.
+6. Each Award Key in Not paid is on the sent list.
+7. **Retry.** If the record's Confirmed On is already set, this is a retry: Paid On must
+   equal the stored Paid On and Not paid must hold exactly the stored Not Paid keys (order
+   and spaces ignored). Anything else stops the run: a second, different confirmation is
+   Brian's to sort by hand.
+
+**Then:**
+
+8. On the first confirmation, write the record's Confirmed On = now, Paid On and Not Paid,
+   with `IF-MATCH` on its ETag, before any row changes. A retry leaves the record as it is.
+9. For each Award Key on the sent list (Apply to each, concurrency 1), read the row fresh
+   and apply this table, each update with `IF-MATCH` on its ETag. A 412 is named to Brian
+   and that row is left for a retry with the same inputs.
+
+| The row now | Key not in Not paid (the payer paid it) | Key in Not paid |
+|---|---|---|
+| `Waiting`, Payout Batch = Batch | Status `Paid`, Paid On = the input | Payout Batch and Sent On cleared: the row is Waiting and unbatched, so a later batch can carry it |
+| `Waiting`, Payout Batch blank or another batch | Not possible on a first run; stop for that row and name it to Brian | Already returned by an earlier run of this confirmation: no change |
+| `Void` (voided after it was sent) | Status `Paid`, Paid On = the input, Disputed Yes, Dispute Note `voided after it was sent, then paid: ` and its Void Reason. Listed X7. Money that moved is never hidden (D3) | No change: it stays Void, and no money moved |
+| `Paid`, Paid On = the input | No change (done by an earlier run of this confirmation) | Stop for that row and name it to Brian |
+| `Paid`, another Paid On | Stop for that row and name it to Brian | Stop for that row and name it to Brian |
+
+A retry with the same inputs therefore finishes what an earlier run left, and changes
+nothing that run already did. A row voided before the send was never on the sent list, so
+10P never touches it.
+
+Then email Brian the counts: marked Paid, paid after a void (with their Award Keys),
+returned to Waiting, unchanged, and any row named. 10P never changes a row that is not on
+the sent list. It never sends a statement to a rep or a manager: the payout statement is a
+later sheet (rep app v3, section 5).
+
+## F4.9 `StaffingAwardsOn`: what turns it on
+
+Off by default (`false`). While off, HSBS 10 creates no staffing row (rule V still voids
+or disputes one written while it was on), and X5 lists every staffing case that would
+earn. BB2 sets it to `true` on the live HSBS 10 only
+when every gate holds, each written in the build report:
+
+| Gate | What | How BB2 knows |
+|---|---|---|
+| G1 | Every check in groups A, H, G and S passed | The build report |
+| G2 | `LedgerTestOnly` is already false (go-live step 6 done) | The flow's settings |
+| G3 | Decision 82's follow-up is live: the partner page no longer preselects the rep's practice type for the confirmation, and 7B stamps Award Practice Type only from the partner's confirmation with the qualify answer. Both have passed their own checks | Brian or Claude says so in writing, naming the PR and the sheet |
+| G4 | No live (not TEST) rep app staffing case has Qualified Yes or an Award Practice Type yet. The natural order is that this switch goes on before, or together with, `Staffing` in the site's `REP_APP_COMPANIES`, so no real staffing lead exists yet. If one does: stop and Ask Brian A7 | A Get items count, in the build report |
+| G5 | Brian's go in chat, in his own words, quoted in the build report | |
+| G6 | The plan equality check (freeze check part 4) passes for the staffing plan | The two values in the build report |
+
+Decision 75 (the staffing payout contact) and decision 76 (Brian, 11/13: "Already
+cleared") are answered, so neither holds it up, once gate G0 holds. Turning it off again stops new
+staffing rows. Rows already written stay (an award earned stands), and are still voided
+or disputed if a no-pay reason appears.
+
+## A ledger row, as the site and 1R read it
+
+The F6 `earnings` row, for a staffing Reached award (only `company` is new, from F6.4):
+
+```json
+{
+  "referralId": "HSBS-R251113120000",
+  "practiceName": "TEST North Side Dental",
+  "event": "Reached",
+  "payeeRole": "Rep",
+  "amount": 200,
+  "earnedOn": "2026-11-14",
+  "status": "Waiting",
+  "paidOn": "",
+  "voidReason": "",
+  "disputed": false,
+  "company": "Staffing"
+}
+```
+
+## What must not change
+
+**For HealthFirst today.**
+
+- 1R, 7A, 7B, 3F and every other existing flow are not edited by this sheet. HSBS 10 reads
+  Service Cases and Referrals and never writes them.
+- The Award Key shape (Case ID + Event + Payee Role, D6), the events `Reached` and
+  `Signed`, the roles `Rep` and `Manager`, the statuses, and the 1R `earnings` and `team`
+  answers (F6 adds `company`, nothing else).
+- HealthFirst amounts are Brian's 11/11 plan: 100 / 0 / 50 (rep app v3 D15).
+- Manager pay is D18 and the contract's points 1 to 8: decided once, in the sign run, for
+  the manager on the rep's Active Team Roster row as that run reads it (decision 77). No
+  Manager row is Pending review. A roster change never re-points a row.
+- Paid is never clawed back (D3). A Paid row only gains Disputed and a note.
+- No email to a rep or manager, and no dollar amount in one (D15). `REP_PAY_ENABLED` stays
+  off until Brian turns it on.
+- Existing ledger rows keep every value except a blank Company or Payer, filled once
+  (F4.2).
+- What changes for HealthFirst on purpose, from the spec: the Reached award needs Reached
+  and Qualified (T17, replacing "paid at reached"); auto-reached and Pending review are
+  retired (T18); a not-qualified answer voids; a hand back no longer voids for "No
+  permission" (T22). A Reached row that already exists when this goes live stands.
+
+**For every other partner and source.** No Unitas, eAssist, Practice Booster, WeCare or
+other case is read past W3, and no row is written for any source but `Rep app`.
+
+## TEST checks (TEST rows only; each is pass or fail)
+
+"No row" means a ledger Get items on the case's three Award Keys returns nothing. "Listed"
+means the next HSBS 10D email (BB2 may run 10D by hand) has the line. To test five-business-
+day lists without waiting, BB2 may set Introduced On or Talked On on a TEST case to a date
+seven business days back. Each "save" is a partner save through the TEST 7B copy unless a
+check says Brian edits SharePoint.
+
+### Group A: the build (staffing off)
+
+- A1. The ledger has Company and Practice Type with exactly the choices in F4.1, and Sent
+  On (date), each not required, no default; Payer has `HealthFirst` and `Direct Dental`; Award Key enforces
+  unique values; the F4.1 indexes exist.
+- A2. F4.2's before and after exports differ only in Company and Payer; every row has
+  Company and Payer set; no row's Status, Amount or Paid On changed.
+- A3. The Ledger Settings row reads LedgerTestOnly Yes, StaffingAwardsOn No, RealPayoutsOn
+  No, and the `Settings read` step of a run of HSBS 10, 10D, 10B and 10P shows those
+  values. Deleting the row makes each fall back to the same safe values and record an X1
+  row; put it back. HSBS 10's six amounts read 100, 0, 50, 100, 200, 50. HSBS 10's trigger
+  concurrency reads 1.
+- A3a. (One switch, every flow) BB2 sets StaffingAwardsOn Yes in the row for group S and
+  confirms it in the `Settings read` step of HSBS 10 and 10D: a TEST staffing case Reached
+  and Qualified gets its K_R, and the next 10D email no longer lists it on X5. Set back to
+  No after group S: both flows show No.
+- A4. A non-TEST case saved during testing: the HSBS 10 run history shows it ended at W7
+  and wrote nothing.
+- A5. HSBS 10's run history for every check below shows no write to Service Cases,
+  Referrals, the Rep Roster, the Team Roster or Routing.
+- A6. Two posts of the same TEST case ID to HSBS 10 at the same moment (a temporary instant
+  flow BB2 deletes afterwards) on a case that is Reached and Qualified: exactly one K_R
+  row.
+- A7. Setting `HF_Reached` to 0 and `HF_Signed` to 0 on the copy makes the next run fail
+  before any write; restoring them passes.
+- A8. No email from any HSBS 10 flow reached anyone but Brian during groups A, H and G (run
+  history of every Send email step).
+
+### Group H: HealthFirst (staffing off)
+
+- H1. (M16) Reached Yes, Qualified blank: no row. Then Qualified Yes: one K_R, Waiting,
+  $100, Company `HealthFirst`, Payer `HealthFirst`, Practice Type blank, Test Yes. The
+  rep's lead screen showed no earned amount before (site, slice S5).
+- H2. (M16) Qualified Yes first, Talked To Doctor `Not yet, still trying`: no row. Then
+  Reached Yes: one K_R, Waiting.
+- H3. (M16) First answer Qualified No, reason `No permission to contact`: one K_R, Void,
+  $100, Void Reason `HealthFirst marked this lead as not qualified (No permission to
+  contact)`. Nothing is ever Waiting for the case.
+- H4. (M10) Reached and Qualified (K_R Waiting), then Qualified No with a reason: K_R is
+  Void with that reason. A Signed post to 7B is then refused, and no K_M exists.
+- H5. (M11, first order) A K_R that a TEST batch and 10P made Paid; then Qualified No: K_R
+  stays Paid, Disputed Yes, Dispute Note the reason, listed X7; no Waiting K_M exists.
+- H6. (M11, second order) Reached, Qualified, Signed; K_R and K_M Paid by a TEST batch.
+  Brian sets Qualified No with a reason in SharePoint: both rows Paid and Disputed, both
+  listed X7; Partner Status, Pipeline Stage and Closed Reason unchanged.
+- H7. (M11, third order) Reached, Qualified, Signed, both rows Waiting. Brian sets
+  Qualified No in SharePoint: both Void with the same reason; a TEST batch afterwards holds
+  neither.
+- H8. (M24) Reached Yes, Qualified blank, Signed refused by 7B: no K_M. Then Qualified Yes
+  and Signed: one K_R and one K_M, both Waiting.
+- H9. (M6 for HealthFirst, D18) A sign for a TEST rep with an Active Team Roster row: one
+  K_M, Waiting, $50, Payee Email that manager. Saving again and a 10D run write nothing
+  new.
+- H10. A sign for a TEST rep with no Active row: one K_M, Void, `no manager on the team
+  roster when the office signed`, Payee Email blank. Brian then adds the pair and saves the
+  case: nothing new is written.
+- H11. (M18) Closed `Already a customer` before any award: one K_R, Void, `Already a
+  customer`. A direct 7B Signed post is refused; no K_M.
+- H12. (M14) A pilot FSC app TEST lead to HealthFirst for a JDE, then a rep app TEST lead
+  for the same JDE within 12 months, reached, qualified and signed: K_R Void and K_M Void,
+  reason `this office was referred to HealthFirst in the last 12 months`; nothing Waiting.
+  A TEST field page lead with the same practice name and no JDE blocks nothing.
+- H13. (M17, HealthFirst half) An earlier FSC app TEST row naming HealthFirst and staffing
+  for a JDE; a rep app HealthFirst case for that JDE, reached, qualified and signed: K_R
+  Void and K_M Void.
+- H14. (M18, last part) With `HF_Reached` 0, `HF_Signed` 150, `HF_Manager` 50 on the copy,
+  H11 and H13 are run again: no K_R is written for either; H13's sign writes K_M Void and
+  K_S Void. A clean case signed under this plan writes K_M Waiting $50 first, then K_S
+  Waiting $150. Restore 100 / 0 / 50 afterwards.
+- H15. (M13, M20) A field page TEST lead with HealthFirst, reached, qualified and signed:
+  no row. A field page TEST lead marked Qualified No: no row. A pilot FSC app TEST lead,
+  reached, qualified and signed: no row.
+- H16. (M19) A TEST case with no answer to question 1 five business days after Introduced
+  On: listed X2, no row, no Pending review row ever. A second case, Reached, Qualified blank,
+  five business days after Talked On: listed X3, no row. The partner answers Qualified Yes:
+  K_R Waiting, and the case leaves X3.
+- H17. (M21) A case with a Waiting K_R is handed back with a note: K_R still Waiting and
+  unchanged; a TEST HealthFirst batch run afterwards holds it. A case handed back with no
+  award: no row after the save, after a 10D run, or ever.
+- H18. (M27, ledger part) A pre-existing TEST row with Company blank batches in a TEST
+  HealthFirst batch. A Waiting K_R on a case with Qualified blank (made by setting Qualified
+  blank by hand on a TEST case after its row) stays Waiting after a 10D run and is listed
+  X8.
+- H19. (M27, staged go-live) A TEST FSC (Rep Roster Test No for this check) with a TEST
+  manager still Test Yes; a referral with TEST in the practice name, reached, qualified and
+  signed: K_M Test Yes, listed X11, in no batch. A Real dry run for HealthFirst does not
+  list it. The manager is set Test No and Brian clears Test on that row: a Real dry run now
+  lists it once, and it was in no batch before. Reset the FSC and manager to Test Yes.
+- H20. (M8) Every row from groups H and S has Test Yes; 1R `earnings` for the TEST rep and
+  `team` for the TEST manager return them; a Real dry run for each payer lists none of
+  them; no TEST row has a Payout Batch that does not end in `-TEST`.
+- H21. (Batch and void race) A Waiting TEST row stamped in a TEST batch, then Qualified
+  No: the row is Void and listed X13; 10P on that batch leaves it Void and names it to
+  Brian.
+- H22. (Payer) HSBS 10B `New` with Payer `Staffing` or `healthfirst` stamps nothing. A
+  `Send` run with Dry run No on a `Real` batch stops at check 2 (RealPayoutsOn No) and
+  sends and writes nothing. On a `-TEST` batch it runs and goes to Brian only (H31).
+- H23. (Batch input) 10P with Batch blank, with `HealthFirst-2026`, and with a well-formed
+  ID no row carries: each stops, changes nothing, and names the failed check to Brian, and
+  no unbatched Waiting row changes. 10P with Paid On blank, a future date, or a date before
+  a row's Earned On: the same.
+- H24. (Mixed batch) In a TEST HealthFirst batch of two rows, BB2 edits one row's Payer to
+  `Direct Dental` by hand. 10P on that batch stops before any change: both rows stay
+  Waiting. A `Send` dry run on it stops at check 4. BB2 sets the Payer back; then a row's
+  Test edited to No: 10P stops at check 5 and the `Send` dry run at check 6. Set it back.
+- H25. (Sent once) The H19 row, cleared to Test No, is put in a Real HealthFirst batch. 10P
+  on it stops at check 1 (`RealPayoutsOn` false). A `Send` with Dry run No stops at check 2.
+  A `Send` dry run passes and emails Brian only. BB2 sets the record's Send Started On by
+  hand: a second dry run stops at check 3, and the batch is listed X19. No `Real` batch is
+  ever sent with Dry run No in testing.
+- H26. (W8) A TEST case with a Waiting K_R; BB2 adds a second TEST Service Case linked to
+  the same Referrals row and company. Both are listed X15, and no new row is written. The
+  partner marks the first case Qualified No: its K_R is Void. Delete the second case.
+- H27. (X17 and the hold) A rep app TEST lead to HealthFirst, then a second for the same
+  practice name with a different JDE within 12 months, reached and qualified: the second
+  has a Waiting K_R, listed X17, and no row is voided. A TEST HealthFirst `New` batch (and
+  its dry run) leaves that row out. After seven days it is still listed. Brian sets Office
+  Check `Cleared`: it leaves X17 and the next TEST batch holds it. A second such pair,
+  where Brian voids the row by hand: it leaves X17 and is in no batch.
+- H28. (The freeze) The X1 section of the exceptions email starts with the freeze line.
+  A forced HSBS 10 failure (A7) makes an open Ledger Run Errors row; the freeze check run
+  then fails at part 1, though no email has gone out since. After a successful run and the
+  row marked resolved, it passes. A 10D catch-up stopped part way (BB2 cancels the run)
+  leaves its catch-up row open, and the freeze check fails.
+- H29. (Roster conflict) A TEST rep given two Active Team Roster rows (BB2 makes the second
+  TEST pair by hand), and a sign: a Sign Log row with the plan, Handled On blank, no K_M
+  and no K_S, listed X18. Brian sets one row Active No and saves the case: one K_M, Waiting,
+  $50 from the stored Plan Manager, to the remaining manager; Handled On set; X18 drops
+  it.
+- H30. (Batch ID used once) Two TEST HealthFirst `New` runs started in the same minute: the
+  second fails to create its record and stamps nothing.
+- H31. (Confirmation and retry) A TEST batch of three Waiting rows is sent (`Send`, Dry run
+  No; it goes to Brian only): its record has Send Started On, Rows Sent (the three keys)
+  and Sent On, and each row has Sent On. Row 2's case is then marked Qualified No: row 2 is
+  Void, listed X13. 10P with a Paid On before the record's Sent On stops at check 5. 10P
+  with row 3's key in Not paid: row 1 Paid; row 2 Paid, Disputed Yes, Dispute Note starting
+  `voided after it was sent, then paid`, listed X7; row 3 Waiting with Payout Batch and
+  Sent On blank. The same 10P run again, same inputs: it succeeds and changes nothing. 10P
+  again with Not paid blank: stops at check 7, nothing changes. A key that is not on the
+  sent list in Not paid, on a new batch: stops at check 6.
+- H32. (Send lock) A TEST batch of three Waiting rows. Before `Send`, row 1's case is
+  marked Qualified No (row 1 Void): `Send` drops it, and it is not in Rows Sent or the
+  email. With a temporary 60 second Delay added after the reread in step 10, a second TEST
+  batch is sent, and during the delay row 2's case is marked Qualified No: the Sent On
+  stamp on row 2 fails (412), row 2 is not in Rows Sent or the email, and has no Sent On.
+  Remove the Delay.
+- H33. (Sign handled once) A TEST HealthFirst sign under 100 / 0 / 50: one K_M, and a Sign
+  Log row with Plan Manager 50, Plan Rep Sign 0, Handled On set. After the freeze check,
+  BB2 sets `HF_Signed` to 150; the case is saved and 10D runs: no K_S. Then `HF_Manager` 0
+  and a new TEST sign: Sign Log Handled On set at once, no sign row; `HF_Manager` back to
+  50, the case saved and 10D run: still no K_M. Restore 100 / 0 / 50.
+- H34. (Sign not finished) With `HF_Signed` 150, a temporary Terminate (Failed) step right
+  after the K_M create, and a TEST sign: K_M Waiting, no K_S, Sign Log Handled On blank,
+  listed X1 and, the next day, X20. The step removed, the case saved: one K_S, Waiting,
+  $150 (the stored Plan Rep Sign), no second K_M, Handled On set. Restore `HF_Signed` 0
+  after the freeze check passes.
+- H36. (Send recovery) A TEST batch is sent with a temporary Terminate (Failed) step added
+  right before step 13: the email reaches Brian, the record has Send Started On, Rows Sent
+  and Send Run ID but no Sent On, and it is listed X19 with the run ID. 10P on it stops at
+  check 3. 10B `Finish` answered No changes nothing. 10B `Finish` answered Yes, after the
+  named run shows the send email step Succeeded: Sent On = Send Started On, no email is
+  sent, and X19 drops it. A second `Finish` stops (Sent On is set). A second batch with the
+  Terminate step before step 12 (no email): X19, and clearing the send by hand lets a later
+  `Send` go out once. Remove the Terminate step.
+- H35. (Catch-up, every age) A TEST rep app case whose Referrals row is more than 400 days
+  old by Created (or the lowest-ID TEST rep app row there is) and that is Reached and
+  Qualified with no K_R because HSBS 10S was off when it was saved: the next 10D pass
+  writes its K_R. The 10D run history shows every ID window from 1 to the highest ID read.
+
+### Group G: the staffing guard and switch (staffing off)
+
+- G1. A TEST staffing case Reached and Qualified with an Award Practice Type (staffing off):
+  no row of any kind; listed X5. Marked Qualified No on another: no Void row. A duplicate
+  staffing pair: no row.
+- G1a. (Switch off after on; run after group S) A TEST staffing case with a Waiting K_R from
+  group S. `StaffingAwardsOn` is set false, then the partner marks it Qualified No: K_R is
+  Void with the reason, and no new row is written.
+- G2. (The guard) A TEST staffing case Reached, with Brian setting Qualified Yes in
+  SharePoint and leaving Award Practice Type blank: no row; listed X4 and X5.
+- G3. (Decision 84, the turn-on gap; sheet F2 check 25) A TEST staffing case signed with
+  Qualified blank (site switch and `EnforceQualify` off): no row, listed X6. Brian sets
+  Qualified Yes alone: still no row, now listed X4. He sets Award Practice Type: X4 drops
+  it (and with staffing off it stays on X5).
+
+### Group S: staffing (only after build order step 5's condition; `StaffingAwardsOn` true, `LedgerTestOnly` true)
+
+In S1 to S3, "the partner confirms `<type>`" means the partner's confirmation with the
+qualify answer that decision 82's follow-up builds.
+
+- S1. (M1) Rep picks `Private practice`; the partner confirms `Group` with Qualified Yes,
+  and Reached Yes: one K_R, Waiting, $200, Practice Type `Group`, Company `Staffing`, Payer
+  `Direct Dental`.
+- S2. (M2) Rep picks `Group`; the partner confirms `Private practice`: one K_R, $100.
+- S2a. (No fallback) A TEST staffing case with Practice Type `Group` and Award Practice
+  Type blank (BB2 sets Qualified Yes by hand, the partner never confirmed): no row, listed
+  X4, never a $200 row from Practice Type.
+- S3. (M3) After S1, the partner changes Practice Type back to `Private practice`: the row
+  stays $200 and `Group`, no new row, listed X9. Delayed run: with HSBS 10S turned off, a
+  new case is saved Reached and Qualified as `Private practice` and then corrected to
+  `Group`; 10S on and 10D run by hand: one K_R, $100, `Private practice`, from Award
+  Practice Type.
+- S4. (M4) Same JDE to HealthFirst, then to staffing: the staffing case earns. The reverse
+  on another JDE: the HealthFirst case earns.
+- S5. (M5) Same JDE to staffing twice within 12 months: the second has one K_R, Void,
+  `this office was referred to Direct Dental in the last 12 months`, from its first run,
+  before any answer; the first keeps its award. The second is then reached, qualified and
+  signed: K_M Void with the same reason; no Waiting row for it.
+- S6. (M6) A staffing sign: one K_M, Waiting, $50, to the manager on the rep's Active Team
+  Roster row. Saving again writes none. No K_S is ever written for staffing.
+- S7. (M7) A TEST batch for `HealthFirst` holds only HealthFirst rows and no staffing row; a
+  TEST batch for `Direct Dental` holds only staffing rows. One TEST staffing row with its
+  Payer edited by hand to `HealthFirst` is in neither batch and is listed X12; set it back.
+- S8. (M8) As H20, for the staffing rows.
+- S9. (M10, M11, M16, M24, M17, M14, M19, M21 for staffing) H3 to H8, H12, H13, H16 and H17
+  run on staffing cases, with `Direct Dental` in the reasons and the staffing amounts.
+- S10. (M18 for staffing) Closed `Already a customer` before any award with Practice Type
+  set: K_R Void. On a sent-on case with no practice type, closed `Already a customer`: K_R
+  Void, $100, Practice Type blank, in no batch.
+- S11. (M22, pay part) A HealthFirst rep app TEST lead handed back and sent on to staffing
+  by sheet F7: the staffing case, reached, qualified, `Private practice`, has one K_R, $100,
+  Company `Staffing`, for the original rep; the HealthFirst case has no row. The reverse
+  direction the same. Each is a Test row in no Real dry run.
+- S12. (The guard, staffing on) G2 again: no row, listed X4. Brian fills Award Practice Type
+  `Group`: that save's run writes K_R $200 and the case leaves X4. A signed gap case where
+  Brian sets Qualified Yes and Award Practice Type together: one run writes K_R and K_M.
+- S13. (M12, second order) With the site's `REP_PAY_PLAN_STAFFING` unset, a staffing case
+  reached and qualified still gets its K_R from HSBS 10's amounts.
+
+### Go-live checks (no TEST data needed)
+
+- L1. After go-live: LedgerTestOnly No, StaffingAwardsOn No, RealPayoutsOn No until step
+  6a, read from the Ledger Settings row and confirmed in each flow's `Settings read` step
+  ("How BB2 confirms the change took"); amounts as A3.
+- L2. After F4.9: StaffingAwardsOn Yes, confirmed the same way, and gates G1 to G6 in the
+  build report.
+
+After the checks, BB2 deletes the TEST rows, cases and ledger rows he made, and the
+temporary flow from A6.
+
+## Rollback
+
+0. `RealPayoutsOn` to No in the Ledger Settings row.
+1. `StaffingAwardsOn` to false, if it was turned on. HSBS 10 still voids staffing rows.
+2. `LedgerTestOnly` to true. From here HSBS 10 no longer voids a real row when a no-pay
+   reason appears, so Brian runs no Real batch (HSBS 10B) until HSBS 10 is back on with
+   `LedgerTestOnly` false and a 10D pass has run.
+3. Turn off HSBS 10D, then HSBS 10S, then HSBS 10. 10B and 10P stay on with
+   RealPayoutsOn No. A payer's confirmation of a list sent before the rollback is recorded
+   with 10P after Brian's go to set RealPayoutsOn Yes for that run, and No again after.
+4. Ledger rows already written stay as they are: an award earned stands, a Paid row is never
+   changed (D3), and no non-TEST row is ever deleted. A batch stamped but not sent may have
+   its Payout Batch cleared by Brian by hand.
+5. The Company and Practice Type columns stay; a blank Company reads `HealthFirst`, and 1R
+   and the site read them as F6 says. Ledger Run Errors, Sign Log and Payout Batches stay:
+   a handled sign stays handled, and a batch record still says what was sent.
+
+## Spec clause to sheet step
+
+| Spec clause | Step | Check |
+|---|---|---|
+| 9 F4: Company and Practice Type on the ledger | F4.1, F4.2, W17 | A1, A2, S1 |
+| 9 F4: per-company amounts | Settings, W13 | A3, S1, S2 |
+| 9 F4: staffing amount from Award Practice Type, never Practice Type | W10, W13 | S1 to S3 |
+| 6 and 9 F4: reached and qualified, both companies | W15 | H1, H2, S9 |
+| 6 (T18): no auto-reached award; two silent-partner lists | W15, X2, X3 | H16 |
+| 6: not-qualified void; Paid stays Paid and Disputed | W11, W14, W15 | H3 to H7 |
+| 6 (D12): 12 month look-back per company, any source, by JDE | W11 | H12, H13, S4, S5 |
+| 6: no-pay case pays nobody, manager included | W11, W16 | H12, S5 |
+| 6: a Void Reached row only where the plan has a reached award | W15 | H14 |
+| 6: manager pay at the sign, D18, decision 77 | W16 | H9, H10, S6 |
+| 6: HSBS 10 checks both answers before a Manager row | W16 rule B.1 | H8, G3 |
+| 9 F4: Payer per company; one batch per payer | Company table, F4.7 | S7, H22 |
+| 75: staffing payout list to the Routing contact | F4.7 Send | S7, H22, H24, H25 |
+| Nothing is marked Paid without a confirmed payout; a batch is sent once | F4.7 Send, F4.8 | H23 to H25 |
+| 6: no Team Roster or plan change while a failed or pending run is listed | F4.4 "The freeze", X1 | H28 |
+| 9 F4 and 84: blank Award Practice Type guard | Rule G, X4 | G2, G3, S12 |
+| 9 F4 and 82: staffing awards held behind a setting until the follow-up is live | W9, F4.9 | G1, G1a, L2 |
+| 6: Rep app only (T24) | W5 | H15 |
+| 6 (D8): TEST rows earn, never in a real batch | W17, F4.7 | H20, S8 |
+| 6: live rep with a Test manager | W17, X11 | H19 |
+| 6: hand back changes no pay | W11 | H17 |
+| 6: blank Company reads HealthFirst | F4.1 | H18 |
+| 13: releasing a manager's Test row after go-live | X11, F4.7 | H19 |
+| T9: no double row | Trigger concurrency 1, unique Award Key, ETag | A6 |
+| Manager pay needs exactly one Active Team Roster row | W16 step 5, X18 | H29 |
+| A sign is handled once, by a marker that does not depend on the plan | W16 steps 3 and 7, Sign Log | H33, H34 |
+| Catch-up covers every rep app case, whatever its age | F4.6 step 1 | H35 |
+| A send claims each row by ETag; a confirmation retry with the same inputs finishes | F4.7 steps 9 to 14, F4.8 | H31, H32 |
+| A send whose email went out but whose last stamp failed is finished without sending again | F4.7 `Finish`, X19 | H36 |
+| The switches are one shared row every flow reads | "Shared switches" | A3, A3a, L1, L2 |
+| Site plans equal HSBS 10's amounts before a change or staffing on | Freeze check part 4, G6 | Build report |
+| Money that moved after a void is recorded, never hidden | F4.8 | H31 |
+| 12 month check, TEST and real apart (decision 90) | W11 rule 1 | H12, S5 |
+
+## Ask Brian
+
+Each has a safe default that the build follows until he answers. Ask one at a time.
+
+- **A1. Settled by decision 90** (Brian, 11/13: "Never block each other"): in the 12 month
+  look-back TEST rows check only against TEST rows, and real only against real.
+- **A2. Ask Brian:** The two silent-partner lists (X2, X3) and the "signed without both
+  answers" list (X6) cover rep app cases only. Do you also want field page, other-team, FSC app and
+  Salesforce cases on them? (Sheet F2's wording says every signed HealthFirst or staffing
+  case with Qualified blank, which would list every HealthFirst case signed before the
+  change.) Safe default: rep app cases only, since only they can pay.
+- **A3. Ask Brian:** For "reached, no qualify answer for five business days", the clock
+  starts at the date the partner gave for talking (Talked On). OK? Safe default: Talked On;
+  a reached case with no Talked On is listed from the first day.
+- **A4. Ask Brian:** A staffing Void row with no award type (for example a duplicate closed
+  before anyone confirmed a type) carries the $100 private practice amount and a blank
+  type. It never pays. OK? Safe default: as written; the amount is never read from
+  Practice Type.
+- **A5. Ask Brian:** How long should the information lines (X9, a type changed after its
+  award; X10, a not-qualified "Other" note) stay on the daily email? Safe default: seven
+  days from the partner's last update.
+- **A6. Ask Brian:** Who at HealthFirst receives the HealthFirst payout list, and when is
+  the payout date? (Open since rep app v3, "from the Tuesday call".) Safe default: HSBS 10B
+  sends HealthFirst lists to you only, and you forward them; it runs only when you run it.
+- **A7. Ask Brian (only if gate G4 finds live staffing cases):** If live staffing cases were
+  reached and qualified while staffing awards were off, do they earn when it turns on?
+  Safe default: `StaffingAwardsOn` stays off until you answer.
