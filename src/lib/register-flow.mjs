@@ -85,6 +85,12 @@ export const repAppCompanies = () => env('REP_APP_COMPANIES');
  * nothing issues a token, so the routes answer 404 before any 1J call unless
  * REP_CONFIRM_ENABLED is exactly "true" as well as REP_APP_ENABLED. Removable later.
  */
+/**
+ * REP_ASK_STATE: the HealthFirst form asks for the practice's state and sends it to 1F as
+ * practiceState. Off unless exactly "true", so it goes on only after 1F stores the field.
+ */
+export const repAskState = () => repAppEnabled() && env('REP_ASK_STATE') === 'true';
+
 export const confirmEnabled = () => repAppEnabled() && env('REP_CONFIRM_ENABLED') === 'true';
 
 /**
