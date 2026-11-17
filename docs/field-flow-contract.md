@@ -26,6 +26,7 @@ route answers 404 and no flow is called.
 | `REP_PAY_ENABLED` | Dollar amounts on screens, exactly `true`. Off until Brian approves pay | No |
 | `REP_PAY_PLAN` | HealthFirst pay plan words (`src/lib/rep-pay-plan.mjs`) | No |
 | `REP_PAY_PLAN_STAFFING` | Staffing pay plan words | No |
+| `REP_ASK_STATE` | The HealthFirst form asks for the practice's state and sends `practiceState`, exactly `true`. Off: no State field and no `practiceState` in the body | No |
 | `REP_CONFIRM_ENABLED` | `/confirm/<token>`, exactly `true`. Off: not used at launch | No |
 | `FLOW_CACHE_SECONDS` | Track and Earnings cache, 0 to 300, default 45. 0 turns it off | No |
 | `REGISTER_IP_LIMIT` | Sign-ups per IP per window, default 200 | No |
@@ -128,6 +129,11 @@ Two shapes, one per company (`src/lib/rep-referral-form.mjs`,
 - A staffing send has `companies: ["HS Staffing / Recruiting Services (including GoTu)"]`,
   `needs: ["Staffing"]`, its own consent sentence, and `practiceType` (`Private practice` or
   `Group`).
+- With `REP_ASK_STATE` on, a HealthFirst send also carries `practiceState`: the practice's
+  state as a two-letter USPS code, one of the 50 states or `DC` (`US_STATES` in
+  `src/lib/rep-referral-form.mjs`). It is required; a missing or unknown code is refused
+  with 422 before any 1F call. HealthFirst splits its reps by state. A staffing send never
+  carries it. Turn the switch on only after 1F stores the field.
 - `PVApermission` is a column name 1F maps today. It stays until 1F stops reading it;
   removing it is a 1F change first.
 - The site refuses, before any 1F call, a company that is off in `REP_APP_COMPANIES`, two

@@ -2544,6 +2544,53 @@ try {
   killDev(dev);
 }
 
+
+// REP_ASK_STATE (HealthFirst splits its reps by state): the HealthFirst form asks for the
+// practice's state, refuses a send without it, and 1F gets the code as practiceState. With
+// JavaScript off the server does the same check.
+dev = await startDev({ ...env, REP_APP_ENABLED: 'true', REP_ASK_STATE: 'true' });
+try {
+  for (const js of [false, true]) {
+    const tag = js ? 'JS on' : 'JS off';
+    const ctx = await browser.newContext({ ...devices['iPhone 13'], javaScriptEnabled: js, reducedMotion: 'reduce' });
+    const page = await ctx.newPage();
+    const submit = async () => {
+      await page.click('#rep-send-button');
+      if (js) await page.waitForTimeout(1200);
+      else await page.waitForLoadState('load');
+    };
+    try {
+      await check(`REP_ASK_STATE ${tag}: no state shows its error and sends nothing; a picked state reaches 1F`, async () => {
+        bodies.length = 0;
+        await page.goto(`${BASE}/refer/${REP_KEY}`);
+        assert.equal(await page.locator('#rep-form select[name=practiceState] option').count(), 52);
+        await page.fill('[name=contactName]', 'TEST Office Manager');
+        await page.fill('[name=practiceName]', 'TEST North Side Dental');
+        await page.fill('[name=jde]', '001234');
+        await page.fill('[name=officePhone]', '303-555-0100');
+        await page.check('[name=preferredContact][value=Text]');
+        await page.check('[name=permission]');
+        if (js) assert.equal((await page.textContent('#rep-send-button')).trim(), 'Pick the state');
+        await submit();
+        assert.match(await page.textContent('.rep-err[data-for=practiceState]'), /state/);
+        assert.equal(count('submit'), 0, 'nothing reached 1F');
+        await page.selectOption('[name=practiceState]', 'CO');
+        if (!js) await page.check('[name=permission]');
+        if (js) assert.equal((await page.textContent('#rep-send-button')).trim(), 'Send to HealthFirst');
+        await submit();
+        await page.waitForSelector('#rep-receipt:not([hidden])', { timeout: 10000 });
+        const sent = bodies.filter((b) => b.action === 'submit');
+        assert.equal(sent.length, 1);
+        assert.equal(sent[0].practiceState, 'CO');
+      });
+    } finally {
+      await ctx.close();
+    }
+  }
+} finally {
+  killDev(dev);
+}
+
 await browser.close();
 flow.close();
 for (const [status, label] of results) console.log(`${status}  ${label}`);

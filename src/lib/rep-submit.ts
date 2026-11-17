@@ -12,12 +12,12 @@ import {
   submitReferral,
 } from './field-flow.mjs';
 import { TIMEOUT_MESSAGE, isReferralKey, isSubmissionId } from './field-form.mjs';
-import { repAppCompanies, repAppEnabled } from './register-flow.mjs';
+import { repAppCompanies, repAppEnabled, repAskState } from './register-flow.mjs';
 import { COMPANY_OFF_MESSAGE, ONE_COMPANY_MESSAGE, checkSendCompany } from './rep-companies.mjs';
 import { repFlowPayload, validateRepReferral } from './rep-referral-form.mjs';
 import { staffingFlowPayload, validateStaffingReferral } from './rep-staffing-form.mjs';
 
-const STRINGS = ['contactName', 'practiceName', 'jde', 'officePhone', 'email', 'preferredContact', 'practiceType', 'notes'] as const;
+const STRINGS = ['contactName', 'practiceName', 'jde', 'officePhone', 'email', 'preferredContact', 'practiceType', 'practiceState', 'notes'] as const;
 
 /**
  * One sender per company that has a send form (field two-track spec, section 4). A
@@ -26,12 +26,15 @@ const STRINGS = ['contactName', 'practiceName', 'jde', 'officePhone', 'email', '
  * (rep-companies.test.mjs checks the two agree). Each payload builder sets every fixed value itself; identity is never
  * in the body (HSBS 1F reads it from the Rep Roster row for the key).
  */
+type RepFormOptions = { askState?: boolean };
 type RepSender = {
-  validate: (fields: Record<string, unknown>) => { ok: boolean; errors: { field: string; message: string }[] };
-  payload: (fields: Record<string, unknown>, meta: { referralKey: string; submissionId: string }) => Record<string, unknown>;
+  validate: (fields: Record<string, unknown>, options?: RepFormOptions) => { ok: boolean; errors: { field: string; message: string }[] };
+  payload: (fields: Record<string, unknown>, meta: { referralKey: string; submissionId: string }, options?: RepFormOptions) => Record<string, unknown>;
+  /** The form's switches, read from env on each send. */
+  options?: () => RepFormOptions;
 };
 export const REP_SENDERS: Readonly<Record<string, RepSender>> = Object.freeze({
-  HealthFirst: { validate: validateRepReferral, payload: repFlowPayload },
+  HealthFirst: { validate: validateRepReferral, payload: repFlowPayload, options: () => ({ askState: repAskState() }) },
   Staffing: { validate: validateStaffingReferral, payload: staffingFlowPayload },
 });
 
@@ -95,11 +98,12 @@ export async function submitRep(
   const sender = REP_SENDERS[company.key];
   if (!sender) return { status: 403, error: COMPANY_OFF_MESSAGE };
 
-  const result = sender.validate(fields);
+  const options = sender.options?.() ?? {};
+  const result = sender.validate(fields, options);
   if (!result.ok) return { status: 422, errors: result.errors };
 
   try {
-    await submitReferral(sender.payload(fields, { referralKey: String(referralKey), submissionId: String(submissionId) }), timeoutMs);
+    await submitReferral(sender.payload(fields, { referralKey: String(referralKey), submissionId: String(submissionId) }, options), timeoutMs);
   } catch (err) {
     // Status only. The flow URL, the key and the office's details stay out of the log.
     if (err instanceof ReferralAppConfigError) {

@@ -7,7 +7,7 @@
 import '../../styles/global.css';
 import RepReferral from '../../components/RepReferral.astro';
 import { clientIp } from '../../lib/http';
-import { repAppCompanies, repAppEnabled, repPayEnabled, repPromisePlan, repStaffingPromisePlan } from '../../lib/register-flow.mjs';
+import { repAppCompanies, repAppEnabled, repAskState, repPayEnabled, repPromisePlan, repStaffingPromisePlan } from '../../lib/register-flow.mjs';
 import { sendTab } from '../../lib/rep-companies.mjs';
 import { pickRepFields, submitRep, type RepSubmitResult } from '../../lib/rep-submit';
 import { lookupReferral, submitBudgetMs } from '../../lib/field-flow.mjs';
@@ -153,6 +153,7 @@ const showTeam = isManager && showRep;
             showTeam={showTeam}
             companies={repSend.keys}
             picked={repPicked}
+            askState={repAskState()}
           />
         )
       }

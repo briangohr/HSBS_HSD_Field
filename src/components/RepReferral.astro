@@ -8,7 +8,7 @@
 // only when REP_PAY_ENABLED is on (D14), worded from the SPIFF plan in REP_PAY_PLAN
 // (src/lib/rep-pay-plan.mjs). New styles go in LeadStyles.astro (is:inline), never in
 // the bundled <style> below.
-import { GUIDE, PREFERRED_CONTACTS, REP_CONSENT, repReceipt, repSendLabel } from '../lib/rep-referral-form.mjs';
+import { GUIDE, PREFERRED_CONTACTS, REP_CONSENT, US_STATES, repReceipt, repSendLabel } from '../lib/rep-referral-form.mjs';
 import { EARNINGS_FOOTER } from '../lib/rep-earnings.mjs';
 import { emptyEarnings, payLine, payTerms, type PayPlan, type StaffingPayPlan } from '../lib/rep-pay-plan.mjs';
 import { companyName } from '../lib/rep-companies.mjs';
@@ -46,9 +46,11 @@ interface Props {
    * the page's pay terms, so a staffing plan change drops this page's promises (slice S5).
    */
   staffingPlan?: StaffingPayPlan | null;
+  /** REP_ASK_STATE: the HealthFirst form asks for the practice's state (required). */
+  askState?: boolean;
 }
 
-const { repName, referralKey, submissionId, payPlan, pay, result, values = {}, showTeam = false, companies = ['HealthFirst'], picked = '', staffingPlan = null } = Astro.props;
+const { repName, referralKey, submissionId, payPlan, pay, result, values = {}, showTeam = false, companies = ['HealthFirst'], picked = '', staffingPlan = null, askState = false } = Astro.props;
 // classic: HealthFirst only, the Send tab exactly as on main. Otherwise the Send tab names
 // each company, and with two or more it opens on a choice.
 const classic = companies.length === 1 && companies[0] === 'HealthFirst';
@@ -85,7 +87,7 @@ const sPlan = payEnabled ? staffingPlan : null;
 const receipt = staffingSend
   ? staffingReceipt({ contactName: values.contactName, practiceType: values.practiceType, plan: sPlan })
   : repReceipt({ contactName: values.contactName, plan: payPlan });
-const label = repSendLabel(sent ? {} : hfValues);
+const label = repSendLabel(sent ? {} : hfValues, { askState });
 // Each company form has its own submission id, so a send from one never reuses the other's
 // (1F remembers a good send by its id). The id the server holds belongs to the form that was
 // posted; the other form gets a fresh one.
@@ -144,7 +146,7 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
       {GUIDE.map((line) => <p>{line}</p>)}
     </div>
 
-    <form id="rep-form" method="post" action={`/refer/${referralKey}`} novalidate>
+    <form id="rep-form" method="post" action={`/refer/${referralKey}`} data-ask-state={askState ? 'true' : undefined} novalidate>
       <input type="hidden" name="app" value="rep" />
       <input type="hidden" name="company" value="HealthFirst" />
       <input type="hidden" name="submissionId" value={healthFirstId} />
@@ -159,6 +161,20 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
         <input name="practiceName" value={v('practiceName')} maxlength="160" autocomplete="off" required />
         <span class="rep-err" data-for="practiceName">{fieldError('practiceName')}</span>
       </label>
+      {
+        askState && (
+          <label class="rep-field">
+            State
+            <select name="practiceState" required>
+              <option value="" selected={!v('practiceState')}>Pick the state</option>
+              {US_STATES.map(([code, name]) => (
+                <option value={code} selected={v('practiceState') === code}>{name}</option>
+              ))}
+            </select>
+            <span class="rep-err" data-for="practiceState">{fieldError('practiceState')}</span>
+          </label>
+        )
+      }
       <label class="rep-field">
         JDE #
         <input name="jde" value={v('jde')} inputmode="numeric" pattern="[0-9]*" maxlength="40" autocomplete="off" required />
@@ -385,6 +401,7 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
       return {
         contactName: String(data.get('contactName') ?? ''),
         practiceName: String(data.get('practiceName') ?? ''),
+        practiceState: String(data.get('practiceState') ?? ''),
         jde: String(data.get('jde') ?? ''),
         officePhone: String(data.get('officePhone') ?? ''),
         email: String(data.get('email') ?? ''),
@@ -393,9 +410,11 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
         permission: data.get('permission') === 'yes',
       };
     };
+    // REP_ASK_STATE: the server rendered the State list and checks it the same way.
+    const formOptions = { askState: form?.dataset.askState === 'true' };
     let sending = false;
     const refresh = () => {
-      if (!sending) sendButton.textContent = repSendLabel(read());
+      if (!sending) sendButton.textContent = repSendLabel(read(), formOptions);
     };
     form?.addEventListener('input', refresh);
     form?.addEventListener('change', refresh);
@@ -416,7 +435,7 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
     // After a confirmed send, the next referral starts blank with a new id. A failed
     // send keeps its id, so trying again can't make a second row.
     const clearForm = () => {
-      form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea').forEach((el) => {
+      form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select').forEach((el) => {
         if (el instanceof HTMLInputElement && el.type === 'hidden') return;
         if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) el.checked = false;
         else el.value = '';
@@ -601,7 +620,7 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
       if (sending) return;
       if (hfPending) restore(hfPending.fields);
       const fields = hfPending ? hfPending.fields : read();
-      const check = validateRepReferral(fields);
+      const check = validateRepReferral(fields, formOptions);
       if (!check.ok) {
         showErrors(check.errors);
         say('');
@@ -1118,7 +1137,7 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
   .rep-guide { background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--hs-blue); border-radius: 12px; padding: 0.75rem 0.9rem; margin: 1rem 0; }
   .rep-guide p { margin: 0.25rem 0; font-size: 0.95rem; }
   .rep-field { display: grid; gap: 0.2rem; margin-top: 0.75rem; font-weight: 600; font-size: 0.92rem; border: 0; padding: 0; }
-  .rep-field input, .rep-field textarea {
+  .rep-field input, .rep-field textarea, .rep-field select {
     font: inherit; font-weight: 400; font-size: 1rem; padding: 0.65rem 0.75rem; min-height: 44px;
     border: 1px solid #c3cad6; border-radius: 10px; background: #fff; color: var(--text); width: 100%; box-sizing: border-box;
   }
