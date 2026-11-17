@@ -30,6 +30,7 @@ route answers 404 and no flow is called.
 | `REP_CONFIRM_ENABLED` | `/confirm/<token>`, exactly `true`. Off: not used at launch | No |
 | `FLOW_CACHE_SECONDS` | Track and Earnings cache, 0 to 300, default 45. 0 turns it off | No |
 | `REGISTER_IP_LIMIT` | Sign-ups per IP per window, default 200 | No |
+| `JOIN_RGMS` | The RGM pick list for `/join` (roster match, below), a JSON list of `{"region","name","email"}` built from the field roster. Unset, empty or any bad entry: the free-text form | No, but it holds staff emails, so it lives only in Vercel env |
 
 ## HSBS 1J: register (`/join`)
 
@@ -54,8 +55,36 @@ Request (built only from a validated form, `registerPayload` in
 - `role` is one of `AE`, `FSC`, `RM`, `ES`, `EST`, `HSFS`, `Other`.
   Thrive Signature is a program, not a role (Brian, 11/17); it stays only as a `source`.
   The page shows `RM` as RGM and sends `RM`.
-- An AE may leave both manager fields blank (decision 113).
+- An AE may leave both manager fields blank (decision 113). With `JOIN_RGMS` set, any role may (roster match, below).
 - `source` is `QR`, `AE link`, `Thrive Signature link` or `Other`, from `?src=` on `/join`.
+
+### Roster match (`JOIN_RGMS` set)
+
+Brian, 11/17: free-text manager and region boxes get filled in every possible way, so
+people are matched to the field roster instead. With `JOIN_RGMS` set, `/join` asks for
+first and last name, Henry Schein email, mobile, role and the person's RGM, picked from a
+list. There are no manager name, manager email or branch boxes.
+
+- The list shows each RGM as `Name (REGION)` and posts only the region code. The RGM's
+  email never reaches the page.
+- The body keeps its shape. `managerName` and `managerEmail` are the picked RGM's name
+  and email as `JOIN_RGMS` spells them, and `branch` is the region code (for example `OR`).
+- "Not listed, or I don't know" sends `managerName`, `managerEmail` and `branch` as `""`,
+  for any role, not only AE.
+- An RGM can't pick themselves (their own email): 422.
+
+What 1J does with it (Brian's live edit, written out on the Field Build Desk):
+
+1. Both manager fields blank is allowed for every role. One blank and one filled is still
+   refused.
+2. Match to the Rep Roster by `email` first, then by `mobile` (`NNN-NNN-NNNN`, exact). A
+   match resends that row's link **to the row's own Rep Email**, never to the typed one, and
+   changes nothing on the row. So someone who types a colleague's mobile only sends the
+   colleague their own link, under the Link Resends limit.
+3. No match: a new Pending row as today, with the picked RGM as the manager hint.
+
+The Team Roster still alone decides managers and pay (D18). The pick is a hint, as the
+typed manager was.
 
 Answers the site reads:
 

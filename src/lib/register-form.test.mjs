@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { describe, test } from 'node:test';
 import {
+  RGM_NOT_LISTED,
   ROLES,
   SENT_MESSAGE,
   normalizeMobile,
+  parseRgms,
+  rgmLabel,
   registerPayload,
   roleLabel,
   sourceFor,
@@ -423,5 +426,71 @@ describe('HSBS 1J manager confirm', { concurrency: false }, () => {
         await close(server);
       }
     }
+  });
+});
+
+describe('roster match: the RGM pick list (Brian, 11/17)', () => {
+  const RGMS = [
+    { region: 'tb', name: 'Test Rgm Bravo', email: 'Test.Rgm.Bravo@HenrySchein.com' },
+    { region: 'TA', name: 'Test Rgm Alpha', email: 'test.rgm.alpha@henryschein.com' },
+  ];
+  const list = parseRgms(JSON.stringify(RGMS));
+  const rep = { firstName: 'Test', lastName: 'Rep', email: 'test.rep@henryschein.com', mobile: '555 010 1234', role: 'FSC' };
+
+  test('JOIN_RGMS is read, cleaned and sorted by name', () => {
+    assert.deepEqual(list, [
+      { region: 'TA', name: 'Test Rgm Alpha', email: 'test.rgm.alpha@henryschein.com' },
+      { region: 'TB', name: 'Test Rgm Bravo', email: 'test.rgm.bravo@henryschein.com' },
+    ]);
+    assert.equal(rgmLabel(list[0]), 'Test Rgm Alpha (TA)');
+  });
+
+  test('unset, broken or any bad entry turns the whole list off (free-text form)', () => {
+    for (const raw of [undefined, '', 'not json', '{}', '[]',
+      JSON.stringify([...RGMS, { region: 'TC', name: 'Test Rgm', email: 'x@gmail.com' }]),
+      JSON.stringify([...RGMS, { region: 'TA', name: 'Test Again', email: 'test.again@henryschein.com' }]),
+      JSON.stringify([{ region: 'Ohio', name: 'Test Rgm', email: 'test.rgm@henryschein.com' }]),
+      JSON.stringify([{ region: 'TA', name: 'Rgm <b>', email: 'test.rgm@henryschein.com' }])]) {
+      assert.deepEqual(parseRgms(raw), [], String(raw));
+    }
+  });
+
+  test('a picked RGM fills the manager hint and region from the list, never from the browser', () => {
+    const r = validateRegistration({ ...rep, rgm: 'TB', managerName: 'Matt', managerEmail: 'someone@henryschein.com', branch: 'North' }, list);
+    assert.equal(r.ok, true);
+    const body = registerPayload(r.value, 'QR');
+    assert.equal(body.managerName, 'Test Rgm Bravo');
+    assert.equal(body.managerEmail, 'test.rgm.bravo@henryschein.com');
+    assert.equal(body.branch, 'TB');
+    assert.deepEqual(Object.keys(body).sort(), ['action', 'branch', 'email', 'firstName', 'lastName', 'managerEmail', 'managerName', 'mobile', 'role', 'source']);
+  });
+
+  test('"Not listed" sends the manager and branch blank, for every role', () => {
+    for (const role of ROLES) {
+      const r = validateRegistration({ ...rep, role, rgm: RGM_NOT_LISTED }, list);
+      assert.equal(r.ok, true, role);
+      assert.equal(r.value.managerName, '');
+      assert.equal(r.value.managerEmail, '');
+      assert.equal(r.value.branch, '');
+    }
+  });
+
+  test('no pick, or a region not on the list, is refused', () => {
+    for (const rgm of ['', 'ZZ', 'Test Rgm Alpha', undefined]) {
+      const r = validateRegistration({ ...rep, rgm }, list);
+      assert.equal(r.ok, false, String(rgm));
+      assert.match(r.errors.rgm, /Pick your RGM/);
+    }
+  });
+
+  test('an RGM cannot pick themselves', () => {
+    const r = validateRegistration({ ...rep, role: 'RM', email: 'test.rgm.alpha@henryschein.com', rgm: 'TA' }, list);
+    assert.equal(r.ok, false);
+    assert.ok(r.errors.rgm);
+  });
+
+  test('the roster form asks only for name, email, mobile, role and RGM', () => {
+    const r = validateRegistration({}, list);
+    assert.deepEqual(Object.keys(r.errors).sort(), ['email', 'firstName', 'lastName', 'mobile', 'rgm', 'role']);
   });
 });

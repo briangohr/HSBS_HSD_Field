@@ -8,8 +8,8 @@ import '../styles/global.css';
 import Analytics from '../components/Analytics.astro';
 import { clientIp } from '../lib/http';
 import { repAppEnabled } from '../lib/register-flow.mjs';
-import { ROLES, SENT_MESSAGE, roleLabel } from '../lib/register-form.mjs';
-import { pickFields, submitRegistration, type SubmitResult } from '../lib/register-submit';
+import { RGM_NOT_LISTED, ROLES, SENT_MESSAGE, rgmLabel, roleLabel } from '../lib/register-form.mjs';
+import { joinRgms, pickFields, submitRegistration, type SubmitResult } from '../lib/register-submit';
 
 export const prerender = false;
 
@@ -18,6 +18,8 @@ if (!repAppEnabled()) {
 }
 
 const MAX_BODY = 4 * 1024;
+// JOIN_RGMS set: the roster-match form (RGM pick list, no manager or branch boxes).
+const rgms = joinRgms();
 let src = (Astro.url.searchParams.get('src') ?? '').slice(0, 20);
 let values: Record<string, string> = {};
 let result: SubmitResult | undefined;
@@ -119,23 +121,38 @@ const v = (k: string) => (sent ? '' : (values[k] ?? ''));
             <span class="join-err" data-for="role">{errors.role ?? ''}</span>
           </label>
 
-          <label class="join-field">
-            Manager's name <span class="join-hint">(AEs can leave blank)</span>
-            <input name="managerName" value={v('managerName')} autocomplete="off" maxlength="120" />
-            <span class="join-err" data-for="managerName">{errors.managerName ?? ''}</span>
-          </label>
+          {rgms.length ? (
+            <label class="join-field">
+              Your RGM <span class="join-hint">(Regional General Manager)</span>
+              <select name="rgm" required>
+                <option value="">Pick one</option>
+                {rgms.map((r) => <option value={r.region} selected={v('rgm') === r.region}>{rgmLabel(r)}</option>)}
+                <option value={RGM_NOT_LISTED} selected={v('rgm') === RGM_NOT_LISTED}>Not listed, or I don't know</option>
+              </select>
+              <span class="join-hint">If you're on the field roster, we use the roster's manager.</span>
+              <span class="join-err" data-for="rgm">{errors.rgm ?? ''}</span>
+            </label>
+          ) : (
+            <>
+            <label class="join-field">
+              Manager's name <span class="join-hint">(AEs can leave blank)</span>
+              <input name="managerName" value={v('managerName')} autocomplete="off" maxlength="120" />
+              <span class="join-err" data-for="managerName">{errors.managerName ?? ''}</span>
+            </label>
 
-          <label class="join-field">
-            Manager's Henry Schein email <span class="join-hint">(AEs can leave blank)</span>
-            <input name="managerEmail" value={v('managerEmail')} type="email" inputmode="email" autocomplete="off" maxlength="120" />
-            <span class="join-err" data-for="managerEmail">{errors.managerEmail ?? ''}</span>
-          </label>
+            <label class="join-field">
+              Manager's Henry Schein email <span class="join-hint">(AEs can leave blank)</span>
+              <input name="managerEmail" value={v('managerEmail')} type="email" inputmode="email" autocomplete="off" maxlength="120" />
+              <span class="join-err" data-for="managerEmail">{errors.managerEmail ?? ''}</span>
+            </label>
 
-          <label class="join-field">
-            Branch or territory
-            <input name="branch" value={v('branch')} autocomplete="off" maxlength="80" required />
-            <span class="join-err" data-for="branch">{errors.branch ?? ''}</span>
-          </label>
+            <label class="join-field">
+              Branch or territory
+              <input name="branch" value={v('branch')} autocomplete="off" maxlength="80" required />
+              <span class="join-err" data-for="branch">{errors.branch ?? ''}</span>
+            </label>
+            </>
+          )}
 
           <p class="join-alert" id="join-alert" role="alert" hidden={!result?.error}>{result?.error ?? ''}</p>
           <button class="join-send" type="submit" id="join-send">Send my link</button>
@@ -149,7 +166,7 @@ const v = (k: string) => (sent ? '' : (values[k] ?? ''));
     </main>
 
     <script>
-      import { validateRegistration } from '../lib/register-form.mjs';
+      import { RGM_NOT_LISTED, validateRegistration } from '../lib/register-form.mjs';
 
       const form = document.getElementById('join-form') as HTMLFormElement;
       const send = document.getElementById('join-send') as HTMLButtonElement;
@@ -174,7 +191,13 @@ const v = (k: string) => (sent ? '' : (values[k] ?? ''));
         event.preventDefault();
         say('');
         const data = Object.fromEntries(new FormData(form).entries()) as Record<string, string>;
-        const check = validateRegistration(data);
+        // The pick list's codes, so the page checks the same rule as the server. The
+        // RGM emails never reach the page; the server checks the rest.
+        const pick = form.elements.namedItem('rgm') as HTMLSelectElement | null;
+        const rgms = pick
+          ? [...pick.options].filter((o) => o.value && o.value !== RGM_NOT_LISTED).map((o) => ({ region: o.value, name: 'RGM', email: '' }))
+          : [];
+        const check = validateRegistration(data, rgms);
         if (!check.ok) {
           showErrors(check.errors);
           return;
