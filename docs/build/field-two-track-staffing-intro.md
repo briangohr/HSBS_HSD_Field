@@ -204,7 +204,7 @@ P3).
   "jde": "001234",
   "companies": ["HS Staffing / Recruiting Services (including GoTu)"],
   "needs": ["Staffing"],
-  "`PVApermission`": true,
+  "PVApermission": true,
   "contactFirst": false,
   "preferredContact": "Call",
   "consentText": "The customer gave permission for Direct Dental to contact them about staffing.*",

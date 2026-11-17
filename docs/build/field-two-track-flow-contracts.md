@@ -444,7 +444,7 @@ key (before S6; the site reads it since PR #116, `src/lib/partner-flow.ts` lines
   "jde": "001234",
   "companies": ["HS Staffing / Recruiting Services (including GoTu)"],
   "needs": ["Staffing"],
-  "`PVApermission`": true,
+  "PVApermission": true,
   "contactFirst": false,
   "preferredContact": "Call",
   "consentText": "<the words on the screen>",

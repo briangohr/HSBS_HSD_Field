@@ -277,7 +277,7 @@ can't change them; the server builds them (`src/lib/rep-referral-form.mjs`):
   "jde": "001234",
   "companies": ["HealthFirst"],
   "needs": ["OSHA and HIPAA compliance"],
-  "`PVApermission`": true,
+  "PVApermission": true,
   "contactFirst": false,
   "preferredContact": "Text",
   "consentText": "The office agreed to a call from HealthFirst.",
@@ -651,7 +651,7 @@ The site:
 ### team (new, read only)
 
 ```json
-{ "action": "team", "referralKey": "<a key from the `PVA Roster`, FSC Roster or Rep Roster>" }
+{ "action": "team", "referralKey": "<a key from the PVA Roster, FSC Roster or Rep Roster>" }
 ```
 
 **200**:
