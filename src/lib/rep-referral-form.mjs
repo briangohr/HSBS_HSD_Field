@@ -47,6 +47,55 @@ const STATE_CODES = new Set(US_STATES.map(([code]) => code));
 /** A known two-letter code, exactly as the page's list sends it. */
 export const isStateCode = (v) => typeof v === 'string' && STATE_CODES.has(v);
 
+const STATE_NAMES = new Map(US_STATES.map(([code, name]) => [code, name]));
+/** The state's name for a known code, else ''. */
+export const stateName = (code) => STATE_NAMES.get(code) ?? '';
+
+const fold = (v) => String(v ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+
+/**
+ * The type-ahead on the State box: the states a rep's typing points to, best first. A
+ * two-letter code typed in full ("co") comes first, then names that start with the text
+ * ("co" Colorado, Connecticut), then names with a later word that starts with it
+ * ("car" North Carolina, South Carolina). Nothing for empty text. Only states from
+ * US_STATES, so the box can only send a code on the list.
+ *
+ * @param {unknown} text
+ * @param {number} [limit]
+ * @returns {Array<readonly [string, string]>}
+ */
+export function matchStates(text, limit = 8) {
+  const q = fold(text);
+  if (!q) return [];
+  const byCode = [], byStart = [], byWord = [];
+  for (const pair of US_STATES) {
+    const [code, name] = pair;
+    const n = name.toLowerCase();
+    if (code.toLowerCase() === q) byCode.push(pair);
+    else if (n.startsWith(q)) byStart.push(pair);
+    else if (n.split(' ').slice(1).some((w) => w.startsWith(q))) byWord.push(pair);
+  }
+  return [...byCode, ...byStart, ...byWord].slice(0, limit);
+}
+
+/**
+ * The code a finished entry in the State box stands for, or '' when it is not one state.
+ * A full name or code in any case counts ("colorado", "CO"), and so does text that only
+ * one state's name starts with ("flo" Florida). Anything else is no state, and the send
+ * asks for it again.
+ *
+ * @param {unknown} text
+ * @returns {string}
+ */
+export function stateFromText(text) {
+  const q = fold(text);
+  if (!q) return '';
+  const exact = US_STATES.find(([code, name]) => code.toLowerCase() === q || name.toLowerCase() === q);
+  if (exact) return exact[0];
+  const starts = US_STATES.filter(([, name]) => name.toLowerCase().startsWith(q));
+  return starts.length === 1 ? starts[0][0] : '';
+}
+
 /** @typedef {{ askState?: boolean }} RepFormOptions */
 
 const trim = (v) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim() : '');

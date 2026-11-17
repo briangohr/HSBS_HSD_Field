@@ -163,16 +163,34 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
       </label>
       {
         askState && (
-          <label class="rep-field">
-            State
-            <select name="practiceState" required>
+          <div class="rep-field" data-state-field>
+            <label for="rep-state">State</label>
+            {/* With JavaScript the list gives way to a type-ahead box (rep-combo below)
+                that sets this same field, so the form still sends one code from US_STATES. */}
+            <select id="rep-state" name="practiceState" required>
               <option value="" selected={!v('practiceState')}>Pick the state</option>
               {US_STATES.map(([code, name]) => (
                 <option value={code} selected={v('practiceState') === code}>{name}</option>
               ))}
             </select>
+            <div class="rep-combo" data-state-combo hidden>
+              <input
+                type="text"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                aria-controls="rep-state-list"
+                autocomplete="off"
+                autocapitalize="words"
+                spellcheck="false"
+                maxlength="40"
+                placeholder="Start typing the state"
+                data-state-input
+              />
+              <ul id="rep-state-list" class="rep-combo-list" role="listbox" aria-label="States" hidden></ul>
+            </div>
             <span class="rep-err" data-for="practiceState">{fieldError('practiceState')}</span>
-          </label>
+          </div>
         )
       }
       <label class="rep-field">
@@ -312,7 +330,7 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
 
 <script>
   import { CLIENT_WAIT_MS, SENDING_MESSAGE, TIMEOUT_MESSAGE } from '../lib/field-form.mjs';
-  import { repReceipt, repSendLabel, validateRepReferral } from '../lib/rep-referral-form.mjs';
+  import { matchStates, repReceipt, repSendLabel, stateFromText, stateName, validateRepReferral } from '../lib/rep-referral-form.mjs';
   import { PAY_TERMS_EVENT, TERMS_CHANGED, healthFirstTerms, parsePayPlan } from '../lib/rep-pay-plan.mjs';
   import { staffingReceipt, staffingSendLabel, validateStaffingReferral } from '../lib/rep-staffing-form.mjs';
 
@@ -419,12 +437,122 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
     form?.addEventListener('input', refresh);
     form?.addEventListener('change', refresh);
 
+    // REP_ASK_STATE: the State list becomes a type-ahead box. Typing a couple of letters
+    // shows the states that match; picking one (tap, Enter or Tab) sets the hidden list to
+    // that state's code. Text that is not one state leaves no state picked, so the send
+    // asks for it, exactly as the server does. The form still sends practiceState.
+    const stateSelect = form?.querySelector<HTMLSelectElement>('select[name=practiceState]') ?? null;
+    const stateCombo = form?.querySelector<HTMLElement>('[data-state-combo]') ?? null;
+    const stateInput = stateCombo?.querySelector<HTMLInputElement>('[data-state-input]') ?? null;
+    const stateList = stateCombo?.querySelector<HTMLUListElement>('[role=listbox]') ?? null;
+    if (stateSelect && stateCombo && stateInput && stateList) {
+      stateSelect.hidden = true;
+      stateSelect.tabIndex = -1;
+      stateSelect.removeAttribute('id');
+      stateInput.id = 'rep-state';
+      stateCombo.hidden = false;
+      stateInput.value = stateName(stateSelect.value);
+      let matches: Array<readonly [string, string]> = [];
+      let active = -1;
+      const setState = (code: string) => {
+        if (stateSelect.value === code) return;
+        stateSelect.value = code;
+        stateSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const closeList = () => {
+        matches = [];
+        active = -1;
+        stateList.hidden = true;
+        stateList.replaceChildren();
+        stateInput.setAttribute('aria-expanded', 'false');
+        stateInput.removeAttribute('aria-activedescendant');
+      };
+      const paint = () => {
+        stateList.querySelectorAll('li').forEach((li, i) => {
+          li.setAttribute('aria-selected', String(i === active));
+          if (i === active) li.scrollIntoView({ block: 'nearest' });
+        });
+        if (active >= 0) stateInput.setAttribute('aria-activedescendant', `rep-state-opt-${active}`);
+        else stateInput.removeAttribute('aria-activedescendant');
+      };
+      const pickState = (i: number) => {
+        const m = matches[i];
+        if (!m) return;
+        stateInput.value = m[1];
+        setState(m[0]);
+        closeList();
+      };
+      const openList = () => {
+        matches = matchStates(stateInput.value);
+        active = matches.length ? 0 : -1;
+        stateList.replaceChildren(
+          ...matches.map(([code, name], i) => {
+            const li = document.createElement('li');
+            li.id = `rep-state-opt-${i}`;
+            li.setAttribute('role', 'option');
+            li.dataset.code = code;
+            const strong = document.createElement('span');
+            strong.textContent = name;
+            const small = document.createElement('span');
+            small.className = 'rep-combo-code';
+            small.textContent = code;
+            li.append(strong, small);
+            // pointerdown, not click: it lands before the box loses focus.
+            li.addEventListener('pointerdown', (event) => {
+              event.preventDefault();
+              pickState(i);
+            });
+            return li;
+          }),
+        );
+        stateList.hidden = matches.length === 0;
+        stateInput.setAttribute('aria-expanded', String(matches.length > 0));
+        paint();
+      };
+      stateInput.addEventListener('input', (event) => {
+        // Only an exact name or code picks while typing ("Virginia" is not yet West Virginia).
+        const exact = matchStates(stateInput.value).find(
+          ([code, name]) => name.toLowerCase() === stateInput.value.trim().toLowerCase() || code === stateInput.value.trim().toUpperCase(),
+        );
+        setState(exact ? exact[0] : '');
+        openList();
+      });
+      stateInput.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          if (stateList.hidden) return openList();
+          const step = event.key === 'ArrowDown' ? 1 : -1;
+          active = (active + step + matches.length) % matches.length;
+          paint();
+        } else if (event.key === 'Enter') {
+          if (!stateList.hidden && active >= 0) {
+            event.preventDefault(); // pick, don't send
+            pickState(active);
+          }
+        } else if (event.key === 'Tab') {
+          if (!stateList.hidden && active >= 0) pickState(active);
+        } else if (event.key === 'Escape') {
+          if (!stateList.hidden) {
+            event.preventDefault();
+            closeList();
+          }
+        }
+      });
+      stateInput.addEventListener('blur', () => {
+        closeList();
+        const code = stateFromText(stateInput.value);
+        setState(code);
+        if (code) stateInput.value = stateName(code);
+      });
+    }
+
     const showErrors = (errors: { field: string; message: string }[]) => {
       form.querySelectorAll<HTMLElement>('.rep-err').forEach((el) => {
         el.textContent = errors.find((e) => e.field === el.dataset.for)?.message ?? '';
       });
       const first = errors[0]?.field;
-      const el = first ? form.elements.namedItem(first) : null;
+      // The State type-ahead stands in for its hidden list.
+      const el = first === 'practiceState' && stateInput && !stateCombo?.hidden ? stateInput : first ? form.elements.namedItem(first) : null;
       if (el instanceof HTMLElement) el.focus();
     };
     const say = (text: string) => {
@@ -1146,6 +1274,21 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
   .rep-choice { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 500; border: 1px solid #c3cad6; border-radius: 999px; padding: 0.45rem 0.9rem; min-height: 44px; box-sizing: border-box; background: #fff; }
   .rep-ok { display: flex; gap: 0.6rem; align-items: flex-start; margin-top: 1rem; font-weight: 600; }
   .rep-ok input { width: 1.4rem; height: 1.4rem; margin-top: 0.1rem; flex: none; }
+  /* REP_ASK_STATE: the State type-ahead. Its options are made in the browser, so they are
+     styled through :global. */
+  .rep-field > label { font-weight: 600; }
+  .rep-combo { position: relative; }
+  .rep-combo-list {
+    position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + 4px); margin: 0; padding: 0.25rem 0;
+    list-style: none; max-height: 16rem; overflow-y: auto; background: #fff; border: 1px solid #c3cad6;
+    border-radius: 10px; box-shadow: 0 6px 18px rgba(0, 32, 91, 0.12); font-weight: 400;
+  }
+  .rep-combo-list :global(li) {
+    display: flex; justify-content: space-between; gap: 0.75rem; align-items: center;
+    padding: 0.6rem 0.75rem; min-height: 44px; box-sizing: border-box; cursor: pointer; font-size: 1rem;
+  }
+  .rep-combo-list :global(li[aria-selected='true']) { background: #e6f0fa; box-shadow: inset 3px 0 0 var(--hs-navy); }
+  .rep-combo-list :global(.rep-combo-code) { color: var(--muted); font-size: 0.85rem; }
   .rep-err { font-weight: 500; font-size: 0.85rem; color: var(--btn-red); }
   .rep-err:empty { display: none; }
   .rep-alert { margin: 1rem 0 0; color: var(--btn-red); font-weight: 500; }
