@@ -82,8 +82,11 @@ export class RepUnverifiedError extends Error {
  * Rep (Codex P0 on HSBS_HSD_Field#1). The cache's role check (isRepKey) only decides
  * whether an answer may be held; this decides whether it may be returned at all.
  *   - A warm read came from memory, and only confirmed Rep keys are ever held: served.
- *   - Otherwise this caller's own role check, or the one a shared read ran, decides. A
- *     check still running is waited on (no new flow run).
+ *   - Otherwise this caller's own role check decides. A check still running for this key
+ *     is waited on first (no new flow run), so an older result is never used in place of
+ *     a newer check that has not finished (Codex P0 on HSBS_HSD_Field#1, round 2: a fresh
+ *     read whose ledger fails fast). Only a read that joined another caller's, whose
+ *     check finished before that read resolved, uses the held result.
  *   - The cache is off (`cache` false, or FLOW_CACHE_SECONDS=0): no check ran beside the
  *     read, so the lookup is asked now. An older check is never reused then.
  * A lookup that refuses the key throws ReferralKeyUnknownError (404). One that failed
@@ -94,7 +97,7 @@ export class RepUnverifiedError extends Error {
 export async function confirmRep(key, { referrer, warm, cache = true } = {}) {
   if (warm) return;
   const cacheOn = cache && cacheTtlMs() > 0;
-  let r = referrer ?? (cacheOn ? classificationFor(key) : undefined);
+  let r = referrer;
   if (!r && cacheOn) {
     const running = classificationInFlight(key);
     if (running) {
@@ -103,6 +106,8 @@ export async function confirmRep(key, { referrer, warm, cache = true } = {}) {
       } catch {
         r = UNKNOWN;
       }
+    } else {
+      r = classificationFor(key);
     }
   }
   if (r === UNKNOWN) {

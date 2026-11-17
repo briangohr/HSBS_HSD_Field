@@ -401,6 +401,32 @@ describe('fail closed: nothing is returned unless the lookup confirms a Rep (Cod
     });
   }
 
+  test('a fresh read whose ledger fails fast waits for its own lookup, never an older one (Codex P0 round 2)', async () => {
+    let phase = 'good';
+    const flow = await listen(
+      fakeFlow({
+        lookup: async () => {
+          if (phase === 'good') return [200, REP_LOOKUP];
+          await new Promise((r) => setTimeout(r, 300));
+          return [200, NOT_REP_LOOKUP];
+        },
+        list: () => [200, ROWS],
+        earnings: () => (phase === 'good' ? [200, LEDGER] : [500, '']),
+      }),
+    );
+    try {
+      const k = key('RaceGone');
+      assert.equal((await track(k)).status, 200, 'confirmed first');
+      phase = 'gone';
+      for (const r of [await track(k, { fresh: true }), await call(listRoute, '/api/referral-list', { referralKey: k, fresh: true })]) {
+        assert.equal(r.status, 404);
+        assert.equal(JSON.stringify(r.body).includes('TEST Dental'), false);
+      }
+    } finally {
+      await close(flow);
+    }
+  });
+
   test('a warm read needs no new lookup: only a confirmed Rep key is ever held', async () => {
     const flow = await listen(fakeFlow({ list: () => [200, ROWS], earnings: () => [200, LEDGER] }));
     try {
