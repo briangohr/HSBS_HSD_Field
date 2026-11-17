@@ -125,7 +125,9 @@ describe('money for every card and the feed', () => {
       row({ referralId: 'R2', status: 'Pending review' }),
       row({ referralId: 'R3', status: 'Void', voidReason: 'x' }),
     ]);
-    const m = moneyForReferrals([ref({ id: 'R1' }), ref({ id: 'R2' }), ref({ id: 'R3' }), ref({ id: 'R5' })], rows);
+    // A fixed today: the cases were updated Nov 10, so on the real clock the feed gains
+    // "No update in 7 days" lines from Nov 17 on.
+    const m = moneyForReferrals([ref({ id: 'R1' }), ref({ id: 'R2' }), ref({ id: 'R3' }), ref({ id: 'R5' })], rows, '2026-11-12');
     assert.deepEqual(Object.keys(m.lines).sort(), ['R1', 'R2', 'R3', 'R5']);
     assert.equal(m.lines.R5, '$50 when HealthFirst confirms the lead qualifies. $100 more if they sign.', 'Meeting set proves HealthFirst reached them (Codex P1 on #132)');
     assert.deepEqual(m.feed.map((f) => f.label).sort(), ['Nov 10. North Side Dental: HealthFirst reached the office. You earned $50.', 'Nov 30. Paid $50.']);
