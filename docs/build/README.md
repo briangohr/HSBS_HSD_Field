@@ -16,6 +16,9 @@ How to read them:
   touchpoint: a defect to remove, not a feature to keep (`CLAUDE.md`, Scope).
 - Paths such as `src/...`, `AGENTS.md` rule numbers, and `docs/...` files that are not in
   `docs/build/` refer to the old repo, `briangohr/HSBS`.
+- Env names: on this site the 1F address is `FIELD_FLOW_URL` and the 1J address is
+  `REGISTER_FLOW_URL` (`docs/field-flow-contract.md`, Environment). A sheet step that sets
+  `REFERRAL_FLOW_URL` was written for the old site and does not apply here.
 - Sheets written for HSBS 1R describe the setup before the field app moved to its own flow,
   HSBS 1F. Read them as history where 1F has replaced a step.
 - The /rgm field pages and the pilot FSC app named in these sheets are being retired after

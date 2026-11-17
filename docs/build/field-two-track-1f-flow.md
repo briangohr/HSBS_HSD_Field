@@ -47,7 +47,8 @@ lookup, submit and list; slice 4 earnings; slice 5 team) and sheets F1 and F6 in
 
 1F is On only while a check runs, then Off. Its web address goes to Brian, never into chat
 or the repo. Brian sets it as the preview's own `REFERRAL_FLOW_URL`, scoped to the preview
-branch, once checks 1 to 10 pass.
+branch, once checks 1 to 10 pass. (History: that was the old site, `hsps-lifecycle`. On this
+site the 1F address is `FIELD_FLOW_URL` only; `src/lib/field-flow.mjs` reads nothing else.)
 
 ## TEST checks (each is pass or fail)
 
