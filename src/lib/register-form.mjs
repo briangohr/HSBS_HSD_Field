@@ -7,8 +7,10 @@
 // The Rep Roster's Role choice values, as 1J stores them. HSFS, ES and EST were added on
 // 11/16 (Brian: "add HSFS, ES, EST, FSC, RGM, AE", keeping the ones we have). The Role
 // choices on the Rep Roster must hold each value before the page offers it. The field app
-// has no PVA choice (Brian, 11/16: "The Field should have zero mention of PVA.").
-export const ROLES = ['AE', 'FSC', 'RM', 'ES', 'EST', 'HSFS', 'Thrive Signature', 'Other'];
+// has no PVA choice (Brian, 11/16: "The Field should have zero mention of PVA."). Thrive
+// Signature came off on 11/17 (Brian: "Thrive Signature is a program, not a role."); the
+// `thrive` source below stays, because it names the program's link, not a role.
+export const ROLES = ['AE', 'FSC', 'RM', 'ES', 'EST', 'HSFS', 'Other'];
 
 /** What the drop-down shows for a stored value. `RM` stays `RM` on the roster (decision 81). */
 export const ROLE_LABELS = { RM: 'RGM' };

@@ -100,11 +100,13 @@ describe('sign-up form rules', () => {
     assert.deepEqual(Object.keys(r.errors).sort(), ['branch', 'email', 'firstName', 'lastName', 'managerEmail', 'managerName', 'mobile', 'role']);
   });
 
-  test('the role must be one of the eight roster choices', () => {
-    assert.deepEqual(ROLES, ['AE', 'FSC', 'RM', 'ES', 'EST', 'HSFS', 'Thrive Signature', 'Other']);
+  test('the role must be one of the seven roster choices', () => {
+    assert.deepEqual(ROLES, ['AE', 'FSC', 'RM', 'ES', 'EST', 'HSFS', 'Other']);
     assert.equal(validateRegistration({ ...good, role: 'CEO' }).ok, false);
     // The field app offers no PVA choice, and refuses one posted around the page.
     assert.equal(validateRegistration({ ...good, role: 'PVA' }).ok, false);
+    // Thrive Signature is a program, not a role (Brian, 11/17).
+    assert.equal(validateRegistration({ ...good, role: 'Thrive Signature' }).ok, false);
     // The drop-down's words are never sent: RGM is a label, RM is what 1J stores.
     assert.equal(validateRegistration({ ...good, role: 'RGM' }).ok, false);
   });
