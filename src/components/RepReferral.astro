@@ -8,7 +8,7 @@
 // only when REP_PAY_ENABLED is on (D14), worded from the SPIFF plan in REP_PAY_PLAN
 // (src/lib/rep-pay-plan.mjs). New styles go in LeadStyles.astro (is:inline), never in
 // the bundled <style> below.
-import { GUIDE, PREFERRED_CONTACTS, REP_CONSENT, repReceipt, repSendLabel } from '../lib/rep-referral-form.mjs';
+import { GUIDE, NOTES_HINT, PREFERRED_CONTACTS, REP_CONSENT, repReceipt, repSendLabel } from '../lib/rep-referral-form.mjs';
 import { EARNINGS_FOOTER } from '../lib/rep-earnings.mjs';
 import { emptyEarnings, payLine, payTerms, type PayPlan, type StaffingPayPlan } from '../lib/rep-pay-plan.mjs';
 import { companyName } from '../lib/rep-companies.mjs';
@@ -190,7 +190,8 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
 
       <label class="rep-field">
         Notes (optional)
-        <textarea name="notes" maxlength="2000" rows="3">{v('notes')}</textarea>
+        <span class="rep-hint" id="rep-notes-hint">{NOTES_HINT}</span>
+        <textarea name="notes" maxlength="2000" rows="3" aria-describedby="rep-notes-hint">{v('notes')}</textarea>
         <span class="rep-err" data-for="notes">{fieldError('notes')}</span>
       </label>
 
@@ -1127,6 +1128,7 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
   .rep-choice { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 500; border: 1px solid #c3cad6; border-radius: 999px; padding: 0.45rem 0.9rem; min-height: 44px; box-sizing: border-box; background: #fff; }
   .rep-ok { display: flex; gap: 0.6rem; align-items: flex-start; margin-top: 1rem; font-weight: 600; }
   .rep-ok input { width: 1.4rem; height: 1.4rem; margin-top: 0.1rem; flex: none; }
+  .rep-hint { font-weight: 400; font-size: 0.85rem; color: var(--muted); }
   .rep-err { font-weight: 500; font-size: 0.85rem; color: var(--btn-red); }
   .rep-err:empty { display: none; }
   .rep-alert { margin: 1rem 0 0; color: var(--btn-red); font-weight: 500; }

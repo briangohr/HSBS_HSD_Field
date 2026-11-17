@@ -24,6 +24,12 @@ export const GUIDE = [
 
 export { PREFERRED_CONTACTS };
 
+/**
+ * Under Notes on the HealthFirst form: a nudge to pass on what the rep learned, such as a
+ * qualifying question and the office's answer (Matt DeFazio's ask, 11/16/2026).
+ */
+export const NOTES_HINT = 'Anything HealthFirst should know, like a question you asked and their answer.';
+
 const trim = (v) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim() : '');
 const cap = (v, n) => trim(v).slice(0, n);
 const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
