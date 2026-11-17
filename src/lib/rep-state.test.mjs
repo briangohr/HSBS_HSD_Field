@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { after, before, beforeEach, describe, test } from 'node:test';
-import { US_STATES, isStateCode, repFlowPayload, repSendLabel, validateRepReferral } from './rep-referral-form.mjs';
+import { US_STATES, isStateCode, matchStates, repFlowPayload, repSendLabel, stateFromText, stateName, validateRepReferral } from './rep-referral-form.mjs';
 
 let keySeq = 0;
 const nextKey = () => `RepSt_${String(keySeq++).padStart(6, '0')}${'s'.repeat(26)}`;
@@ -22,6 +22,42 @@ const good = {
 const META = { referralKey: `Rk_${'a'.repeat(30)}`, submissionId: '11111111-1111-4111-8111-111111111111' };
 
 describe('State on the HealthFirst form (rules)', () => {
+  test('type-ahead: a couple of letters suggest states from the list, best first', () => {
+    const codes = (t) => matchStates(t).map(([c]) => c);
+    assert.deepEqual(codes(''), []);
+    assert.deepEqual(codes('   '), []);
+    assert.deepEqual(codes('co'), ['CO', 'CT', 'DC'], 'District of Columbia by its second word');
+    assert.deepEqual(codes('Ne'), ['NE', 'NV', 'NH', 'NJ', 'NM', 'NY']);
+    assert.deepEqual(codes('car'), ['NC', 'SC']);
+    assert.deepEqual(codes('ca'), ['CA', 'NC', 'SC'], 'the code first, then the Carolinas');
+    assert.deepEqual(codes('virginia'), ['VA', 'WV']);
+    assert.deepEqual(codes('new  y'), ['NY']);
+    assert.deepEqual(codes('xyz'), []);
+    assert.equal(matchStates('n').length, 8, 'capped at eight');
+    for (const t of ['a', 'm', 'new', 'o', 'w']) {
+      assert.ok(matchStates(t).every(([c]) => isStateCode(c)), t);
+    }
+  });
+
+  test('type-ahead: a finished entry stands for one code, or none', () => {
+    assert.equal(stateFromText('Colorado'), 'CO');
+    assert.equal(stateFromText(' colorado '), 'CO');
+    assert.equal(stateFromText('co'), 'CO');
+    assert.equal(stateFromText('flo'), 'FL');
+    assert.equal(stateFromText('Virginia'), 'VA');
+    assert.equal(stateFromText('west v'), 'WV');
+    assert.equal(stateFromText('new'), '', 'six states start with New');
+    assert.equal(stateFromText('Colorad0'), '');
+    assert.equal(stateFromText(''), '');
+    assert.equal(stateFromText(null), '');
+    assert.equal(stateName('CO'), 'Colorado');
+    assert.equal(stateName('XX'), '');
+    for (const [code, name] of US_STATES) {
+      assert.equal(stateFromText(name), code, name);
+      assert.equal(stateFromText(code.toLowerCase()), code, code);
+    }
+  });
+
   test('the list is the 50 states and DC, two-letter codes, no repeats', () => {
     assert.equal(US_STATES.length, 51);
     assert.equal(new Set(US_STATES.map(([c]) => c)).size, 51);
