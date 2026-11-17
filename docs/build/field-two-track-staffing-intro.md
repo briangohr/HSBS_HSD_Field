@@ -1,6 +1,6 @@
 # Field two-track app: build sheet F3, the staffing intro email
 
-> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and names in code quotes are live SharePoint and flow names.
+> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and the other team's exact list and column names are only in the old repo's copy.
 
 Builder: BB2 (decision 91).
 
@@ -86,7 +86,7 @@ the question goes to Brian.
 | S3 | Fact 0.9 | HSBS 2, 2B and 3 have no Source `Rep app` skip (fact F3-0.9). **Decided: decision 103** ("Yes, skip in all three"). Build: Part S, one trigger condition in each, after BB2 asks BB1 (decision 91). It must be live before Part D |
 | S4 | Fact 0.3; B2, B9; checks 7 and 9; Part D | 3F stamps Introduced On in Mark_introduced before Send_intro runs (fact F3-0.3; send-on stop item S1). The guard is not proof of a send. **Decided: decision 112** (Brian, 11/14: "yes" to clearing the mark when the send fails). Build: Part U. The stamp stays where it is, before the send; when no intro went out, 3F puts the three stamped columns back, so the row is not marked introduced and the next poll retries it. Still open: S7 (an endless retry when the send keeps failing). BB2 still stops and asks before any resubmit by hand |
 | S5 | Prerequisite P3; fact 0.11; checks 0 and 6 | Service Cases has no Test column (v2 check 5), and neither 3F nor HSBS 3 writes Test on a case (fact F3-0.5). **Decided: decision 101** ("Add a Test column"). Build: Part T adds the column, and the 3F copy's case create copies Test from the row (B9). P3 and fact 0.11 read the case's Test once Part T and B9 are built |
-| S6 | Fact 0.6; checks 11, 13 and D4 | On 3F's test path the intro subject starts `[TEST]`, but the `Tell_PVA` email has no `[TEST]` in its subject (v2 check 3; 3F's wording, unchanged). Apart from Part U (decision 112), this sheet leaves the FSC path as it is. BB2 records it and asks Brian whether it changes (a 3F change outside this sheet) before check 11 is judged |
+| S6 | Fact 0.6; checks 11, 13 and D4 | On 3F's test path the intro subject starts `[TEST]`, but the extra notice step email has no `[TEST]` in its subject (v2 check 3; 3F's wording, unchanged). Apart from Part U (decision 112), this sheet leaves the FSC path as it is. BB2 records it and asks Brian whether it changes (a 3F change outside this sheet) before check 11 is judged |
 | S7 | Part U (decision 112); Part D | Putting the stamp back is an edit, so 3F's created-or-modified trigger retries the row on the next poll. A send that keeps failing retries every poll with no end (nothing is sent; run history fills). Brian decides how retries end before Part D. Not a stop for the TEST build |
 
 ## Pre-build checks (read only)
@@ -103,7 +103,7 @@ the question goes to Brian.
   Rep; fact F3-0.8).
 - **PB4 (before any rep app post).** The 1R the rep app reaches (sheets F1, F2 and F6,
   PB1): whether it writes Source `Rep app`, Referring Rep and Referring Rep Email, and
-  leaves `PVA Email` blank.
+  leaves the other team's email column blank.
 - **PB5 (before Part B).** List read of the Referrals Source choices.
 
 ## Who does what
@@ -204,7 +204,7 @@ P3).
   "jde": "001234",
   "companies": ["HS Staffing / Recruiting Services (including GoTu)"],
   "needs": ["Staffing"],
-  "`PVApermission`": true,
+  "the permission column": true,
   "contactFirst": false,
   "preferredContact": "Call",
   "consentText": "The customer gave permission for Direct Dental to contact them about staffing.*",
@@ -244,7 +244,7 @@ is a copy test row's; the JDE is a made-up TEST value.
 - **3F's Test rule** (decision 97, built 11/13): Test_mode is
   `equals(triggerOutputs()?['body/Test'], true)`, the row's Test column. Before 11/13 it was
   the literal `true`, so every run took the test path. On the test path the intro goes To
-  3F's test-path address (Brian's), with no CC and a subject starting `[TEST]`, and `Tell_PVA`
+  3F's test-path address (Brian's), with no CC and a subject starting `[TEST]`, and the extra notice step
   also goes only to Brian, with no `[TEST]` in its subject (stop item S6). Off the test
   path the intro goes To the Routing Primary email (or a fallback when not routable), CC the
   Routing backup, a fixed Brian address and the other-team sender's email (fact F3-0.4).
@@ -306,9 +306,9 @@ nothing"; check 10 then reads the new intro against stop item S2's open part.
 | 0.3 | Differs (F3-0.3). The guard is Introduced On on Referrals; 3F and HSBS 3 need it empty, stamp it in Mark_introduced, then send, then make the Service Case. The stamp comes before the send | Stop item S4 |
 | 0.4 | Differs (F3-0.4). No rep app intro and no rep receipt in any export. 3F's recipients are in "What exists today" | Stop item S2. Receipt off: no flow sends a rep receipt today. Decision 100 settles which send step is copied |
 | 0.5 | Differs (F3-0.5). 3F writes Introduced On, Next Update Due and Last Notified Status on the Referrals row, then after the send makes the Service Case (`Service`, Status `Sent` or `Held`, Stage `New lead`, no Test). HSBS 3 writes the same | B9 copies these writes and adds Practice Type and Test (decision 101, Part T) to the case create |
-| 0.6 | Differed (F3-0.6); fixed 11/13 by decision 97. Test_mode now reads the row's Test. The test path goes to Brian's address only, no CC; the intro subject starts `[TEST]`, the `Tell_PVA` subject does not. HSBS 2, 2B and 3 skip Test = Yes rows and practice names containing `test`, with no TEST inbox path | Matches the sheet now. Here "the TEST inbox" is 3F's test-path address, which is Brian's (see check 13). Stop item S6 |
+| 0.6 | Differed (F3-0.6); fixed 11/13 by decision 97. Test_mode now reads the row's Test. The test path goes to Brian's address only, no CC; the intro subject starts `[TEST]`, the extra notice step subject does not. HSBS 2, 2B and 3 skip Test = Yes rows and practice names containing `test`, with no TEST inbox path | Matches the sheet now. Here "the TEST inbox" is 3F's test-path address, which is Brian's (see check 13). Stop item S6 |
 | 0.7 | Pending (F3-0.7). 3F and HSBS 3 read Routing by `Title eq '<partner value>'`, Top Count 1. Columns used: Title (a picker), Primaryemail, Verified, Backupemail, Primaryname | PB1 and PB2 before step R1 |
-| 0.8 | Pending (F3-0.8). Columns in use include Test, Source, Solutions, PracticeName, CustomerName, CustomerPhone, CustomerEmail, Preferred Contact, `JDEAccount`, `Consenttext`, Note, Contact Instructions, Referring FSC, Referring FSC Email, `PVA Name`, `PVA Email`, `PVA Slug`, Title, Status, Route, Partner, Introduced On, `PVA permission`. Practice Type is not read or written. Referring Rep is not used | This sheet now says `JDEAccount` and `Consenttext`. PB3 |
+| 0.8 | Pending (F3-0.8). Columns in use include Test, Source, Solutions, PracticeName, CustomerName, CustomerPhone, CustomerEmail, Preferred Contact, `JDEAccount`, `Consenttext`, Note, Contact Instructions, Referring FSC, Referring FSC Email, the other team's name column, the other team's email column, the other team's slug column, Title, Status, Route, Partner, Introduced On, the permission column. Practice Type is not read or written. Referring Rep is not used | This sheet now says `JDEAccount` and `Consenttext`. PB3 |
 | 0.9 | Differs (F3-0.9, F3-2N). No 2N exists. HSBS 2, 2B and 3 have no `Rep app` skip. HSBS 9 needs its export | Stop item S3, decided by decision 103: Part S; PB2 |
 | 0.10 | Matches (F3-0.10). Neither 3F nor HSBS 3 puts a partner update page link in the intro | Nothing to report |
 
@@ -320,7 +320,7 @@ Do this after Step 0 shows no stop in fact 0.7. The rep app staffing intro goes 
 Routing row that only the staffing branch reads. Every existing Routing row stays as it is,
 so every other staffing intro (other-team, Salesforce, pilot FSC app) still goes where it goes today.
 
-**R1. BB2 adds the row.** On the Routing list (site `HSBSPVAReferrals`), New form, one save:
+**R1. BB2 adds the row.** On the Routing list (on the shared SharePoint site), New form, one save:
 
 | Column | Value |
 |---|---|
@@ -346,7 +346,7 @@ no other Routing row was edited (each existing row's version history shows no ne
 Brian, 11/14: "Add a Test column". Field (`Rep app`) and FSC app cases only are written by
 this sheet; the column itself is on every case.
 
-**T1. Add the column.** On Service Cases (site `HSBSPVAReferrals`) add Test: Yes/No, not
+**T1. Add the column.** On Service Cases (on the shared SharePoint site) add Test: Yes/No, not
 required, default No. Build order step 1 of sheets F1, F2 and F6 (columns first).
 
 **T2. Existing cases read No.** After adding it, BB2 reads (Get items in ID windows, `ID ge N
@@ -420,7 +420,7 @@ change nothing else:
 
 `@not(equals(coalesce(triggerOutputs()?['body/<Source internal name>']?['Value'], ''), 'Rep app'))`
 
-A row with any other Source (`PVA page`, `PVA app`, `Salesforce`, `FSC app` and the rest)
+A row with any other Source (the other team's page Source value, the other team's app Source value, `Salesforce`, `FSC app` and the rest)
 makes the condition true, so every other-team row runs exactly as before.
 
 **S-2.** Record each save time and export each changed flow for `flows/`.
@@ -622,7 +622,7 @@ every field or FSC case 3F makes carries the row's Test.
 ### Words that never appear in either staffing email
 
 `HealthFirst`, `OSHA`, `HIPAA`, `GoTu`, `HS Staffing`, `Henry Schein Staffing and Recruiting`,
-`Recruiting`, `PVA`, `HSPA`, `HSRA`, `NumbersIQ`, `sell my practice`, `http`, `/leads/`, a `$`
+`Recruiting`, the other team's label, `HSPA`, `HSRA`, `NumbersIQ`, `sell my practice`, `http`, `/leads/`, a `$`
 sign, an em dash or an arrow character. Direct Dental is spelled exactly. The Solutions value
 is never printed.
 
@@ -726,8 +726,8 @@ address: write "TEST inbox", "Brian", "matches" or "does not match".
     `Rep app` row starts no run of any of the three. If a flow's existing Test skip is
     also a trigger condition, a TEST row alone cannot show which condition stopped it:
     BB2 records that and relies on the export comparison for that flow.
-16. **other-team rows unchanged** (decision 103 scope). A TEST `PVA page` row and a TEST
-    `PVA app` row run HSBS 2, 2B and 3 exactly as before Part S (each run, or each skip for
+16. **other-team rows unchanged** (decision 103 scope). A TEST other-team page Source value row and a TEST
+    the other team's app Source value row run HSBS 2, 2B and 3 exactly as before Part S (each run, or each skip for
     Test, is the same as on a baseline TEST row of that Source made before S-1).
 
 17. **U1, no intro, stamp back** (decision 112). No Routing row is edited (check 12). In

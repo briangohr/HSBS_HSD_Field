@@ -1,6 +1,6 @@
 # Field two-track app: what remains after launch (BB2 start v2)
 
-> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and names in code quotes are live SharePoint and flow names.
+> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and the other team's exact list and column names are only in the old repo's copy.
 
 Builder: BB2. Written 11/15/2026 by Claude for BB2 and Brian.
 Status: draft for Brian's approval. Nothing here starts before launch runbook
@@ -208,9 +208,9 @@ Claude asks these one at a time, and only when the step that needs the answer is
 
 1. **Welcome words for pre-loaded people, and the mailbox they come from** (decision 9, and the
    rep app spec's open item 1). Blocks R4.
-2. **Resend order for people on two rosters.** An RGM on the `PVA Roster`, or a pilot FSC on the
+2. **Resend order for people on two rosters.** An RGM on the other team's roster, or a pilot FSC on the
    FSC Roster, who signs up at `/join` gets their old link resent, because the resend reads the
-   `PVA Roster` and the FSC Roster first. LD has the choices. Blocks R4 for those people.
+   the other team's roster and the FSC Roster first. LD has the choices. Blocks R4 for those people.
 3. **S8: where hand backs are listed.** Blocks R6.
 4. **Which AEs, and their managers** (decision 48). Blocks R8.
 

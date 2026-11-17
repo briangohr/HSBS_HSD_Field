@@ -1,6 +1,6 @@
 # Field two-track app: sheet 3F-F, HSBS 3F Field copy (the Sunday TEST build)
 
-> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and names in code quotes are live SharePoint and flow names.
+> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and the other team's exact list and column names are only in the old repo's copy.
 
 Builder: BB2. Decision 119 (Brian, 11/14): "yes, all field pieces as copies, prove on
 preview".
@@ -54,7 +54,7 @@ and for go-live.
    Referring FSC, and drops the line that says another person is
    copied. In production its To is Kara Reyher, the field team's HealthFirst contact
    (decision 125), not the Routing row's contact, the greeting is "Hi Kara,", and its CC is the rep and Brian. The
-   Test-mode path is unchanged: everything goes to the TEST inbox only. Remove the `Tell_PVA` step from
+   Test-mode path is unchanged: everything goes to the TEST inbox only. Remove the extra notice step from
    the copy. The Service Case's receiver name and email are Kara's too, from the same fixed
    contact, not the Routing row's (decisions 127 and 129; from go-live step 7b the Routing
    row names Kara too).
@@ -152,7 +152,7 @@ the turn-on rule (runbook step 4) before the row is made.
 ## Stop items
 
 - **S2 and S6 (the intro's names, copies and extra emails): ruled 11/14, decision 124.** Brian:
-  "yes, name the rep, drop the extra notice" (the `Tell_PVA` step). Build step 5 carries it.
+  "yes, name the rep, drop the extra notice" (the extra notice step). Build step 5 carries it.
 - **S7 (endless retry): ruled 11/14, decision 131.** Brian: "yes, try 3 times then stop and
   email me". Seen in check 5: with no limit the copy tries again about every 30 seconds while
   it is On. Build step 6 and checks 11 to 15 carry the ruling. Until that import, turn the

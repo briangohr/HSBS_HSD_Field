@@ -1,6 +1,6 @@
 # Field two-track app: build sheet F5, the field roster load
 
-> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and names in code quotes are live SharePoint and flow names.
+> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and the other team's exact list and column names are only in the old repo's copy.
 
 **Hard gate. No row is loaded, on any list, until every gate in "Gates" below is met and
 written in the build report. If any gate fails or cannot be checked, BB2 stops, loads
@@ -41,7 +41,7 @@ confirms what it says, or stops and asks Brian, before going past it.
 | S4 | Rollback step 8 | No deletion in rollback step 4 failed |
 | S5 | F5.1, before the final dry run | Public registration (`/api/register`) is paused until the F5.4 reconcile is done |
 | S6 | Rollback, the batch-row check (step 1) | Every batch row passes the whole predicate, not only Test = Yes; any row that fails any part stops the rollback and BB2 asks Brian |
-| S7 | "BB2 records before loading", before F5.3 | A secure pre-load record holds the `PVA Roster` and FSC Roster counts and each existing roster row's item ID and Modified value, so check 8 can compare; without it, check 8 is not run and BB2 asks |
+| S7 | "BB2 records before loading", before F5.3 | A secure pre-load record holds the other team's roster and FSC Roster counts and each existing roster row's item ID and Modified value, so check 8 can compare; without it, check 8 is not run and BB2 asks |
 | S8 | Check 9 | Every flow run the load or the import started has reached a terminal state before its actions are read; a run still going means BB2 waits, and asks if it does not finish |
 | S9 | F5.2, the conforming-row rule | An accepted existing row's Rep Name matches the F5.2 expected name (the source roster name after the question 6 change, parenthetical dropped); a different name is a clash and BB2 asks |
 | S10 | F5.4, accepting an existing Team Roster pair | The pair's Rep Name equals the expected name; a stale or different name is a clash and BB2 asks |
@@ -50,7 +50,7 @@ confirms what it says, or stops and asks Brian, before going past it.
 | S13 | Rollback, the referral guard before any deletion | The lookup by Referring Rep Email covers every Referrals row (indexed column first, or ID windows with Top Count 5000); a read that may miss rows stops the rollback |
 | S14 | Rollback step 8, after a deletion retry succeeds | Step 5 (turn off pairs) and the rollback check run again for every newly deleted rep before the batch is archived |
 | S15 | After rollback, while any Test row the rollback keeps remains: every accepted row, and every row refused for a referral in rollback step 3 | `REP_APP_ENABLED` stays off, or step R stays in place, until each such row is removed or made safe; Brian turns the app back on only after BB2 confirms that in writing |
-| S16 | F5.1, the dry run | The existing `PVA Roster`, FSC Roster and Rep Roster keys are compared with each other; any duplicate already there is a pre-load clash |
+| S16 | F5.1, the dry run | The existing the other team's roster, FSC Roster and Rep Roster keys are compared with each other; any duplicate already there is a pre-load clash |
 | S17 | F5.3, resuming a row with an open `intended` line and no row created | A fresh key is generated and checked for collisions before Create item is retried |
 | S18 | Before any fresh load after a rollback | No Team Roster pair a rollback set to Active = No (rollback step 5) is left in place. If an inactive pair is left, BB2 stops and asks Brian before any fresh load |
 | S19 | G3; step R steps 2 and 4, S2, checks R1 to R3; "BB2 records" item 7 | Step 1 facts (11/13): 1R makes no Service Case (fact R1), Service Cases has no Test column (v2 check 5), and 3F and HSBS 3 make the case without Test (fact F3-0.5). **Decided 11/14: decision 101** ("Add a Test column"). Service Cases gets a Test column (sheet F3, Part T), and 3F copies the Referrals row's Test onto each field or FSC case it makes. So G3's Service Case half is met by 3F's copy, not by 1R; step R repairs the Referrals Test only, and step R step 4, S2 and the scratch Service Cases list have nothing to act on. "R: stop instead of repairing" (second bullet) no longer stops step R |
@@ -115,12 +115,12 @@ and M27 checks it (conductor, 11/13). G1 and G3 are that condition now.
    a chat or a commit.
 5. **Secure inputs and Secure outputs on every action that receives or emits roster data**,
    in the load run (F5.3) and in every check run: each read of the source roster, each Get
-   items or filter on the `PVA Roster`, FSC Roster, Rep Roster or Team Roster, each Compose,
+   items or filter on the other team's roster, FSC Roster, Rep Roster or Team Roster, each Compose,
    Condition, Select or variable that holds a name, email, phone or key, each Create item,
    and each write to the batch file. Run history then shows no contact data and no key.
 6. Escape `'` as `''` in every Filter Query. Compare emails with `toLower`. Names on the
    roster carry apostrophes.
-7. Never write to the `PVA Roster`, the FSC Roster, Referrals, Service Cases or the SPIFF
+7. Never write to the other team's roster, the FSC Roster, Referrals, Service Cases or the SPIFF
    Ledger.
 8. Never change a Rep Roster or Team Roster row that exists before the load.
 
@@ -155,7 +155,7 @@ and M27 checks it (conductor, 11/13). G1 and G3 are that condition now.
 - **A conforming row** is an existing Rep Roster row with this person's email that already
   meets every F5 value: Role `RM` for an RGM or `FSC` for an FSC, Services `HealthFirst`,
   Test = Yes, Status not `Disabled`, and a Referral Key of 24 to 128 URL-safe characters
-  that no other row on the `PVA Roster`, FSC Roster or Rep Roster shares.
+  that no other row on the other team's roster, FSC Roster or Rep Roster shares.
 
 ## BB2 records before loading
 
@@ -166,7 +166,7 @@ and M27 checks it (conductor, 11/13). G1 and G3 are that condition now.
 3. The Team Roster columns as they are live, and how many rows it holds today.
 4. How the live 1J makes a Referral Key (the method, never a key), so F5.3 makes keys the
    same way.
-5. Which link the live 1J resends when an email is on two rosters (an RGM is on the `PVA Roster`
+5. Which link the live 1J resends when an email is on two rosters (an RGM is on the other team's roster
    and, after this load, the Rep Roster; a pilot FSC is on the FSC Roster). This
    sheet changes nothing about it; Brian needs to know.
 6. Whether the source roster's Field Sales tab has a column holding each FSC's RGM email,
@@ -178,7 +178,7 @@ and M27 checks it (conductor, 11/13). G1 and G3 are that condition now.
    starting `TEST` (fact F7-0.6); no Service Case is made (fact R1). Since decision 101 the
    case's Test is copied from the Referrals row by 3F (S19).
 8. Pre-build check, read only: which 1R the rep app submit reaches (by run history after a
-   TEST call, never by URL; the FSC copy writes Source `FSC app` or `PVA app` only, fact
+   TEST call, never by URL; the FSC copy writes Source `FSC app` or the other team's app Source value only, fact
    F7-0.11), exported and read for item 7 before step R is built. Also 7B's Test rule for
    G4, from the 7B the partner save reaches.
 
@@ -402,7 +402,7 @@ back. Without that word, BB2 stops and asks.
 5a. Read the whole Rep Roster and the whole Team Roster (Rep Email and Manager Email) for
    every Equipment Sales tab email under the 30 RGMs. Any match is a clash (M25: no
    Equipment Specialist has a row).
-6. Read the `PVA Roster`, FSC Roster and Rep Roster keys inside the run only to check new keys
+6. Read the other team's roster, FSC Roster and Rep Roster keys inside the run only to check new keys
    against them in F5.3. Never write them out.
 7. Write the dry run report: the counts read, to create (loaded), accepted (skipped), held out, already paired
    and new pairs, by team (table below), and every held-out, accepted and clash row by tab
@@ -440,8 +440,8 @@ If a column the table leaves blank is required on the live list, stop and report
    Secure outputs as rule 5 says.
 2. For each person to create, make a new Referral Key the way the live 1J does (recorded
    under "BB2 records", item 4). It must be 24 to 128 URL-safe characters. Check it against
-   every key on the `PVA Roster`, FSC Roster and Rep Roster and against every key made earlier
-   in the run; on a match, make another. A pilot FSC's FSC Roster key and an RGM's `PVA Roster`
+   every key on the other team's roster, FSC Roster and Rep Roster and against every key made earlier
+   in the run; on a match, make another. A pilot FSC's FSC Roster key and an RGM's the other team's roster
    key are never reused or copied.
 3. Create the Rep Roster rows from F5.2, RGMs first, then FSCs. For each person the dry run
    marked "to create", in this order:
@@ -513,7 +513,7 @@ and Brian imports it**, or tells BB2 in his own words to import it.
 
 ### F5.5 Left in place
 
-- Every `PVA Roster` row, the 30 RGM rows included. Each RGM's old link still opens the field
+- Every row on the other team's roster, the 30 RGM rows included. Each RGM's old link still opens the field
   app (spec section 3; check M9). They are retired only by a later sheet, after Brian says
   the new app is staying.
 - Every FSC Roster row. A pilot FSC keeps the pilot link and also gets the new Rep Roster
@@ -578,12 +578,12 @@ pairs, new plus already paired.
   rollback.
 - No email to anyone, during or after the load. No welcome goes out. A welcome or link
   email to loaded people is a later step that needs Brian's go.
-- `PVA Roster`, FSC Roster, Referrals, Service Cases and the SPIFF Ledger: no row added,
+- the other team's roster, FSC Roster, Referrals, Service Cases and the SPIFF Ledger: no row added,
   changed or deleted by the load.
 - No loaded person is set to Test = No by BB2. Brian does that, under "Going live".
 
 Note for Brian, not a change: once the pairs are Active, 1R's lookup reports `isManager`
-true for each RGM on every one of their links, the old `PVA Roster` link included, because
+true for each RGM on every one of their links, the old the other team's roster link included, because
 manager status comes only from the Team Roster on every role (D18). With `REP_APP_ENABLED`
 off nothing shows. With it on, an RGM's old field app link shows the live My Team, as
 Harris's does today.
@@ -613,7 +613,7 @@ check 11, and on a different RGM.
    of a Rep Roster row with Role `RM` for one of the 30, and that RGM is the FSC's RGM on the
    source roster (the Houston 7 to the `field.mjs` email). No Active Team Roster row in the
    batch names a manager outside the 30. No RGM has a Team Roster row from the batch.
-6. **Keys are unique** (M25). No two rows on the `PVA Roster`, FSC Roster and Rep Roster
+6. **Keys are unique** (M25). No two rows on the other team's roster, FSC Roster and Rep Roster
    together share a Referral Key. Every new key is 24 to 128 URL-safe characters. (Run in a
    flow with Secure outputs on; the report says only pass or fail and the count.)
 7. **Services and Registered On** (M25, with its Registered On assertion). M25's "every
@@ -624,7 +624,7 @@ check 11, and on a different RGM.
    `Pending`, First Opened On blank and Source `Brian's roster`, except the one link opened
    in check 11. A skipped (accepted) row is not a loaded row: it keeps its own Registered On
    and is not checked for it, and it is counted under skipped in check 2.
-8. **Nothing else changed.** The `PVA Roster` and FSC Roster have the same row count as before
+8. **Nothing else changed.** The other team's roster and FSC Roster have the same row count as before
    the load, and no item on either has a Modified time after the load started. The Rep
    Roster and Team Roster rows that existed before the load, accepted rows included, have
    the same Modified time as before.
@@ -724,12 +724,12 @@ Only Brian starts a rollback. Every step below checks first and changes after.
    a row". A pair whose Rep Roster row was refused or not deleted keeps Active = Yes. A pair
    the batch added for an accepted FSC keeps Active = Yes and is listed for Brian, since
    that person's Rep Roster row was never part of the batch.
-6. Nothing else is touched: rows that existed before the load, the `PVA Roster`, the FSC
+6. Nothing else is touched: rows that existed before the load, the other team's roster, the FSC
    Roster, Referrals, Service Cases and the ledger.
 7. Check: no Rep Roster item deleted in step 4 exists; every Team Roster row set No in step
    5 has Active = No; every refused or accepted person still has their Rep Roster row, with
    the Status it had before the rollback, and every refused or accepted FSC still has an
-   Active pair (an RGM has no pair, so an accepted RGM keeps only its Rep Roster row); the `PVA Roster` and FSC Roster
+   Active pair (an RGM has no pair, so an accepted RGM keeps only its Rep Roster row); the other team's roster and FSC Roster
    are as before; every RGM's old link still opens the field app. Then "The gap check
    pause" step 4.
 8. **Stop item S4.** If any deletion in step 4 failed, do not rename anything: retry each
@@ -776,7 +776,7 @@ Only Brian starts a rollback. Every step below checks first and changes after.
 | A person goes live only when Brian sets Test = No | "Going live"; check 1 |
 | Section 6: go-live runs top down (decision 83) | "Going live"; check 13 |
 | No field person loaded until M27 passes and AGENTS rule 19 is reworded (T19) | G1, G2 |
-| Existing `PVA Roster` rows (RGMs) and FSC Roster rows (pilot FSCs) left in place | F5.5; check 8 |
+| Existing rows on the other team's roster (RGMs) and FSC Roster rows (pilot FSCs) left in place | F5.5; check 8 |
 | Section 3: switching off must restore today | Check 10 (M9) |
 | Section 3: 1R finds a person by key, so links do not collide | F5.3 step 2; check 6 |
 | Section 13: releasing a manager's Test row after go-live (M27) | G1; "Going live" step 5 |

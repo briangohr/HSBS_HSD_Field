@@ -1,6 +1,6 @@
 # Field two-track app: sheet GC, the field gap check
 
-> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and names in code quotes are live SharePoint and flow names.
+> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and the other team's exact list and column names are only in the old repo's copy.
 
 Builder: the bot Claude assigns on the desk (BB2, BB4 or BB5). Decision 132 (Brian, 11/15): "yes, spec the gap check".
 

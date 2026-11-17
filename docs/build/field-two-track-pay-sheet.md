@@ -1,6 +1,6 @@
 # Field two-track app: build sheet F4, the pay flow and the ledger per company
 
-> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and names in code quotes are live SharePoint and flow names.
+> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and the other team's exact list and column names are only in the old repo's copy.
 
 Builder: BB2 (decision 91).
 
@@ -235,7 +235,7 @@ not hold since 11/13: 3F's Test_mode reads the Referrals row's Test (decision 97
 
 The three switches are **shared state, never a per-flow variable**, so every flow that acts
 on one reads the same value. They live in one row of a new SharePoint list, Ledger Settings
-(the shared SharePoint site, `HSBSPVAReferrals`), Title `Live`, with these Yes/No columns:
+(the shared SharePoint site), Title `Live`, with these Yes/No columns:
 
 | Column | Value at build | Read by | What it does |
 |---|---|---|---|
@@ -363,8 +363,7 @@ With no flow writing the ledger (S1), for every existing row:
 
 ## F4.3 HSBS 10S: on a Service Case save
 
-1. Trigger: SharePoint "When an item is created or modified", Service Cases, on the shared SharePoint site
-   (`HSBSPVAReferrals`).
+1. Trigger: SharePoint "When an item is created or modified", Service Cases, on the shared SharePoint site.
 2. Condition: the case's company column is exactly `HealthFirst` or exactly
    `HS Staffing / Recruiting Services (including GoTu)`. Otherwise end, Succeeded.
 3. HTTP POST to HSBS 10, body `{"caseId": <the item ID>}`, Secure inputs on. Wait for the

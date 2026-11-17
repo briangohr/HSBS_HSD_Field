@@ -6,7 +6,7 @@ spec reviews). Approved by Brian, 11/8/2026.
 
 # HealthFirst rep app: build, lead management and reporting (v3, approved)
 
-> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and names in code quotes are live SharePoint and flow names.
+> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and the other team's exact list and column names are only in the old repo's copy.
 
 Created: November 7, 2026 (v1, v2). v3: November 8, 2026.
 From: Claude, for Brian
@@ -24,7 +24,7 @@ Codex and Claude reviewed v2 separately (PR #40). Brian approved every recommend
 | D2 | Limits on /join and 1J so sign-up can't be used to send mail | 2 /join, 3 HSBS 1J |
 | D3 | A paid award is never clawed back | 3 HSBS 10, 5 |
 | D4 | A manager sees only a name for someone on the team who isn't on the app. Brian, 11/9 (D18): there is no unconfirmed state any more; a rep on the manager's Team Roster who hasn't signed up shows by name only, as "Not signed up yet." | 2 My Team, 3 team |
-| D5 | Managers already on the `PVA Roster` or the FSC Roster get My Team as an added tab | 1, 3 lookup |
+| D5 | Managers already on the other team's roster or the FSC Roster get My Team as an added tab | 1, 3 lookup |
 | D6 | The ledger's unique key is Case ID + Event + Payee Role | 3 HSBS 10 |
 | D7 | "Already a customer" becomes a closed reason on the partner page | 1, 3 |
 | D8 | TEST awards earn into the ledger, marked Test, and never reach a real payout | 3 HSBS 10, 7 |
@@ -69,7 +69,7 @@ Freeze exception and switches (D14):
 - The dollar amounts on every screen, the receipt and the emails sit behind a second switch, `REP_PAY_ENABLED`. It turns on only after the Tuesday 11/10 call confirms the pay terms. With it off, screens show the referral status without dollars.
 
 Does not change:
-- The other team's links and the 26 pilot FSC links keep their current menus. The one addition: anyone on the `PVA Roster` or the FSC Roster who is a manager on Brian's Team Roster gets the My Team tab (D5, D18).
+- The other team's links and the 26 pilot FSC links keep their current menus. The one addition: anyone on the other team's roster or the FSC Roster who is a manager on Brian's Team Roster gets the My Team tab (D5, D18).
 - The partner update pages at /leads/<key> and the status standard (Talked with the doctor? / Where does it stand?). The one addition: "Already a customer" joins the closed reasons (D7).
 - Routing rules, intro emails for other companies, Salesforce loading.
 
@@ -183,7 +183,7 @@ Who is on the team: every Active Team Roster row that names this person as the m
 
 ## 3. Build: SharePoint and flows (BB1, in Power Automate, from Claude's build sheets)
 
-### New list: Rep Roster (shared SharePoint site `HSBSPVAReferrals`)
+### New list: Rep Roster (the shared SharePoint site)
 
 Columns: Rep Name, Rep Email (unique), Mobile, Role (choice), Manager Name and Manager Email (what the rep typed on /join: a hint for Brian's daily gap check, D18; they never decide the manager), Branch, Referral Key (24 or more URL-safe characters), Services (text, "HealthFirst" for now), Registered On, First Opened On, Status (Pending, Active, Disabled), Source (QR, AE link, Thrive Signature link, Other), Test (yes/no; Yes when the rep's name or email contains TEST, per BB1 sheet 1).
 
@@ -206,7 +206,7 @@ Who manages whom (D18): a rep's manager is the Manager Email on the rep's Team R
 HTTP trigger, POST, JSON. One action, "register."
 1. Refuse anything that is not an @henryschein.com address (4xx, no row). Refuse a manager email that isn't @henryschein.com or equals the rep's own email (4xx, no row).
 2. Limits (D2). Send a link to the same email at most once every 10 minutes, whatever roster it's on (check Link Resends). Over that limit: send nothing, write nothing, reply 200 with the same words as success.
-3. Email already on the Rep Roster, the FSC Roster or the `PVA Roster`: send that person their existing link again, within the limit. No new row, and nothing on the existing row changes. Reply 200.
+3. Email already on the Rep Roster, the FSC Roster or the other team's roster: send that person their existing link again, within the limit. No new row, and nothing on the existing row changes. Reply 200.
 4. New email: create a Rep Roster row, Status Pending, Services "HealthFirst," a new Referral Key, and the manager's name and email as typed (a hint, D18). Reply 200 only after the row exists.
 5. Welcome email to the rep, from [Brian's mailbox or an HSBS mailbox], HTML, with the personal link and the Add to Home Screen steps. Text approved by Brian before the first live send.
 6. No manager email, at sign-up or later (D18). The manager the rep typed is only a hint: Brian's daily gap check shows it while the rep has no Active Team Roster row, and Brian adds the pair. Nobody is asked to confirm.
@@ -215,7 +215,7 @@ HTTP trigger, POST, JSON. One action, "register."
 
 ### HSBS 1R changes
 
-- lookup: check `PVA Roster`, then FSC Roster, then Rep Roster. A Rep hit returns {"role":"Rep","repName","repEmail","services":["HealthFirst"],"isManager":true or false}. The other answers add the same `isManager` field (D5); a missing field means false, so today's answers still work. isManager is true when this person's roster email is the Manager Email on at least one Active Team Roster row (D18). Every lookup carries `activate`: true only while `REP_APP_ENABLED=true`; a missing value counts as false (#52). Only a lookup with `activate` true sets First Opened On and Status Active, the first time a Rep key is looked up. A Rep key with `activate` false answers 404 and writes nothing to the Rep Roster. Status Disabled answers 404. The lookup carries no manager name, email or status (D18).
+- lookup: check the other team's roster, then FSC Roster, then Rep Roster. A Rep hit returns {"role":"Rep","repName","repEmail","services":["HealthFirst"],"isManager":true or false}. The other answers add the same `isManager` field (D5); a missing field means false, so today's answers still work. isManager is true when this person's roster email is the Manager Email on at least one Active Team Roster row (D18). Every lookup carries `activate`: true only while `REP_APP_ENABLED=true`; a missing value counts as false (#52). Only a lookup with `activate` true sets First Opened On and Status Active, the first time a Rep key is looked up. A Rep key with `activate` false answers 404 and writes nothing to the Rep Roster. Status Disabled answers 404. The lookup carries no manager name, email or status (D18).
 - team: new, read only. Key in. Out: one entry per Active Team Roster row whose Manager Email is this key's email. A rep with a Rep Roster row that isn't Disabled gets a full entry: name, role, registered on, each rep's referral list as the list action builds it (plus a reached flag), and the rep's own ledger rows as the earnings action builds them. The site computes referrals, reached, signed, earned, paid and last referral from those rows, with the same code as the rep's own screen (D16), and shows no contact name, phone, email or notes. A rep with no Rep Roster row yet gets the name from the Team Roster only, which the site shows as "Not signed up yet." (D4): no email and nothing else. A Disabled rep is left out. No confirm token and no confirmed, unconfirmed or paired field: every entry is on the roster by definition. Plus this manager's own ledger rows (Payee Role Manager). Unknown key, or no Active Team Roster row names this person: 404. Contract: docs/rep-app-flow-contracts.md, "HSBS 1R for My Team".
 - submit: accepts referrerRole "Rep." Writes two new Referrals columns, **Referring Rep** and **Referring Rep Email** (D13), from the Rep Roster row, never from the page. The FSC columns stay blank on a Rep row. New Referrals choice in Source: "Rep app."
 - list: a Rep key returns the rows whose Referring Rep Email is that rep's email. Track's compact rows and lead screen are drawn from this answer, with no new field.
@@ -256,7 +256,7 @@ Runs on every HealthFirst Service Case save, and once a day at 7 AM ET. Writing 
 - **Auto-reached** (D10): five business days after the intro with no partner answer to question 1. Write one row: Rep, $50, Event Reached, Status **Pending review**, and add the case to Brian's daily exceptions. Brian clears it to Waiting, or voids it with a reason. If HealthFirst answers "Yes" before Brian acts, the row becomes Waiting.
 - **Signed**: Where does it stand is "Signed" with a signed date and a product. The sign is handled once, by the run that finds no Rep Signed row for the case yet (the sign run; under the 11/11 plan, which pays the rep nothing at the sign, the run that finds no Manager row yet, Brian 11/11); a later save or daily run that finds the Rep Signed row writes no Manager row, whatever the plan or the Team Roster say then. In the sign run, write the Manager row (below) first, then the Rep row (the plan's sign award, Waiting: $100 under the default plan, $150 under the draft plan). With the plan's manager award at 0 in the sign run, write no Manager row, now or later; raising the plan pays only later signs. Otherwise write one Manager row (Award Key Case ID + Signed + Manager) by one rule, read in that same run (D18): Waiting (the plan's manager award), Payee Email = the manager on the rep's Active Team Roster row, when the rep has such a row, its Manager Email isn't blank, and that manager isn't the rep; otherwise Void, "no manager on the team roster when the office signed", Payee Email blank. No Manager row is ever Pending review. A later Team Roster change never adds, moves, releases or re-points a Manager row for a sign already handled; adding or changing a pair pays only offices that sign after it, and a new manager never gets credit for an earlier sign.
 - **No pay** (D12): write a Void row with the reason in words, or void a row that isn't Paid, when any of these is true. The Void row never counts and never pays; it's how the rep sees "Not paid: [reason]" (Brian, 11/8).
-  - The same JDE was already referred to HealthFirst in the 12 months before this referral, from any source: `PVA page`, `PVA app`, `FSC app`, `Rep app` or Salesforce. The earliest Referrals row by created time keeps the credit.
+  - The same JDE was already referred to HealthFirst in the 12 months before this referral, from any source: the other team's page Source value, the other team's app Source value, `FSC app`, `Rep app` or Salesforce. The earliest Referrals row by created time keeps the credit.
   - Closed reason "Already a customer" (D7).
   - Hand back with the note "No permission."
 - **Paid rows are never voided** (D3). If a paid award turns out ineligible, set Disputed = yes with a note, and add it to Brian's exceptions. Nothing is clawed back. The rep sees the row as Paid.
@@ -349,7 +349,7 @@ Power BI: add Rep Roster and SPIFF Ledger as sources and one page, "HealthFirst 
 8. A day-5 case with no answer writes a $50 row as Pending review and lists it in Brian's exceptions (default plan). It isn't in Earned until Brian clears it. A duplicate JDE writes one Void row, "this office was referred to HealthFirst in the last 12 months", that never counts or pays.
 9. A Paid TEST row that is then marked "Already a customer" stays Paid and shows as Disputed in Brian's exceptions.
 10. Track My Referrals and My Earnings show only that rep's rows. A TEST partner save shows on the referral's row, its lead screen and the Latest updates feed within 5 minutes.
-11. My Team (D18): a TEST manager with two TEST reps on Brian's Team Roster, one signed up and one not, sees a full row for the signed-up rep and only "[Name]. Not signed up yet." for the other, with no email, date or anything else. A /join under the second rep's email with a different name changes nothing about the name that rep shows under. A person who is no Active row's manager sees no My Team tab, even when a rep typed them on /join. Anyone on the `PVA Roster` or the FSC Roster who is a manager on the Team Roster sees My Team added to their current link. No rep app screen has a Confirm or Not my team button, and the team answer carries no confirm token and no confirmed, unconfirmed or paired field. Doctor phone, email and notes never appear on My Team.
+11. My Team (D18): a TEST manager with two TEST reps on Brian's Team Roster, one signed up and one not, sees a full row for the signed-up rep and only "[Name]. Not signed up yet." for the other, with no email, date or anything else. A /join under the second rep's email with a different name changes nothing about the name that rep shows under. A person who is no Active row's manager sees no My Team tab, even when a rep typed them on /join. Anyone on the other team's roster or the FSC Roster who is a manager on the Team Roster sees My Team added to their current link. No rep app screen has a Confirm or Not my team button, and the team answer carries no confirm token and no confirmed, unconfirmed or paired field. Doctor phone, email and notes never appear on My Team.
 12. With `REP_APP_ENABLED` off, /join, the Rep role and My Team are unreachable, and the other team's and FSC screens match `main`. With `REP_PAY_ENABLED` off, no dollar amount appears on any screen or email.
 13. A forced flow failure emails Brian within the hour.
 14. Money: every referral's lead screen shows a money line. The Earned tile, the My Earnings total and the ledger total (Waiting plus Paid) for that rep match to the dollar. Every My Earnings line opens its lead screen. A voided row shows its reason in words. A TEST payout batch includes only Test rows, goes only to Brian, flips only its own rows to Paid, and the statement lists the same lines as My Earnings.

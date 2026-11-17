@@ -1,6 +1,6 @@
 # Field two-track app: the go-live runbook
 
-> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and names in code quotes are live SharePoint and flow names.
+> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and the other team's exact list and column names are only in the old repo's copy.
 
 Decision 119 (Brian, 11/14): every field piece is its own copy, proven on the private preview.
 Decision 135 (Brian, 11/15): the field 7A and 7B copies are in the launch, so a field lead
@@ -17,14 +17,14 @@ own flows, HSBS 2, 2B and 3), **Claude** (site code, checks, the record).
 |---|---|---|
 | G1 | 1F checks 1 to 10 pass (sheet 1F), including team and earnings | Field Build Desk reports 001, 007, 004 |
 | G2 | Sheet 3F-F checks 1 to 10 pass, with Brian's ruling on the intro (S2) | Desk report 005 |
-| G3 | The 7A and 7B field copies pass their F1 checks, the F2 launch checks (sheet F2, "F2 at launch", L-a to L-g) and Sunday check 4, and these three on a TEST `Rep app` lead (decision 135): the partner page names the sender by roster position (`RGM: <name>`, sheet SR) and no key or line names anyone outside the field build; a lost save stores its closed reason on the Service Case (F2.4); and that save's run sends no email addressed from the `PVA Email` column and no email text that names the other team | Desk report 008 |
+| G3 | The 7A and 7B field copies pass their F1 checks, the F2 launch checks (sheet F2, "F2 at launch", L-a to L-g) and Sunday check 4, and these three on a TEST `Rep app` lead (decision 135): the partner page names the sender by roster position (`RGM: <name>`, sheet SR) and no key or line names anyone outside the field build; a lost save stores its closed reason on the Service Case (F2.4); and that save's run sends no email addressed from the other team's email column and no email text that names the other team | Desk report 008 |
 | G4 | The preview pass: every line of the Sunday checklist passes on the preview, with the partner page on the field 7A and 7B copies. On line 4 the sender line names the TEST rep by position and names no one outside the field build | Desk checklist |
 | G5 | S7 is ruled (decision 131): the 3F copy tries an intro three times, about 5 minutes apart, then stops and emails Brian. Sheet 3F-F build step 6 is in the copy and its checks 11 to 15 pass. Without it the copy tries again about every 30 seconds for as long as it is On (desk report 005, check 5) | Desk report 005 |
 | G6 | Gate 0a (the answer timing test, with no trigger limit per decision 136) passes on the 7B copy | Desk report 008 |
 | G7 | Decided 11/14 (decision 130): 1F gets a new web address at step 1. Both builder bots had the old one on screen in working sessions; it is in no file or chat | Chat |
 | G8 | Secure inputs and outputs are on in 1F (inner steps), the 3F copy and the 7A and 7B copies, and one TEST call through each still answers as before. 1F's trigger is left as it is until step 1: its secure setting is set when its trigger is re-saved for a new address, or on Brian's go if he keeps the address | Desk reports |
 | G9 | The 3F copy cannot act on a staffing `Rep app` row: either the app sends no staffing row at launch, or the copy skips any partner but HealthFirst. The live 3F has no HealthFirst branch, so the copy as built starts on any `Rep app` row routed Direct to partner (desk report 005, Q-005-1). Checked 11/14: `REP_APP_COMPANIES` is set on no Vercel environment, and unset means HealthFirst only (`src/lib/rep-companies.mjs`). It must still be unset, or list only HealthFirst, at step 6 | Desk report 005 and the site build |
-| G10 | The 3F copy's intro on a `Rep app` row names the rep as the referrer with their roster position, goes to Kara Reyher with the rep and Brian copied, and sends no `Tell_PVA` email (decisions 124 to 127) | Desk report 005, check 3 |
+| G10 | The 3F copy's intro on a `Rep app` row names the rep as the referrer with their roster position, goes to Kara Reyher with the rep and Brian copied, and sends no the extra notice step email (decisions 124 to 127) | Desk report 005, check 3 |
 | G11 | For step 7b (decision 129): the HealthFirst Routing row and the HealthFirst Partner Links row are identified by ID, their current contact values are recorded for rollback, and BB1 has been told, because the Routing row also feeds its flows | Desk report 008 |
 | G12 | The field gap check (sheet GC, `docs/build/field-two-track-gap-check.md`, decision 132) passes its checks 1 to 12. If it is not ready at launch, Brian says in chat whether to launch without it. Then the only backstop is step 4's "Any import after launch" list, run by hand after each import, and the gap check is not turned On at step 4 | Desk report |
 

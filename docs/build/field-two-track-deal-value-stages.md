@@ -1,6 +1,6 @@
 # Field 7A and 7B copies: deal value and pipeline stages (sheet DV)
 
-> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and names in code quotes are live SharePoint and flow names.
+> Moved from `briangohr/HSBS` on 11/17/2026. Read `docs/build/README.md` first: the field contract wins, and the other team's exact list and column names are only in the old repo's copy.
 
 Builder: BB3, on the HSBS 7A Field copy and the HSBS 7B Field copy. Written 11/17/2026 by
 Claude for BB3, from Brian's answers of 11/17 (decisions 158 to 160, `DECISIONS.md`).
