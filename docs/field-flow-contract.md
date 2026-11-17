@@ -1,8 +1,8 @@
 # Field app: what the site sends and expects
 
 The site side of the contract between this site and its two Power Automate flows. The
-flow side (how 1F and 1J are built, step by step) lives in the build sheets on the Field
-Build Desk. When the two disagree, stop and ask Brian.
+flow side (how 1F and 1J are built, step by step) lives in the build sheets in `docs/build/`
+and on the Field Build Desk. When the two disagree, stop and ask Brian.
 
 Rules for both flows: one HTTP trigger per flow, method POST, JSON in and JSON out. The
 trigger URLs are secrets in Vercel env and never reach the browser, a log or this repo.
