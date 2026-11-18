@@ -192,6 +192,12 @@ Two shapes, one per company (`src/lib/rep-referral-form.mjs`,
 `solutions`, `practiceType`, `qualified`, `notQualifiedReason`, `closedReason`, and
 `history` with `on` and `text`. Anything else, an echoed key included, is dropped.
 
+A line needs only `company` to be kept. 1F sends a line's status as `partnerStatus` (the
+case's Partner Status), which is blank on a new case until the partner's first update,
+because the 3F flows set Status, not Partner Status. Such a line reads "Sent to" its own
+company ("Sent to Direct Dental"). Only a referral with no line at all reads "Sent to
+HealthFirst".
+
 ### earnings
 
 ```json

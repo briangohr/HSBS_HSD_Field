@@ -6,7 +6,7 @@
 // line's status, detail and updatedOn, the `closed` and `signed` flags, and the Status
 // Log in `history`). No new flow field, no new action. The words follow the spec's map:
 //
-//   Sent, or no partner save yet                     Sent to HealthFirst
+//   Sent, no partner status yet, or no line          Sent to HealthFirst
 //   Not yet, still trying; Trying to reach            HealthFirst is reaching out
 //   Not yet, haven't tried; Not called yet            Sent to HealthFirst (no try yet)
 //   Yes; Talked with the doctor; Reached; Meeting held HealthFirst talked with the doctor
@@ -254,7 +254,8 @@ export function chipFor(row, bucket) {
   if (words.startsWith('Closed')) return { words, tone: 'closed' };
   if (bucket === 'closed') return { words: 'Closed', tone: 'closed' };
   if (words === signedWords(company)) return { words, tone: 'signed' };
-  if (!line) return { words: `Sent to ${company}`, tone: 'open' };
+  // No line yet, or a case with no partner status yet: sent, to the line's company.
+  if (!line || !line.status) return { words: `Sent to ${company}`, tone: 'open' };
   return { words: words || displayStatus(line.status) || line.status, tone: 'open' };
 }
 
