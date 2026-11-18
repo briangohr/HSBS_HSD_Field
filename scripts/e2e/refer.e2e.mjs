@@ -2574,8 +2574,31 @@ try {
         await submit();
         assert.match(await page.textContent('.rep-err[data-for=practiceState]'), /state/);
         assert.equal(count('submit'), 0, 'nothing reached 1F');
-        await page.selectOption('[name=practiceState]', 'CO');
-        if (!js) await page.check('[name=permission]');
+        if (js) {
+          // The list gives way to the type-ahead box, which sets the same field.
+          assert.equal(await page.isVisible('#rep-form select[name=practiceState]'), false);
+          const box = page.locator('#rep-form [data-state-input]');
+          assert.equal(await box.getAttribute('id'), 'rep-state');
+          await box.fill('Colorad0');
+          assert.equal(await page.isVisible('#rep-state-list'), false, 'no match, no list');
+          await page.click('[name=jde]');
+          assert.equal(await page.inputValue('#rep-form select[name=practiceState]'), '', 'text that is not a state picks none');
+          assert.equal((await page.textContent('#rep-send-button')).trim(), 'Pick the state');
+          await box.fill('');
+          await box.pressSequentially('co');
+          const options = (await page.locator('#rep-state-list [role=option]').allTextContents()).map((t) => t.trim());
+          assert.deepEqual(options, ['ColoradoCO', 'ConnecticutCT', 'District of ColumbiaDC']);
+          await box.press('ArrowDown');
+          await box.press('ArrowUp');
+          await box.press('Enter');
+          assert.equal(await box.inputValue(), 'Colorado');
+          assert.equal(await page.isVisible('#rep-state-list'), false);
+          assert.equal(await page.inputValue('#rep-form select[name=practiceState]'), 'CO');
+          assert.equal(count('submit'), 0, 'Enter on a suggestion picks it and sends nothing');
+        } else {
+          await page.selectOption('[name=practiceState]', 'CO');
+          await page.check('[name=permission]');
+        }
         if (js) assert.equal((await page.textContent('#rep-send-button')).trim(), 'Send to HealthFirst');
         await submit();
         await page.waitForSelector('#rep-receipt:not([hidden])', { timeout: 10000 });
@@ -2587,6 +2610,45 @@ try {
       await ctx.close();
     }
   }
+  // Codex P1 on #7: a retry after a timeout puts the first post back, so the State box
+  // must show the state that retry sends, not one picked since.
+  await check('REP_ASK_STATE JS on: a retry after a timeout puts the State box back to the state it sends', async () => {
+    const ctx = await browser.newContext({ ...devices['iPhone 13'], reducedMotion: 'reduce' });
+    try {
+      const page = await ctx.newPage();
+      const posted = [];
+      await page.route('**/api/referral', async (route) => {
+        const body = JSON.parse(route.request().postData() || '{}');
+        posted.push(body);
+        if (posted.length === 1) {
+          return route.fulfill({ status: 504, contentType: 'application/json', body: JSON.stringify({ timeout: true, error: 'Timed out.' }) });
+        }
+        return route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ error: 'This referral did not send.' }) });
+      });
+      await page.goto(`${BASE}/refer/${REP_KEY}`);
+      await page.fill('[name=contactName]', 'TEST Office Manager');
+      await page.fill('[name=practiceName]', 'TEST North Side Dental');
+      await page.fill('[name=jde]', '001234');
+      await page.fill('[name=officePhone]', '303-555-0100');
+      await page.check('[name=preferredContact][value=Text]');
+      await page.check('[name=permission]');
+      const box = page.locator('#rep-form [data-state-input]');
+      await box.fill('Colorado');
+      await page.click('#rep-send-button');
+      await page.waitForFunction(() => !document.getElementById('rep-alert').hidden);
+      await box.fill('California');
+      await page.click('[name=jde]');
+      assert.equal(await page.inputValue('#rep-form select[name=practiceState]'), 'CA');
+      await page.click('#rep-send-button');
+      await page.waitForFunction(() => document.getElementById('rep-alert').textContent === 'This referral did not send.');
+      assert.equal(posted.length, 2);
+      assert.equal(posted[1].practiceState, 'CO');
+      assert.equal(await box.inputValue(), 'Colorado', 'the box shows the state that was sent');
+      assert.equal(await page.inputValue('#rep-form select[name=practiceState]'), 'CO');
+    } finally {
+      await ctx.close();
+    }
+  });
 } finally {
   killDev(dev);
 }

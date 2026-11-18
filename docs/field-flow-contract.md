@@ -164,6 +164,10 @@ Two shapes, one per company (`src/lib/rep-referral-form.mjs`,
   `src/lib/rep-referral-form.mjs`). It is required; a missing or unknown code is refused
   with 422 before any 1F call. HealthFirst splits its reps by state. A staffing send never
   carries it. Turn the switch on only after 1F stores the field.
+  On the page the State field is a type-ahead box: a couple of letters list the matching
+  states from `US_STATES`, and picking one fills it in. Text that is not one state sends
+  no state, so the send is refused the same way. With JavaScript off it is a plain list.
+  Either way the body carries the same two-letter code.
 - `PVApermission` is a column name 1F maps today. It stays until 1F stops reading it;
   removing it is a 1F change first.
 - The site refuses, before any 1F call, a company that is off in `REP_APP_COMPANIES`, two
