@@ -62,13 +62,64 @@ export function normalizeMobile(v) {
 }
 
 /**
+ * Roster match (Brian, 11/17: "those fields will create a nightmare"). The RGM pick list
+ * comes from `JOIN_RGMS` in Vercel env, built from the field roster: one entry per region,
+ * `{ "region": "OR", "name": "<RGM name>", "email": "<RGM email>" }`. The page shows each
+ * RGM by name and region and sends only the region code; the emails stay on the server.
+ * Set: /join asks for no manager name, manager email or branch. Unset or invalid: the
+ * free-text form as before. 1J matches a sign-up to the roster by email or mobile and
+ * takes the manager from the roster, so the pick is only a hint for people not on it.
+ *
+ * @typedef {{ region: string, name: string, email: string }} Rgm
+ */
+export const REGION = /^[A-Z]{2,3}$/;
+
+/**
+ * The RGM list from `JOIN_RGMS`, or [] when it is unset or any entry is wrong. One bad
+ * entry turns the whole list off, so a typo never shows a half list.
+ * @param {unknown} raw
+ * @returns {Rgm[]}
+ */
+export function parseRgms(raw) {
+  if (typeof raw !== 'string' || !raw.trim()) return [];
+  let list;
+  try {
+    list = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(list) || list.length === 0 || list.length > 100) return [];
+  /** @type {Rgm[]} */
+  const out = [];
+  const seen = new Set();
+  for (const e of list) {
+    if (!e || typeof e !== 'object') return [];
+    const region = String(e.region ?? '').trim().toUpperCase();
+    const name = normalizeName(e.name);
+    const email = String(e.email ?? '').trim().toLowerCase();
+    if (!REGION.test(region) || seen.has(region) || !NAME.test(name) || !HS_EMAIL.test(email)) return [];
+    seen.add(region);
+    out.push({ region, name, email });
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** What the pick list shows for one RGM. */
+export const rgmLabel = (/** @type {Rgm} */ r) => `${r.name} (${r.region})`;
+
+/** The pick list's value for "my manager is not listed". */
+export const RGM_NOT_LISTED = 'none';
+
+/**
  * @param {Record<string, unknown>} input
+ * @param {Rgm[]} [rgms] the RGM list; non-empty means the roster-match form
  * @returns {{ ok: true, value: Registration } | { ok: false, errors: Record<string, string> }}
  *
  * @typedef {{ firstName: string, lastName: string, email: string, mobile: string, role: string,
  *   managerName: string, managerEmail: string, branch: string }} Registration
  */
-export function validateRegistration(input) {
+export function validateRegistration(input, rgms = []) {
+  if (rgms.length) return validateRosterRegistration(input, rgms);
   const value = {
     firstName: normalizeName(clean(input.firstName, 60)),
     lastName: normalizeName(clean(input.lastName, 60)),
@@ -102,6 +153,41 @@ export function validateRegistration(input) {
     }
   }
   if (!value.branch) errors.branch = 'Add your branch or territory.';
+  return Object.keys(errors).length ? { ok: false, errors } : { ok: true, value };
+}
+
+/**
+ * The roster-match form: name, email, mobile, role and an RGM picked from the list. The
+ * picked RGM's roster name and email go to 1J as the manager hint, and the region code as
+ * `branch`, so the body keeps its shape. "Not listed" sends both manager fields and
+ * branch blank, for any role.
+ * @param {Record<string, unknown>} input
+ * @param {Rgm[]} rgms
+ */
+function validateRosterRegistration(input, rgms) {
+  const pick = clean(input.rgm, 10);
+  const rgm = rgms.find((r) => r.region === pick);
+  const value = {
+    firstName: normalizeName(clean(input.firstName, 60)),
+    lastName: normalizeName(clean(input.lastName, 60)),
+    email: clean(input.email, 120).toLowerCase(),
+    mobile: normalizeMobile(input.mobile),
+    role: clean(input.role, 30),
+    managerName: rgm?.name ?? '',
+    managerEmail: rgm?.email ?? '',
+    branch: rgm?.region ?? '',
+  };
+  /** @type {Record<string, string>} */
+  const errors = {};
+  if (!value.firstName) errors.firstName = 'Add your first name.';
+  else if (!NAME.test(value.firstName)) errors.firstName = 'Use letters, spaces, hyphens and apostrophes only.';
+  if (!value.lastName) errors.lastName = 'Add your last name.';
+  else if (!NAME.test(value.lastName)) errors.lastName = 'Use letters, spaces, hyphens and apostrophes only.';
+  if (!HS_EMAIL.test(value.email)) errors.email = 'Use your Henry Schein email (ends in @henryschein.com).';
+  if (!value.mobile) errors.mobile = 'Add a 10-digit mobile number.';
+  if (!ROLES.includes(value.role)) errors.role = 'Pick your role.';
+  if (!rgm && pick !== RGM_NOT_LISTED) errors.rgm = 'Pick your RGM, or pick Not listed.';
+  else if (rgm && rgm.email && rgm.email === value.email) errors.rgm = 'Pick the RGM you report to, or pick Not listed.';
   return Object.keys(errors).length ? { ok: false, errors } : { ok: true, value };
 }
 

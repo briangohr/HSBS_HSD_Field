@@ -270,6 +270,85 @@ try {
   killDev(dev);
 }
 
+// Roster match (Brian, 11/17): with JOIN_RGMS set, /join shows an RGM pick list in place of
+// the manager and branch boxes. The page shows names and region codes only; the RGM
+// email goes to 1J from the server.
+const TEST_RGMS = [
+  { region: 'TA', name: 'Test Rgm Alpha', email: 'test.rgm.alpha@henryschein.com' },
+  { region: 'TB', name: 'Test Rgm Bravo', email: 'test.rgm.bravo@henryschein.com' },
+];
+dev = await startDev({ REP_APP_ENABLED: 'true', REGISTER_FLOW_URL: `http://127.0.0.1:${FLOW_PORT}/flow`, JOIN_RGMS: JSON.stringify(TEST_RGMS) });
+try {
+  for (const js of [false, true]) {
+    const tag = js ? 'JS on' : 'JS off';
+    const ctx = await browser.newContext({ ...devices['iPhone 13'], javaScriptEnabled: js, reducedMotion: 'reduce' });
+    const page = await ctx.newPage();
+    const fillRoster = async (rgm) => {
+      for (const [name, value] of Object.entries({ firstName: 'Test', lastName: 'Rep', email: 'test.rep@henryschein.com', mobile: '555 010 1234' })) {
+        await page.fill(`[name=${name}]`, value);
+      }
+      await page.selectOption('[name=role]', 'FSC');
+      if (rgm) await page.selectOption('[name=rgm]', rgm);
+    };
+
+    await check(`${tag}: roster form shows the RGM list, no manager or branch boxes, and no RGM email`, async () => {
+      await page.goto(`${BASE}/join?src=qr`);
+      assert.equal(await page.locator('[name=managerName], [name=managerEmail], [name=branch]').count(), 0);
+      const labels = await page.locator('[name=rgm] option').allTextContents();
+      assert.deepEqual(labels, ['Pick one', 'Test Rgm Alpha (TA)', 'Test Rgm Bravo (TB)', "Not listed, or I don't know"]);
+      assert.equal((await page.content()).includes('test.rgm.'), false, 'an RGM email reached the page');
+    });
+
+    await check(`${tag}: roster form refuses a sign-up with no RGM picked, and nothing reaches 1J`, async () => {
+      flowBodies.length = 0;
+      await fillRoster('');
+      await submit(page, js);
+      assert.match(await page.textContent('[data-for=rgm]'), /Pick your RGM/);
+      assert.equal(flowBodies.length, 0);
+    });
+
+    await check(`${tag}: picking an RGM sends that RGM's roster name, email and region in the same body shape`, async () => {
+      flowBodies.length = 0;
+      await page.goto(`${BASE}/join?src=qr`);
+      await fillRoster('TB');
+      await submit(page, js);
+      await page.waitForSelector('#join-sent:not([hidden])', { timeout: 10000 });
+      assert.equal(PERSONAL.test(decodeURIComponent(page.url())), false, page.url());
+      assert.deepEqual(flowBodies, [
+        {
+          action: 'register',
+          firstName: 'Test',
+          lastName: 'Rep',
+          email: 'test.rep@henryschein.com',
+          mobile: '555-010-1234',
+          role: 'FSC',
+          managerName: 'Test Rgm Bravo',
+          managerEmail: 'test.rgm.bravo@henryschein.com',
+          branch: 'TB',
+          source: 'QR',
+        },
+      ]);
+    });
+
+    await check(`${tag}: "Not listed" sends the manager and branch blank, for any role`, async () => {
+      flowBodies.length = 0;
+      await page.goto(`${BASE}/join?src=qr`);
+      await fillRoster('none');
+      await submit(page, js);
+      await page.waitForSelector('#join-sent:not([hidden])', { timeout: 10000 });
+      assert.equal(flowBodies.length, 1);
+      assert.equal(flowBodies[0].role, 'FSC');
+      assert.equal(flowBodies[0].managerName, '');
+      assert.equal(flowBodies[0].managerEmail, '');
+      assert.equal(flowBodies[0].branch, '');
+    });
+
+    await ctx.close();
+  }
+} finally {
+  killDev(dev);
+}
+
 dev = await startDev({ REP_APP_ENABLED: 'false', REGISTER_FLOW_URL: `http://127.0.0.1:${FLOW_PORT}/flow` });
 try {
   await check('switch off: /join, /api/register, /confirm and /api/confirm answer 404 and nothing reaches 1J', async () => {

@@ -9,7 +9,10 @@ import {
   RegisterWriteError,
   postRegistration,
 } from './register-flow.mjs';
-import { SENT_MESSAGE, registerPayload, sourceFor, validateRegistration } from './register-form.mjs';
+import { SENT_MESSAGE, parseRgms, registerPayload, sourceFor, validateRegistration } from './register-form.mjs';
+
+/** The RGM pick list from Vercel env; [] keeps the free-text form. */
+export const joinRgms = () => parseRgms(env('JOIN_RGMS'));
 
 /**
  * Per email from one address per 10 minutes, per server instance. A speed bump; 1J holds
@@ -55,6 +58,7 @@ export const REGISTER_FIELDS = [
   'managerName',
   'managerEmail',
   'branch',
+  'rgm',
   'src',
 ] as const;
 
@@ -81,7 +85,8 @@ export async function submitRegistration(data: Record<string, string>, ip: strin
   if (rateLimited(ipBucket('register', ip), registerIpLimit())) {
     return { status: 429, error: 'Too many tries. Please wait a few minutes.' };
   }
-  const result = validateRegistration(data);
+  const rgms = joinRgms();
+  const result = validateRegistration(data, rgms);
   if (!result.ok) return { status: 422, errors: result.errors };
   // The bucket holds a hash of the email and IP, never the address.
   // A refused send adds no count; an admitted one holds its own, which only it gives back.
@@ -97,7 +102,12 @@ export async function submitRegistration(data: Record<string, string>, ip: strin
     // The per-IP count stays; only the email allowance is given back.
     if (notActedOn(err)) keyRefund(emailBucket, hold);
     if (err instanceof RegisterRefusedError) {
-      return { status: 422, error: "Check your Henry Schein email and your manager's, then try again." };
+      return {
+        status: 422,
+        error: rgms.length
+          ? 'Check your Henry Schein email, then try again.'
+          : "Check your Henry Schein email and your manager's, then try again.",
+      };
     }
     if (err instanceof RegisterConfigError) {
       console.error('register: REGISTER_FLOW_URL is not set');
