@@ -28,6 +28,23 @@ update in Track without anyone chasing it. Runs at least through 12/31/2026.
   due, no email.
 - For field cases only, this replaces the line "Next Update Due, 7C (Friday) and 7D
   (overdue) rules" in "What must not change" in `docs/build/field-two-track-deal-value-stages.md`.
+- O1, Brian, 11/19: two emails. A partner with PVA and field leads gets the field daily
+  email on its own, labeled as field. Decide again if trace question 2 shows a shared key.
+- O2, Brian, 11/19: keep 2 business days after 12/31. No review date is set.
+- O3, Brian, 11/19: Brian is not copied on the field daily emails. He gets only the
+  2-missed-updates escalation.
+- O4, Brian, 11/19: escalate to Brian at 2 missed updates, about 4 business days.
+- O5, Brian, 11/19: Track keeps the 7-day stale line. Piece 4 is skipped unless reps ask.
+- O6, Brian, 11/19: holiday list through 1/31/2027 is Thu 11/26/2026, Fri 11/27/2026,
+  Thu 12/24/2026, Fri 12/25/2026, Fri 1/1/2027 and Mon 1/18/2027. Not checked against the
+  Henry Schein list; Brian can add or drop a date later.
+- O7, Brian, 11/19: on go-live day, every open field lead's due date is set to the go-live
+  date (Mon 11/23 if the start holds), so each partner gets one full list, then the 2-day
+  rhythm.
+- O8, Brian, 11/19: yes. If trace questions 1 or 4 show 7C or 7D touching field leads, each
+  gets one filter so it skips them, with its rollback recorded first and its owner told.
+  Brian makes the live change. The 7D filter goes in before the first field daily email;
+  the 7C filter may follow go-live by up to a week.
 
 ## How it works
 
