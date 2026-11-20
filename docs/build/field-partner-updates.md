@@ -65,6 +65,15 @@ Two Compose steps, the same text in both flows. Changing one means changing both
 
 "Today" is always `convertFromUtc(utcNow(), 'Eastern Standard Time', 'yyyy-MM-dd')`.
 
+### Reading Service Cases
+
+Every "Get Service Cases" in 7F, 7G and 7H is a Get items with an OData filter that does
+the open and Test test on the server (`Test eq 1` or `Test eq 0`, and Partner Status not
+one of the closed values), Pagination on in the action's settings, threshold 5000. No step
+uses a fixed top count, so closed cases never crowd out open ones. If a read returns 5000
+rows, the flow emails Brian `Field cases over 5000: raise the threshold` and stops before
+writing. Today there are 17 cases.
+
 ### Words used
 
 - **Field partner:** an Active Partner Links row on the new site. A row whose Title contains
@@ -198,8 +207,8 @@ HTTP trigger, POST, schema from the contract above. Trigger concurrency on, limi
    Not exactly 1 row: 404. Key Expires before now: 410. `TestPartner` =
    `contains(Title, 'TEST')`.
 2. **Switch on `action`.** Anything else: 400.
-3. **`leads`:** Get Service Cases (top 500) where Test equals `TestPartner`. Filter array to
-   its cases that are open (Words used). For each, Get item on Referrals by the Referral
+3. **`leads`:** Get Service Cases (Reading Service Cases) where Test equals `TestPartner`
+   and the case is open. Filter array to its Services. For each, Get item on Referrals by the Referral
    lookup id: skip it when Introduced On is blank. Select the contract keys: `ref` from the
    Referrals Title, `practice` and `contact` from the Referrals row, `company` from Service,
    `status` from Partner Status, the rest from the case. `nextUpdateDue` uses the blank rule.
@@ -249,7 +258,7 @@ below reads only Service Cases with Test on and only Partner Links rows whose Ti
 `TEST`, so a run can neither mail a real partner nor change a real case. Brian sets it to
 `false` at go-live (live step 8), the only edit the package needs.
 
-0. **Set missing due dates.** Get Service Cases (top 500). For each open case with Introduced
+0. **Set missing due dates.** Get Service Cases (Reading Service Cases). For each open case with Introduced
    On and a blank Next Update Due: write Next Update Due = the later of today and `Created` +
    `Window_days` business days. From here on every open case has a stored due date. On
    go-live day every older case gets today, so it is listed today and first missed tomorrow
@@ -259,9 +268,14 @@ below reads only Service Cases with Test on and only Partner Links rows whose Ti
    partner who never saves therefore gains one miss per missed window: the first business
    day after each due date, about every 2 business days, so 2 misses take about 4 business
    days (O4).
-2. **Escalate.** Cases whose Missed Updates became exactly 2 in step 1: one email to Brian
-   listing them (ref, practice, partner). Test cases go in the same email marked `[TEST]`.
-   Nothing reached 2: no email.
+2. **Escalate.** The escalation key of a case is `[esc:<Last Partner Update as yyyy-MM-dd,
+   or never>]`. Open cases with Missed Updates 2 or more whose Status Log does not contain
+   their key: one email to Brian listing them (ref, practice, partner, misses). Test cases go
+   in the same email marked `[TEST]`. Only after the email succeeds, each listed case gets a
+   Status Log line `<today> escalated to Brian <key>`. If the email fails, no line is
+   written, so the next run lists those cases again. A new partner save changes Last Partner
+   Update and so the key, so the same case can escalate again after 2 more misses. Nothing to
+   list: no email.
 3. **For each Active Partner Links row:**
    - a. Its cases that are open and due, or have Missed Updates above 0. None: skip the
      row. No email.
@@ -311,7 +325,7 @@ show one.
 - The 7-day "No update in N days" line on Track stays (O5).
 - Later, not in this build: 1F sends the case's last Status Log line as `detail`, so Track
   shows the partner's note. That is a 1F and contract change of its own; it must drop the
-  `[s:...]` tag before sending the line.
+  `[s:...]` and `[esc:...]` tags before sending the line.
 
 ## Brian's live steps, in order
 
@@ -370,7 +384,7 @@ Use the TEST rep and the TEST field partner. Mail may go only to Brian.
   changes no Partner Status. A reply from Brian's own address, or from any address not on an
   Active row, changes nothing. A reply from the TEST mailbox to a real (Test off) intro
   changes nothing on that case.
-- **PU-10 (no other mail).** No run in PU-1 to PU-14 mailed anyone but Brian, and no real
+- **PU-10 (no other mail).** No run in PU-1 to PU-16 mailed anyone but Brian, and no real
   case's Missed Updates, Next Update Due or Status Log changed.
 - **PU-14 (Track date).** After a manual 7G run that adds a miss to a TEST case, the TEST
   rep's Track shows no new "Updated" date for it. After a 7F save on it, Track shows "Updated
@@ -384,6 +398,11 @@ Use the TEST rep and the TEST field partner. Mail may go only to Brian.
   days out. Run 3 on the first business day after that due date gives Missed Updates 2 and
   one escalation email. A run between those two dates adds no miss. To test in one sitting,
   set the case's Next Update Due to yesterday before runs 2 and 3.
+- **PU-15 (escalation resumes).** After PU-6, delete the `escalated to Brian` line from
+  that TEST case's Status Log (as if the email had failed). The next manual run emails Brian
+  about it once and writes the line again. The run after that does not email about it.
+- **PU-16 (reads).** In 7F, 7G and 7H every Get items on Service Cases has an OData filter
+  and Pagination on at 5000, and no Top Count. Checked in each action's settings.
 - **PU-13 (TEST guard).** With `Test_only` `true` and the real rows off, a manual 7G run
   touches only Test cases and mails only Brian.
 
