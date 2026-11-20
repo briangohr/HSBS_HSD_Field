@@ -105,6 +105,9 @@ in the same PR (a new flow, HSBS 7F, and `PARTNER_FLOW_URL`).
   4. Note: optional, up to 300 characters, one line.
 - **One Save button** for the page. Success reads "Saved N updates." A refusal for one lead
   names that lead and keeps every typed answer.
+- **Retry:** each save carries a `submissionId` (a UUID made when the partner presses Save).
+  A save with no clear answer (timeout, dropped connection, 5xx) keeps that id and the exact
+  fields first sent, so pressing Save again resends the same save, as `/refer` does.
 - **Copy:** approved partner spellings, no HSPA, HSRA or NumbersIQ, no em dashes or arrows.
 - **Tests:** unit tests for the body builder and answer reader; a browser test against a local
   fake 7F (list, save, a refusal, an unknown key, an expired key). Never a live flow.
@@ -148,6 +151,7 @@ Every body carries `key`. Answers are JSON.
 {
   "action": "save",
   "key": "<40 hex>",
+  "submissionId": "11111111-1111-4111-8111-111111111111",
   "updates": [
     {
       "id": 36,
@@ -168,15 +172,21 @@ Every body carries `key`. Answers are JSON.
 
 | Answer | Meaning | Site shows |
 |---|---|---|
-| 200 `{"ok":true,"saved":n}` | Every update written | "Saved n updates." |
+| 200 `{"ok":true,"saved":n}` | Every update written, now or by an earlier try with the same `submissionId` | "Saved n updates." |
 | 404 | Unknown key, inactive row, or more than one row with the key | "This link does not work." |
 | 410 | Key Expires is past | "This link has expired. Use the link in your latest email." |
 | 422 `{"error":"reload","id":36}` | The case is not this partner's, not open, or the wrong Test | "Lead HSBS-F90 changed. Reload the page." Nothing in that save was written |
 | 422 `{"error":"bad_value","id":36}` | A required answer is missing or not an allowed value | Names the lead and the field |
-| 408, 429, 5xx, timeout | Not available | "We could not save just now. Nothing was lost on this page; try Save again in a minute." |
+| 408, 429, 5xx, timeout (55 s) | No clear answer | "This is taking too long. It may already have gone through. Press Save again; it will not save twice." |
 
 7F checks every update before it writes any (two loops: check all, then write all), so a
-422 means nothing was written.
+422 from the check loop means nothing in that try was written.
+
+**Saving twice is safe.** Every Status Log line a save writes ends with `[s:<submissionId>]`.
+A case whose Status Log already holds this save's tag was written by an earlier try: 7F
+skips it, sends no second email for it, and counts it as saved. A retry after a lost answer
+or a partial write therefore finishes the rest and answers 200. A retry is the only way the
+same `submissionId` arrives twice.
 
 ## B. HSBS 7F Field partner (new site)
 
@@ -192,13 +202,15 @@ HTTP trigger, POST, schema from the contract above. Trigger concurrency on, limi
    Referrals Title, `practice` and `contact` from the Referrals row, `company` from Service,
    `status` from Partner Status, the rest from the case. `nextUpdateDue` uses the blank rule.
    Sort overdue first, then by due date. Answer 200.
-4. **`save`, check loop:** for each update, Get the case by `id`. Refuse 422 `reload` when it
-   is not one of this partner's open cases. Refuse 422 `bad_value` when: `choice` is not one
+4. **`save`, check loop:** refuse 422 `bad_value` with no `id` when `submissionId` is not a
+   UUID. For each update, Get the case by `id`. When its Status Log contains
+   `[s:<submissionId>]`, mark it done and skip the rest of the checks for it. Refuse 422
+   `reload` when it is not one of this partner's open cases. Refuse 422 `bad_value` when: `choice` is not one
    of the six; `talkedToDoctor` is not one of the three choices on any choice but
    `nochange`; `meeting` has no `meetingDate` or one before today; `signed` has no
    `signedDate` or one after today; `lost` has a `closedReason` not in the six; `handback`
    has a blank `note`; `note` is over 300 characters or `signedProduct` over 100.
-5. **`save`, write loop:** for each update, Update item on Service Cases:
+5. **`save`, write loop:** for each update not marked done, Update item on Service Cases:
 
    | Column | Value |
    |---|---|
@@ -213,22 +225,33 @@ HTTP trigger, POST, schema from the contract above. Trigger concurrency on, limi
    | Partner Updated By | Partner Links Title |
    | Missed Updates | 0 |
    | Next Update Due | `meeting`: 1 business day after the meeting date. `signed`, `lost`, `handback`: cleared. Otherwise: today + `Window_days` business days |
-   | Status Log | Old text + new line `<today> <partner>: <label>. <note>` |
+   | Status Log | Old text + new line `<today> <partner>: <label>. <note> [s:<submissionId>]` |
 
    Stage, Status and Pipeline Stage are not written.
-6. **Hand back email:** for each `handback`, one email to Brian only, subject
+6. **Hand back email:** for each `handback` written in step 5 (not one marked done), right
+   after its Update item, one email to Brian only, subject
    `Field lead handed back: <ref>`, body: partner, practice, note. No other email. A save
    never mails the partner, the rep or anyone else.
-7. **Answer** 200 `{"ok":true,"saved":<count>}`.
+7. **Answer** 200 `{"ok":true,"saved":<count>}`, the count of written plus done updates.
 
 ## C. HSBS 7G Field daily ask (new site)
 
 Recurrence: weekdays, 8:00 AM, Eastern Standard Time (the `timeZone` setting, as the gap
 check package does). First step: when today is on `Holidays`, Terminate (Succeeded).
 
-1. **Count misses.** Get Service Cases (top 500). For each open case with Introduced On whose
-   Next Update Due is set and before today: Missed Updates + 1, Next Update Due = today +
-   `Window_days` business days. A blank due date is never a miss.
+**TEST guard.** A Compose `Test_only`, `true` in the package. While it is `true`, every step
+below reads only Service Cases with Test on and only Partner Links rows whose Title contains
+`TEST`, so a run can neither mail a real partner nor change a real case. Brian sets it to
+`false` at go-live (live step 7), the only edit the package needs.
+
+0. **Set missing due dates.** Get Service Cases (top 500). For each open case with Introduced
+   On and a blank Next Update Due: write Next Update Due = the later of today and `Created` +
+   `Window_days` business days. From here on every open case has a stored due date. On
+   go-live day every older case gets today, so it is listed today and first missed tomorrow
+   (O7), and a case made yesterday keeps its own 2 business days.
+1. **Count misses.** For each open case with Introduced On whose Next Update Due is before
+   today: Missed Updates + 1, Next Update Due = today + `Window_days` business days. A
+   partner who never saves therefore gains one miss each business day the lead stays due.
 2. **Escalate.** Cases whose Missed Updates became exactly 2 in step 1: one email to Brian
    listing them (ref, practice, partner). Test cases go in the same email marked `[TEST]`.
    Nothing reached 2: no email.
@@ -270,24 +293,28 @@ show one.
 - 1F, 3F HealthFirst and 3F Staffing: no change. Track needs none (fact 1).
 - The 7-day "No update in N days" line on Track stays (O5).
 - Later, not in this build: 1F sends the case's last Status Log line as `detail`, so Track
-  shows the partner's note. That is a 1F and contract change of its own.
+  shows the partner's note. That is a 1F and contract change of its own; it must drop the
+  `[s:...]` tag before sending the line.
 
 ## Brian's live steps, in order
 
 Each one is a paste-ready block or a package from the build thread, with a direct link.
 
-1. Partner Links on `sites/HSBSField`: add 3 rows, Active on, Link Key blank.
-   `TEST field partner` (Email: Brian, Services: HealthFirst and the staffing service);
-   `HealthFirst` (Email and CC as the 3F HealthFirst intro sends today, Services:
-   HealthFirst); `Direct Dental` (Email as the Routing row, Services: the staffing service).
+1. Partner Links on `sites/HSBSField`: add 3 rows, Link Key blank.
+   `TEST field partner` (Active on, Email: Brian, Services: HealthFirst and the staffing
+   service); `HealthFirst` (Active **off**, Email and CC as the 3F HealthFirst intro sends
+   today, Services: HealthFirst); `Direct Dental` (Active **off**, Email as the Routing row,
+   Services: the staffing service). The real rows stay off until step 7, so no TEST run, page
+   or reply capture can reach a real partner.
 2. Import 7F. Turn it On. Copy its trigger URL into Vercel `PARTNER_FLOW_URL` (Preview first).
 3. Approve and merge the page PR. Set `PARTNER_PAGE_ENABLED=true` on Preview.
-4. Import 7G. Leave it Off; run it by hand for the TEST checks.
+4. Import 7G with `Test_only` `true`. Leave it Off; run it by hand for the TEST checks.
 5. Import 7H and turn it On.
-6. After every check below passes on Preview with TEST rows: `PARTNER_PAGE_ENABLED=true` and
-   `PARTNER_FLOW_URL` on Production, then turn 7G On. Its first 8:00 AM run sends each real
-   partner one full list (O7).
-7. Send the two-line partner note (Claude drafts, Brian sends) the same day.
+6. Run every check below on Preview with TEST rows.
+7. Only after all pass: `PARTNER_PAGE_ENABLED=true` and `PARTNER_FLOW_URL` on Production; turn
+   the HealthFirst and Direct Dental rows Active on; set 7G's `Test_only` to `false`; turn 7G
+   On. Its first 8:00 AM run sends each real partner one full list (O7).
+8. Send the two-line partner note (Claude drafts, Brian sends) the same day.
 
 Imports arrive Off: turn each On when its step says so.
 
@@ -319,7 +346,16 @@ Use the TEST rep and the TEST field partner. Mail may go only to Brian.
 - **PU-9 (reply capture).** A reply from a TEST partner address to a
   `[TEST] HSBS referral HSBS-F<n>` intro stamps Last Partner Update and the Status Log line
   and changes no Partner Status. A reply from any other sender changes nothing.
-- **PU-10 (no other mail).** No run in PU-1 to PU-9 mailed anyone but Brian.
+- **PU-10 (no other mail).** No run in PU-1 to PU-13 mailed anyone but Brian, and no real
+  case's Missed Updates, Next Update Due or Status Log changed.
+- **PU-11 (retry).** Post the same TEST save twice with one `submissionId` (a Hand back and a
+  Meeting set): both answer 200 `saved` 2, each case has one Status Log line with the tag,
+  and Brian gets one hand back email, not two.
+- **PU-12 (unanswered lead).** A TEST case with a blank Next Update Due and `Created` 3
+  business days ago: run 1 stores today as its due date and lists it. With no save, run 2 on
+  the next business day gives Missed Updates 1, run 3 gives 2 and one escalation email.
+- **PU-13 (TEST guard).** With `Test_only` `true` and the real rows off, a manual 7G run
+  touches only Test cases and mails only Brian.
 
 ## Rollback
 
@@ -327,7 +363,7 @@ Use the TEST rep and the TEST field partner. Mail may go only to Brian.
 - 7G: turn Off. No more asks. Cases keep their due dates; nothing else reads them.
 - 7F: turn Off. The page shows "not available". 7H: turn Off.
 - No existing flow, list column or row is changed by this build except Partner Links rows and
-  the Service Case columns listed in B5, C1 and D4.
+  the Service Case columns listed in B5, C0, C1 and D4.
 
 ## Estimate for the build thread
 
