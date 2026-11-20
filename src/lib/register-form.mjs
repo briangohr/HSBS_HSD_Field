@@ -17,8 +17,11 @@ export const ROLE_LABELS = { RM: 'RGM' };
 /** @param {string} role */
 export const roleLabel = (role) => ROLE_LABELS[/** @type {keyof typeof ROLE_LABELS} */ (role)] ?? role;
 
-/** Roles that may leave the manager blank at sign-up (decision 113). */
-export const MANAGER_OPTIONAL_ROLES = ['AE'];
+/** Roles that may skip the roster-match RGM pick. */
+export const RGM_OPTIONAL_ROLES = ['HSFS', 'Other'];
+
+/** Roles that may leave both manager fields blank on the free-text form. */
+export const MANAGER_OPTIONAL_ROLES = ['AE', ...RGM_OPTIONAL_ROLES];
 
 /** `?src=` on /join. The QR code goes to /j, which sends `qr`. */
 export const SOURCES = { qr: 'QR', ae: 'AE link', thrive: 'Thrive Signature link' };
@@ -139,9 +142,8 @@ export function validateRegistration(input, rgms = []) {
   if (!HS_EMAIL.test(value.email)) errors.email = 'Use your Henry Schein email (ends in @henryschein.com).';
   if (!value.mobile) errors.mobile = 'Add a 10-digit mobile number.';
   if (!ROLES.includes(value.role)) errors.role = 'Pick your role.';
-  // Decision 113 (Brian, 11/14): an AE's manager is unknown today, so an AE may leave both
-  // manager fields blank. Brian adds the manager on the Team Roster later (D18: this is
-  // only a hint). A manager an AE does give is checked like anyone's.
+  // AEs (decision 113), HSFS and Other may leave both fields blank. A manager offered
+  // here is only a hint (D18), and both fields still need to pass validation.
   const managerOptional = MANAGER_OPTIONAL_ROLES.includes(value.role) && !value.managerName && !value.managerEmail;
   if (!managerOptional) {
     if (!value.managerName) errors.managerName = "Add your manager's name.";
@@ -160,7 +162,7 @@ export function validateRegistration(input, rgms = []) {
  * The roster-match form: name, email, mobile, role and an RGM picked from the list. The
  * picked RGM's roster name and email go to 1J as the manager hint, and the region code as
  * `branch`, so the body keeps its shape. "Not listed" sends both manager fields and
- * branch blank, for any role.
+ * branch blank for any role. HSFS and Other can also leave the pick empty.
  * @param {Record<string, unknown>} input
  * @param {Rgm[]} rgms
  */
@@ -186,7 +188,8 @@ function validateRosterRegistration(input, rgms) {
   if (!HS_EMAIL.test(value.email)) errors.email = 'Use your Henry Schein email (ends in @henryschein.com).';
   if (!value.mobile) errors.mobile = 'Add a 10-digit mobile number.';
   if (!ROLES.includes(value.role)) errors.role = 'Pick your role.';
-  if (!rgm && pick !== RGM_NOT_LISTED) errors.rgm = 'Pick your RGM, or pick Not listed.';
+  const skippedRgm = pick === '' && RGM_OPTIONAL_ROLES.includes(value.role);
+  if (!rgm && pick !== RGM_NOT_LISTED && !skippedRgm) errors.rgm = 'Pick your RGM, or pick Not listed.';
   else if (rgm && rgm.email && rgm.email === value.email) errors.rgm = 'Pick the RGM you report to, or pick Not listed.';
   return Object.keys(errors).length ? { ok: false, errors } : { ok: true, value };
 }

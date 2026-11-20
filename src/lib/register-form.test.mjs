@@ -70,8 +70,25 @@ describe('sign-up form rules', () => {
     assert.match(own.errors.managerEmail, /can't be your own/);
   });
 
-  test('every other role still needs a manager', () => {
-    for (const role of ROLES.filter((x) => x !== 'AE')) {
+  for (const role of ['HSFS', 'Other']) {
+    test(`${role} may leave both free-text manager fields blank`, () => {
+      const result = validateRegistration({ ...good, role, managerName: '', managerEmail: '' });
+      assert.equal(result.ok, true);
+      const { managerName, managerEmail } = registerPayload(result.value, 'QR');
+      assert.deepEqual({ managerName, managerEmail }, { managerName: '', managerEmail: '' });
+    });
+
+    test(`${role} must fill both manager fields if either is filled`, () => {
+      for (const field of ['managerName', 'managerEmail']) {
+        const result = validateRegistration({ ...good, role, [field]: '' });
+        assert.equal(result.ok, false);
+        assert.ok(result.errors[field]);
+      }
+    });
+  }
+
+  test('FSC, RM, ES and EST still need a manager', () => {
+    for (const role of ['FSC', 'RM', 'ES', 'EST']) {
       const r = validateRegistration({ ...good, role, managerName: '', managerEmail: '' });
       assert.equal(r.ok, false, role);
       assert.ok(r.errors.managerName && r.errors.managerEmail, role);
@@ -475,12 +492,40 @@ describe('roster match: the RGM pick list (Brian, 11/17)', () => {
     }
   });
 
-  test('no pick, or a region not on the list, is refused', () => {
-    for (const rgm of ['', 'ZZ', 'Test Rgm Alpha', undefined]) {
-      const r = validateRegistration({ ...rep, rgm }, list);
-      assert.equal(r.ok, false, String(rgm));
-      assert.match(r.errors.rgm, /Pick your RGM/);
+  for (const role of ['HSFS', 'Other']) {
+    test(`${role} may skip the RGM and sends the same body as Not listed`, () => {
+      const notListed = validateRegistration({ ...rep, role, rgm: RGM_NOT_LISTED }, list);
+      assert.equal(notListed.ok, true);
+      for (const rgm of ['', undefined]) {
+        const result = validateRegistration({ ...rep, role, rgm }, list);
+        assert.equal(result.ok, true);
+        assert.deepEqual(registerPayload(result.value, 'QR'), registerPayload(notListed.value, 'QR'));
+      }
+    });
+  }
+
+  test('AE, FSC, RM, ES and EST must pick an RGM or Not listed', () => {
+    for (const role of ['AE', 'FSC', 'RM', 'ES', 'EST']) {
+      for (const rgm of ['', undefined]) {
+        const result = validateRegistration({ ...rep, role, rgm }, list);
+        assert.equal(result.ok, false, role);
+        assert.match(result.errors.rgm, /Pick your RGM/, role);
+      }
     }
+  });
+
+  test('an HSFS pick must be on the list and cannot be their own email', () => {
+    const picked = validateRegistration({ ...rep, role: 'HSFS', rgm: 'TA' }, list);
+    assert.equal(picked.ok, true);
+    assert.equal(registerPayload(picked.value, 'QR').managerEmail, 'test.rgm.alpha@henryschein.com');
+    for (const rgm of ['ZZ', 'Test Rgm Alpha']) {
+      const result = validateRegistration({ ...rep, role: 'HSFS', rgm }, list);
+      assert.equal(result.ok, false);
+      assert.match(result.errors.rgm, /Pick your RGM/);
+    }
+    const own = validateRegistration({ ...rep, role: 'HSFS', email: 'test.rgm.alpha@henryschein.com', rgm: 'TA' }, list);
+    assert.equal(own.ok, false);
+    assert.match(own.errors.rgm, /Pick the RGM you report to/);
   });
 
   test('an RGM cannot pick themselves', () => {

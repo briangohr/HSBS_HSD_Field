@@ -57,7 +57,9 @@ Request (built only from a validated form, `registerPayload` in
 - `role` is one of `AE`, `FSC`, `RM`, `ES`, `EST`, `HSFS`, `Other`.
   Thrive Signature is a program, not a role (Brian, 11/17); it stays only as a `source`.
   The page shows `RM` as RGM and sends `RM`.
-- An AE may leave both manager fields blank (decision 113). With `JOIN_RGMS` set, any role may (roster match, below).
+- In the free-text form, AE (decision 113), HSFS and Other may leave both manager
+  fields blank. If either is filled, both are checked. With `JOIN_RGMS` set, see
+  roster match below.
 - `source` is `QR`, `AE link`, `Thrive Signature link` or `Other`, from `?src=` on `/join`.
 
 ### Roster match (`JOIN_RGMS` set)
@@ -72,8 +74,10 @@ list. There are no manager name, manager email or branch boxes.
 - The body keeps its shape. `managerName` and `managerEmail` are the picked RGM's name
   and email as `JOIN_RGMS` spells them, and `branch` is the region code (for example `OR`).
 - "Not listed, or I don't know" sends `managerName`, `managerEmail` and `branch` as `""`,
-  for any role, not only AE.
-- An RGM can't pick themselves (their own email): 422.
+  for any role. HSFS and Other may also leave the pick empty for the same result.
+  AE, FSC, RM, ES and EST must pick an RGM or choose "Not listed, or I don't know."
+- Any pick must be on the list and cannot match the person's own email. An invalid
+  pick returns 422.
 
 What 1J does with it (Brian's live edit, written out on the Field Build Desk):
 
