@@ -52,6 +52,12 @@ describe('Track past 200 referrals', () => {
     assert.equal(out.tiles.referrals, 250);
     assert.equal(out.team[0].cards.length, 250);
   });
+
+  test(`My Team: a member with more than ${REFERRAL_READ_MAX} referrals is a failed load`, () => {
+    const many = Array.from({ length: REFERRAL_READ_MAX + 1 }, (_, i) => ({ id: `R${i}` }));
+    const member = { signedUp: true, name: 'Test Rep', registeredOn: '2026-11-01', referrals: many, rows: [] };
+    assert.throws(() => shapeTeam({ team: [member], managerRows: [] }, null, TODAY), (err) => err instanceof ReferralAppWriteError && err.status === 200);
+  });
 });
 
 describe('1F list read bounds', () => {

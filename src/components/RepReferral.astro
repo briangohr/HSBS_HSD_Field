@@ -1080,6 +1080,7 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
       const seq = ++moneySeq;
       trackStatus.hidden = false;
       trackStatus.textContent = 'Loading your referrals.';
+      trackMore.hidden = true;
       try {
         const res = await fetch('/api/referral-list', {
           method: 'POST',
@@ -1132,9 +1133,15 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
         feedList.replaceChildren();
         trackStatus.hidden = false;
         trackStatus.textContent = 'Your referrals did not load. Try again in a minute.';
+        trackMore.hidden = true;
       }
     };
     trackMore.addEventListener('click', () => {
+      // Only a loaded list pages; a failed read must never redraw as an empty history.
+      if (!loaded) {
+        trackMore.hidden = true;
+        return;
+      }
       trackShown += TRACK_PAGE;
       renderTrack();
     });
