@@ -58,6 +58,12 @@ describe('checkUpdate', () => {
     bad({ ...base, choice: 'signed', signedDate: '2026-11-21' }, 'signedDate');
     bad({ ...base, choice: 'signed', signedDate: TODAY, signedProduct: 'x'.repeat(101) }, 'signedProduct');
   });
+  test('with no day (the save route) the day rules are left to 7F, the shape rules stay', () => {
+    assert.equal(checkUpdate({ ...base, choice: 'meeting', meetingDate: '2026-11-19' }, null).ok, true);
+    assert.equal(checkUpdate({ ...base, choice: 'signed', signedDate: '2026-11-21' }, null).ok, true);
+    assert.deepEqual(checkUpdate({ ...base, choice: 'meeting', meetingDate: '' }, null), { ok: false, id: 36, field: 'meetingDate' });
+    assert.deepEqual(checkUpdate({ ...base, choice: 'signed', signedDate: '11/20/2026' }, null), { ok: false, id: 36, field: 'signedDate' });
+  });
   test('lost needs one of the six reasons', () => {
     for (const reason of CLOSED_REASONS) assert.equal(ok({ ...base, choice: 'lost', closedReason: reason }).closedReason, reason);
     bad({ ...base, choice: 'lost', closedReason: 'Bored' }, 'closedReason');

@@ -78,8 +78,13 @@ const text = (v) => (typeof v === 'string' ? v : '');
 /**
  * Check one lead's answer and return the exact update 7F gets. Fields that do not belong to
  * the choice are sent blank. The same rules as 7F's check loop (sheet PU, B4).
+ *
+ * `today` turns on the two rules that depend on the day (meeting today or later, signed not
+ * after today). The page passes it. The save route passes null: a resend after midnight
+ * must still reach 7F, whose submission tag check finds what an earlier try wrote (Codex P1
+ * on #14). 7F checks the day rules itself, except on a save it has already partly written.
  * @param {unknown} raw
- * @param {string} today yyyy-MM-dd, Eastern
+ * @param {string | null} today yyyy-MM-dd, Eastern, or null to skip the day rules
  * @returns {{ ok: true, update: Record<string, unknown> } | { ok: false, id: number | null, field: string }}
  */
 export function checkUpdate(raw, today) {
@@ -97,12 +102,12 @@ export function checkUpdate(raw, today) {
   const update = { id, choice, talkedToDoctor: talked, meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note };
   if (choice === 'meeting') {
     const date = text(u.meetingDate);
-    if (!isDate(date) || date < today) return bad('meetingDate');
+    if (!isDate(date) || (today !== null && date < today)) return bad('meetingDate');
     update.meetingDate = date;
   }
   if (choice === 'signed') {
     const date = text(u.signedDate);
-    if (!isDate(date) || date > today) return bad('signedDate');
+    if (!isDate(date) || (today !== null && date > today)) return bad('signedDate');
     const product = oneLine(text(u.signedProduct), PRODUCT_MAX + 1);
     if (product.length > PRODUCT_MAX) return bad('signedProduct');
     update.signedDate = date;
@@ -120,7 +125,7 @@ export function checkUpdate(raw, today) {
 /**
  * Check a whole save: 1 to 50 updates, each lead once.
  * @param {unknown} updates
- * @param {string} today
+ * @param {string | null} today as checkUpdate
  * @returns {{ ok: true, updates: Record<string, unknown>[] } | { ok: false, id: number | null, field: string }}
  */
 export function checkUpdates(updates, today) {

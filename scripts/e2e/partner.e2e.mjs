@@ -281,16 +281,19 @@ await check('no clear answer: Save again resends the same id and updates', async
   await page.close();
 });
 
-await check('the save API refuses a past meeting date before 7F', async () => {
+await check('the save API leaves the day rules to 7F, so a resend after midnight reaches it', async () => {
   bodies.length = 0;
   const res = await postSave({
     key: KEY,
     submissionId: crypto.randomUUID(),
     updates: [{ id: 36, choice: 'meeting', talkedToDoctor: 'Yes', meetingDate: eastern(-1) }],
   });
-  assert.equal(res.status, 422);
-  assert.deepEqual(await res.json(), { error: 'bad_value', id: 36, field: 'meetingDate' });
-  assert.equal(saves().length, 0);
+  assert.equal(res.status, 200);
+  assert.equal(saves().length, 1);
+  const blank = await postSave({ key: KEY, submissionId: crypto.randomUUID(), updates: [{ id: 36, choice: 'meeting', talkedToDoctor: 'Yes' }] });
+  assert.equal(blank.status, 422);
+  assert.deepEqual(await blank.json(), { error: 'bad_value', id: 36, field: 'meetingDate' });
+  assert.equal(saves().length, 1);
   assert.equal(TODAY.length, 10);
 });
 

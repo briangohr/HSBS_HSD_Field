@@ -33,6 +33,12 @@ Part 1 audit, 11/20: field partners get an intro and nothing after it.
 | 8 | Intros go out from Brian's mailbox. A TEST referral (`Test` on) sends only to Brian. Partner replies arrive in Brian's inbox with the subject `RE: HSBS referral HSBS-F<n>: <practice> for <company>` | 3F package `Send_intro`, `Test_mode`; Brian's inbox, a reply of 11/19 |
 | 9 | Field cases live only on `sites/HSBSField`. The old 7C and 7D read the old site's lists, so they cannot list or count a new-site case. O8 needs no filter | List IDs in the packages vs the old-site flows' site address |
 
+Build thread read of the live lists, 11/20 (read only): internal names match the sheet
+(`Status_x0020_Log`, `Missed_x0020_Updates`, `Hand_x0020_Back_x0020_Note` and so on).
+Service Cases is list `248a4afc`. 12 referrals moved from the old site keep the title
+`HSBS-A<n>`; new ones are `HSBS-F<n>`. So a ref is `HSBS-` plus letters and digits, and 7H's
+subject filter must match both (part B).
+
 Fact 9 closes trace questions 1, 2 and 4 of the plan for new-site cases. Question 3 is fact 6.
 
 ## The build
@@ -68,9 +74,11 @@ Two Compose steps, the same text in both flows. Changing one means changing both
 ### Reading Service Cases
 
 Every "Get Service Cases" in 7F, 7G and 7H is a Get items with an OData filter that does
-the open and Test test on the server (`Test eq 1` or `Test eq 0`, and Partner Status not
-one of the closed values), Pagination on in the action's settings, threshold 5000. No step
-uses a fixed top count, so closed cases never crowd out open ones. If a read returns 5000
+the Test test on the server (`Test eq 1` or `Test eq 0`), Pagination on in the action's
+settings, threshold 5000. The open test is a Filter array step right after the read, not
+part of the OData filter, because a SharePoint `ne` filter on a choice column can drop the
+blank Partner Status that most open cases have (build thread, 11/20). No step uses a fixed
+top count, so closed cases never crowd out open ones. If a read returns 5000
 rows, the flow emails Brian `Field cases over 5000: raise the threshold` and stops before
 writing. Today there are 17 cases.
 
@@ -241,7 +249,10 @@ HTTP trigger, POST, schema from the contract above. Trigger concurrency on, limi
    of the six; `talkedToDoctor` is not one of the three choices on any choice but
    `nochange`; `meeting` has no `meetingDate` or one before today; `signed` has no
    `signedDate` or one after today; `lost` has a `closedReason` not in the six; `handback`
-   has a blank `note`; `note` is over 300 characters or `signedProduct` over 100.
+   has a blank `note`; `note` is over 300 characters or `signedProduct` over 100. When any
+   case in the read already holds this save's tag, an earlier try wrote part of it: the two
+   day rules (before today, after today) are skipped, so a resend after midnight finishes
+   (Codex P1 on #14). The site leaves those two rules to the page and 7F for the same reason.
 5. **`save`, write loop:** for each update not marked done: a `handback` sends its email
    first (step 6), then every update does Update item on Service Cases:
 

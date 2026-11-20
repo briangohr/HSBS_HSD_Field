@@ -9,7 +9,6 @@ import { partnerSave } from './partner-save.mjs';
 
 const KEY = 'ab'.repeat(20);
 const SID = '11111111-1111-4111-8111-111111111111';
-const TODAY = '2026-11-20';
 const UPDATE = { id: 36, choice: 'meeting', talkedToDoctor: 'Yes', meetingDate: '2026-11-24', signedDate: '', signedProduct: '', closedReason: '', note: '' };
 const LEAD = {
   id: 36,
@@ -136,29 +135,35 @@ describe('save', () => {
 
 describe('partnerSave (the save route)', () => {
   test('checks before posting: bad key, bad id, no updates, a bad answer', async () => {
-    assert.equal((await partnerSave({ key: 'x', submissionId: SID, updates: [UPDATE] }, TODAY)).status, 404);
-    assert.equal((await partnerSave({ key: KEY, submissionId: 'x', updates: [UPDATE] }, TODAY)).status, 400);
-    assert.equal((await partnerSave({ key: KEY, submissionId: SID, updates: [] }, TODAY)).status, 400);
-    const refused = await partnerSave({ key: KEY, submissionId: SID, updates: [{ ...UPDATE, meetingDate: '2026-11-19' }] }, TODAY);
+    assert.equal((await partnerSave({ key: 'x', submissionId: SID, updates: [UPDATE] })).status, 404);
+    assert.equal((await partnerSave({ key: KEY, submissionId: 'x', updates: [UPDATE] })).status, 400);
+    assert.equal((await partnerSave({ key: KEY, submissionId: SID, updates: [] })).status, 400);
+    const refused = await partnerSave({ key: KEY, submissionId: SID, updates: [{ ...UPDATE, meetingDate: '' }] });
     assert.deepEqual(refused, { status: 422, body: { error: 'bad_value', id: 36, field: 'meetingDate' } });
     assert.equal(posts.length, 0);
   });
+  test('a resend after midnight still reaches 7F (its tag check finds the earlier write)', async () => {
+    reply = () => [200, { ok: true, saved: 1 }];
+    const resent = await partnerSave({ key: KEY, submissionId: SID, updates: [{ ...UPDATE, meetingDate: '2000-01-01' }] });
+    assert.equal(resent.status, 200);
+    assert.equal(posts.length, 1);
+  });
   test('sends only the cleaned updates and words the answers', async () => {
     reply = () => [200, { ok: true, saved: 1 }];
-    const done = await partnerSave({ key: KEY, submissionId: SID, updates: [{ ...UPDATE, repEmail: 'x@y.z', signedDate: '2026-11-01' }] }, TODAY);
+    const done = await partnerSave({ key: KEY, submissionId: SID, updates: [{ ...UPDATE, repEmail: 'x@y.z', signedDate: '2026-11-01' }] });
     assert.deepEqual(done, { status: 200, body: { ok: true, saved: 1, message: 'Saved 1 update.' } });
     assert.deepEqual(posts[0].updates, [UPDATE]);
     reply = () => [404, ''];
-    assert.equal((await partnerSave({ key: KEY, submissionId: SID, updates: [UPDATE] }, TODAY)).status, 404);
+    assert.equal((await partnerSave({ key: KEY, submissionId: SID, updates: [UPDATE] })).status, 404);
     reply = () => [410, ''];
-    assert.equal((await partnerSave({ key: KEY, submissionId: SID, updates: [UPDATE] }, TODAY)).status, 410);
+    assert.equal((await partnerSave({ key: KEY, submissionId: SID, updates: [UPDATE] })).status, 410);
     reply = () => [422, { error: 'reload', id: 36 }];
-    assert.deepEqual(await partnerSave({ key: KEY, submissionId: SID, updates: [UPDATE] }, TODAY), {
+    assert.deepEqual(await partnerSave({ key: KEY, submissionId: SID, updates: [UPDATE] }), {
       status: 422,
       body: { error: 'reload', id: 36, field: '' },
     });
     reply = () => [503, ''];
-    const unclear = await partnerSave({ key: KEY, submissionId: SID, updates: [UPDATE] }, TODAY);
+    const unclear = await partnerSave({ key: KEY, submissionId: SID, updates: [UPDATE] });
     assert.equal(unclear.status, 502);
     assert.equal(unclear.body.error, 'timeout');
   });

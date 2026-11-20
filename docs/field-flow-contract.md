@@ -277,7 +277,10 @@ checks every update first (`checkUpdate` in `src/lib/partner-form.mjs`) and send
 that don't belong to the choice blank: `talkedToDoctor` one of the three Talked To Doctor
 choices, required except on `nochange`; `meeting` a `meetingDate` today or later; `signed` a
 `signedDate` not after today, `signedProduct` up to 100; `lost` a `closedReason` of the six;
-`handback` a `note`; `note` one line, up to 300. Today is Eastern time.
+`handback` a `note`; `note` one line, up to 300. Today is Eastern time. The two day rules
+(meeting today or later, signed not after today) are checked by the page and by 7F, not by
+`/api/partner-save`, so a resend after midnight still reaches 7F's tag check. 7F skips the
+day rules on a save whose tag it already holds on any of its cases.
 
 | 7F answers | Site |
 |---|---|

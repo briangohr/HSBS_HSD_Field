@@ -3,18 +3,19 @@
 
 import { isSubmissionId } from './field-form.mjs';
 import { PartnerFlowError, saveUpdates } from './partner-flow.mjs';
-import { SAVE_WORDS, checkUpdates, easternToday, isPartnerKey, savedWords } from './partner-form.mjs';
+import { SAVE_WORDS, checkUpdates, isPartnerKey, savedWords } from './partner-form.mjs';
 
 /**
+ * The day rules (meeting today or later, signed not after today) are left to the page and to
+ * 7F, so a resend after midnight still reaches 7F's submission tag check (Codex P1 on #14).
  * @param {unknown} raw the parsed request body: { key, submissionId, updates }
- * @param {string} [today] yyyy-MM-dd, Eastern
  * @returns {Promise<{ status: number, body: Record<string, unknown> }>}
  */
-export async function partnerSave(raw, today = easternToday()) {
+export async function partnerSave(raw) {
   const b = raw && typeof raw === 'object' && !Array.isArray(raw) ? /** @type {Record<string, unknown>} */ (raw) : {};
   if (!isPartnerKey(b.key)) return { status: 404, body: { error: SAVE_WORDS.badLink } };
   if (!isSubmissionId(b.submissionId)) return { status: 400, body: { error: 'bad_value', id: null, field: 'submissionId' } };
-  const checked = checkUpdates(b.updates, today);
+  const checked = checkUpdates(b.updates, null);
   if (!checked.ok) {
     if (checked.field === 'none') return { status: 400, body: { error: 'none', message: SAVE_WORDS.nothing } };
     if (checked.field === 'tooMany') return { status: 400, body: { error: 'tooMany', message: SAVE_WORDS.tooMany } };
