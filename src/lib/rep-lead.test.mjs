@@ -323,3 +323,44 @@ describe('/api/referral-list: the Rep app gets its rows and lead screens from th
     }
   });
 });
+
+// Morgan, 11/18: a Direct Dental send read "Sent to HealthFirst" on Track. The 3F flows
+// make the Service Case with Status set and Partner Status blank, so the 1F list line
+// carries the company and no status until the partner's first update. The line still
+// names the company, so Track must speak for it.
+describe('a new case with no partner status yet', () => {
+  const STAFFING = 'HS Staffing / Recruiting Services (including GoTu)';
+  const fresh = (company) => ({
+    id: 'R9',
+    doctor: 'TEST Office Manager',
+    practice: 'TEST South Side Dental',
+    created: '2026-11-18T15:00:00Z',
+    cases: [{ company, partnerStatus: null, lastTouch: null, updated: '2026-11-18T15:05:00Z', qualified: '', notQualifiedReason: '', closedReason: '', practiceType: '' }],
+  });
+
+  test('a Direct Dental case reads "Sent to Direct Dental", never HealthFirst', () => {
+    const [lead] = leadViews([fresh(STAFFING)], TODAY);
+    assert.equal(lead.chip, 'Sent to Direct Dental');
+    assert.equal(lead.company, 'Direct Dental');
+    assert.equal(lead.tone, 'open');
+    assert.deepEqual(lead.steps.map((s) => s.label), ['Sent to Direct Dental']);
+    assert.ok(!JSON.stringify(lead).includes('HealthFirst'));
+  });
+
+  test('a HealthFirst case reads "Sent to HealthFirst", as before', () => {
+    const [lead] = leadViews([fresh('HealthFirst')], TODAY);
+    assert.equal(lead.chip, 'Sent to HealthFirst');
+    assert.deepEqual(lead.steps.map((s) => s.label), ['Sent to HealthFirst']);
+  });
+
+  test('the manager view says the same', () => {
+    const [lead] = leadViews([fresh(STAFFING)], TODAY, { team: true });
+    assert.equal(lead.chip, 'Sent to Direct Dental');
+  });
+
+  test('a line with no company is still dropped', () => {
+    const r = fresh(STAFFING);
+    r.cases[0].company = null;
+    assert.equal(leadViews([r], TODAY)[0].chip, 'Sent to HealthFirst');
+  });
+});

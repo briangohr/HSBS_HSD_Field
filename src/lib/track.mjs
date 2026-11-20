@@ -110,8 +110,11 @@ function sanitizeLine(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const row = /** @type {Record<string, unknown>} */ (raw);
   const company = s(row.company, 80);
+  // A new Service Case has its company and no Partner Status until the partner's first
+  // update (the 3F flows set Status, not Partner Status). It still names the company, so
+  // it is kept with a blank status; dropping it made Track fall back to HealthFirst.
   const status = s(row.status, 80) || s(row.partnerStatus, 80);
-  if (!company || !status) return null;
+  if (!company) return null;
   const line = {
     company,
     status,
