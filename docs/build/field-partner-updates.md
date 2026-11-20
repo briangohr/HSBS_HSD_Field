@@ -74,6 +74,22 @@ uses a fixed top count, so closed cases never crowd out open ones. If a read ret
 rows, the flow emails Brian `Field cases over 5000: raise the threshold` and stops before
 writing. Today there are 17 cases.
 
+### Writing a case (all three flows)
+
+7F, 7G and 7H all write Service Cases, and their runs can overlap, so no write may rest on
+a stale read. Every Service Case write that appends to Status Log or depends on a tag in it
+is a "Send an HTTP request to SharePoint" pair:
+
+1. GET the item right before the write, reading its `odata.etag` and current Status Log.
+2. Re-check the step's condition on that fresh copy (the `[s:...]` or `[esc:...]` tag, open,
+   Test), then MERGE the new values with header `IF-MATCH: <etag>`, Status Log built from the
+   fresh copy.
+3. A 412 (someone wrote in between) goes back to 1, up to 3 tries. A third 412 fails the
+   step: 7F answers 5xx (the page keeps the save for a retry), 7G and 7H fail the run so the
+   run history shows it, and the next run picks the case up.
+
+So no flow can erase another's Status Log line or tag.
+
 ### Words used
 
 - **Field partner:** an Active Partner Links row on the new site. A row whose Title contains
@@ -391,7 +407,7 @@ Use the TEST rep and the TEST field partner. Mail may go only to Brian.
   changes no Partner Status. A reply from Brian's own address, or from any address not on an
   Active row, changes nothing. A reply from the TEST mailbox to a real (Test off) intro
   changes nothing on that case.
-- **PU-10 (no other mail).** No run in PU-1 to PU-16 mailed anyone but Brian, and no real
+- **PU-10 (no other mail).** No run in PU-1 to PU-17 mailed anyone but Brian, and no real
   case's Missed Updates, Next Update Due or Status Log changed.
 - **PU-14 (Track date).** After a manual 7G run that adds a miss to a TEST case, the TEST
   rep's Track shows no new "Updated" date for it. After a 7F save on it, Track shows "Updated
@@ -410,6 +426,10 @@ Use the TEST rep and the TEST field partner. Mail may go only to Brian.
   about it once and writes the line again. The run after that does not email about it.
 - **PU-16 (reads).** In 7F, 7G and 7H every Get items on Service Cases has an OData filter
   and Pagination on at 5000, and no Top Count. Checked in each action's settings.
+- **PU-17 (overlapping writes).** On a TEST case, run the 7F write with an etag read before a
+  hand edit to its Status Log (the build thread gives a TEST-only manual trigger for this).
+  The MERGE gets 412, re-reads, and the case ends with both the hand edit and the save's
+  tagged line.
 - **PU-13 (TEST guard).** With `Test_only` `true` and the real rows off, a manual 7G run
   touches only Test cases and mails only Brian.
 
