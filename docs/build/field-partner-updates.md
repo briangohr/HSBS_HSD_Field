@@ -77,13 +77,18 @@ writing. Today there are 17 cases.
 ### Writing a case (all three flows)
 
 7F, 7G and 7H all write Service Cases, and their runs can overlap, so no write may rest on
-a stale read. Every Service Case write that appends to Status Log or depends on a tag in it
-is a "Send an HTTP request to SharePoint" pair:
+a stale read. Every Service Case write in these flows, with no exception, is a "Send an
+HTTP request to SharePoint" pair. That covers Status Log lines and tags, and also 7G's Next
+Update Due and Missed Updates writes (C0 and C1) and 7H's update date:
 
-1. GET the item right before the write, reading its `odata.etag` and current Status Log.
-2. Re-check the step's condition on that fresh copy (the `[s:...]` or `[esc:...]` tag, open,
-   Test), then MERGE the new values with header `IF-MATCH: <etag>`, Status Log built from the
-   fresh copy.
+1. GET the item right before the write, reading its `odata.etag` and current values.
+2. Re-check the step's condition on that fresh copy, then MERGE the new values with header
+   `IF-MATCH: <etag>`, built from the fresh copy (Status Log appended to the fresh log,
+   Missed Updates = fresh count + 1). The conditions are: the `[s:...]` or `[esc:...]` tag,
+   open, Test; for C0, Next Update Due still blank; for C1, Next Update Due still before
+   today. If the condition no longer holds, skip the case with no write. So a 7F save that
+   lands between 7G's read and its write (new due date, Missed Updates 0) is kept: C1 sees
+   the new future due date and skips.
 3. A 412 (someone wrote in between) goes back to 1, up to 3 tries. A third 412 fails the
    step: 7F answers 5xx (the page keeps the save for a retry), 7G and 7H fail the run so the
    run history shows it, and the next run picks the case up.
@@ -281,12 +286,12 @@ below reads only Service Cases with Test on and only Partner Links rows whose Ti
 `false` at go-live (live step 8), the only edit the package needs.
 
 0. **Set missing due dates.** Get Service Cases (Reading Service Cases). For each open case with Introduced
-   On and a blank Next Update Due: write Next Update Due = the later of today and `Created` +
+   On and a blank Next Update Due: write (Writing a case) Next Update Due = the later of today and `Created` +
    `Window_days` business days. From here on every open case has a stored due date. On
    go-live day every older case gets today, so it is listed today and first missed tomorrow
    (O7), and a case made yesterday keeps its own 2 business days.
 1. **Count misses.** For each open case with Introduced On whose Next Update Due is before
-   today: Missed Updates + 1, Next Update Due = today + `Window_days` business days. A
+   today, a write (Writing a case): Missed Updates + 1, Next Update Due = today + `Window_days` business days. A
    partner who never saves therefore gains one miss per missed window: the first business
    day after each due date, about every 2 business days, so 2 misses take about 4 business
    days (O4).
@@ -430,6 +435,9 @@ Use the TEST rep and the TEST field partner. Mail may go only to Brian.
   hand edit to its Status Log (the build thread gives a TEST-only manual trigger for this).
   The MERGE gets 412, re-reads, and the case ends with both the hand edit and the save's
   tagged line.
+  Second part: on a TEST case past due, run the 7G C1 write with an etag read before a 7F
+  save on that case. The MERGE gets 412, re-reads, sees the future due date and skips. The
+  case keeps Missed Updates 0 and the save's due date.
 - **PU-13 (TEST guard).** With `Test_only` `true` and the real rows off, a manual 7G run
   touches only Test cases and mails only Brian.
 
