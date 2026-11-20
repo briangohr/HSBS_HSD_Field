@@ -10,7 +10,7 @@
     "astro": "astro",
     "check": "astro check",
     "test": "node --import ./scripts/test-register.mjs --test --test-concurrency=1 src/lib/*.test.mjs",
-    "e2e": "node scripts/e2e/rep-app.e2e.mjs && node scripts/e2e/refer.e2e.mjs"
+    "e2e": "node scripts/e2e/rep-app.e2e.mjs && node scripts/e2e/refer.e2e.mjs && node scripts/e2e/partner.e2e.mjs"
   },
   "dependencies": {
     "@astrojs/vercel": "^11.0.11",

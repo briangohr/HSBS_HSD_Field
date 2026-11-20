@@ -1,0 +1,433 @@
+---
+// Partner update page (sheet PU, piece A). The key is a Partner Links Link Key, a secret in
+// the URL. HSBS 7F (PARTNER_FLOW_URL) resolves it to one Active Partner Links row and lists
+// that partner's open leads; Save posts to /api/partner-save. The flow URL never reaches
+// the browser. Off (404) unless PARTNER_PAGE_ENABLED and REP_APP_ENABLED are both exactly
+// true. No analytics. Contract: docs/field-flow-contract.md, "HSBS 7F".
+import '../../styles/global.css';
+import { clientIp, journeyLimited } from '../../lib/http';
+import { PartnerFlowError, listLeads, partnerPageEnabled } from '../../lib/partner-flow.mjs';
+import {
+  CLOSED_REASONS,
+  MAX_UPDATES,
+  NOTE_MAX,
+  PRODUCT_MAX,
+  SAVE_WORDS,
+  TALKED_CHOICES,
+  easternToday,
+  isPartnerKey,
+  savedWords,
+  showDate,
+} from '../../lib/partner-form.mjs';
+import { STAND_CHOICES, displayStatus } from '../../lib/partner-status-words.mjs';
+
+export const prerender = false;
+
+if (!partnerPageEnabled()) {
+  return new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+}
+
+const key = String(Astro.params.key ?? '').trim();
+let state: 'invalid' | 'expired' | 'busy' | 'unavailable' | 'ready' = 'invalid';
+let partner = '';
+let leads: Awaited<ReturnType<typeof listLeads>>['leads'] = [];
+
+if (isPartnerKey(key)) {
+  let ip: string;
+  try {
+    ip = Astro.clientAddress;
+  } catch {
+    ip = clientIp(Astro.request);
+  }
+  // Each open runs 7F. 60 per key per 10 minutes, with the per-IP backstop, as /refer.
+  if (journeyLimited('partner-page', key, ip, 60, true)) {
+    state = 'busy';
+  } else {
+    try {
+      const answer = await listLeads(key);
+      partner = answer.partner;
+      leads = answer.leads;
+      state = 'ready';
+    } catch (err) {
+      const kind = err instanceof PartnerFlowError ? err.kind : 'failed';
+      state = kind === 'unknown' ? 'invalid' : kind === 'expired' ? 'expired' : 'unavailable';
+      if (state === 'unavailable') console.error('update page: flow', kind, err instanceof PartnerFlowError ? err.status : 0);
+    }
+  }
+}
+
+Astro.response.headers.set('Cache-Control', 'no-store');
+Astro.response.headers.set('Referrer-Policy', 'same-origin');
+Astro.response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+Astro.response.status = { invalid: 404, expired: 410, busy: 429, unavailable: 503, ready: 200 }[state];
+
+const today = easternToday();
+const savedParam = Number(Astro.url.searchParams.get('saved') ?? '');
+const saved = state === 'ready' && Number.isSafeInteger(savedParam) && savedParam > 0 && savedParam <= MAX_UPDATES ? savedWords(savedParam) : '';
+const nowLine = (status: string) => displayStatus(status) || 'No update yet';
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="same-origin" />
+    <meta name="theme-color" content="#002f6d" />
+    <title>{partner ? `Lead updates | ${partner}` : 'Lead updates'}</title>
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body class="pu">
+    <header class="pu-top">
+      <img src="/logos/HSBS_horizontal_color.svg" alt="Henry Schein Business Solutions" height="32" />
+    </header>
+
+    <main class="pu-main" id="main">
+      {
+        state === 'invalid' && (
+          <section class="pu-card">
+            <h1>{SAVE_WORDS.badLink}</h1>
+            <p>Open the update link in your latest email from HSBS.</p>
+          </section>
+        )
+      }
+      {
+        state === 'expired' && (
+          <section class="pu-card">
+            <h1>{SAVE_WORDS.expired}</h1>
+          </section>
+        )
+      }
+      {
+        state === 'busy' && (
+          <section class="pu-card">
+            <h1>{SAVE_WORDS.busy}</h1>
+          </section>
+        )
+      }
+      {
+        state === 'unavailable' && (
+          <section class="pu-card">
+            <h1>This page is not available right now.</h1>
+            <p>Try the link again in a few minutes.</p>
+          </section>
+        )
+      }
+
+      {
+        state === 'ready' && (
+          <form id="pu-form" class="pu-form" data-key={key} novalidate>
+            <h1 class="pu-h1">{partner ? `Lead updates for ${partner}` : 'Lead updates'}</h1>
+            <p class="pu-intro">
+              Please update each lead within 2 business days. Answer only the leads that changed, then press Save once.
+            </p>
+            <p id="pu-status" class="pu-status" role="status" aria-live="polite">{saved}</p>
+            <noscript>
+              <p class="pu-status">Turn on JavaScript to save updates.</p>
+            </noscript>
+
+            {leads.length === 0 && <p class="pu-card">No leads need an update right now. Thank you.</p>}
+
+            <ol class="pu-leads">
+              {leads.map((lead) => (
+                <li class="pu-lead" data-id={String(lead.id)} data-ref={lead.ref}>
+                  <fieldset class="pu-card" aria-labelledby={`lead-${lead.id}-title`}>
+                    <h2 class="pu-ref" id={`lead-${lead.id}-title`}>
+                      {lead.ref}: {lead.practice}
+                    </h2>
+                    <p class="pu-sub">{[lead.contact, lead.company].filter(Boolean).join(', ')}</p>
+                    <p class="pu-sub">
+                      {lead.introducedOn ? `Introduced ${showDate(lead.introducedOn)}. ` : ''}Now: {nowLine(lead.status)}
+                      {lead.meetingDate ? `, meeting ${showDate(lead.meetingDate)}` : ''}
+                    </p>
+                    <p class={lead.missedUpdates > 0 ? 'pu-due pu-due--late' : 'pu-due'}>
+                      {lead.missedUpdates > 0 ? 'Overdue' : lead.nextUpdateDue ? `Update due ${showDate(lead.nextUpdateDue)}` : ''}
+                    </p>
+
+                    <fieldset class="pu-q" data-q="talked">
+                      <legend>Have you talked to the doctor?</legend>
+                      {TALKED_CHOICES.map((c) => (
+                        <label class="pu-opt">
+                          <input type="radio" name={`talked-${lead.id}`} value={c} checked={lead.talkedToDoctor === c} data-start={lead.talkedToDoctor === c ? '1' : ''} />
+                          <span>{c}</span>
+                        </label>
+                      ))}
+                    </fieldset>
+
+                    <fieldset class="pu-q" data-q="choice">
+                      <legend>Where does it stand?</legend>
+                      {STAND_CHOICES.map((c) => (
+                        <label class="pu-opt">
+                          <input type="radio" name={`choice-${lead.id}`} value={c.code} />
+                          <span>{c.label}</span>
+                        </label>
+                      ))}
+                    </fieldset>
+
+                    <div class="pu-more" data-for="meeting" hidden>
+                      <label class="pu-field">
+                        <span>Meeting date</span>
+                        <input type="date" name={`meetingDate-${lead.id}`} min={today} />
+                      </label>
+                    </div>
+                    <div class="pu-more" data-for="signed" hidden>
+                      <label class="pu-field">
+                        <span>Signed date</span>
+                        <input type="date" name={`signedDate-${lead.id}`} max={today} />
+                      </label>
+                      <label class="pu-field">
+                        <span>Product (optional)</span>
+                        <input type="text" name={`signedProduct-${lead.id}`} maxlength={PRODUCT_MAX} autocomplete="off" />
+                      </label>
+                    </div>
+                    <div class="pu-more" data-for="lost" hidden>
+                      <label class="pu-field">
+                        <span>Reason</span>
+                        <select name={`closedReason-${lead.id}`}>
+                          <option value="">Pick a reason</option>
+                          {CLOSED_REASONS.map((r) => (
+                            <option value={r}>{r}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <label class="pu-field">
+                      <span data-note-label>Note (optional)</span>
+                      <input type="text" name={`note-${lead.id}`} maxlength={NOTE_MAX} autocomplete="off" />
+                    </label>
+                    <p class="pu-err" role="alert" hidden />
+                  </fieldset>
+                </li>
+              ))}
+            </ol>
+
+            {leads.length > 0 && (
+              <button type="submit" id="pu-save" class="pu-save" disabled>
+                Save
+              </button>
+            )}
+          </form>
+        )
+      }
+    </main>
+
+    <style is:global>
+      body.pu { background: var(--bg-accent); }
+      .pu-top { background: #fff; border-bottom: 3px solid var(--hs-navy); padding: 0.85rem 1rem; }
+      .pu-top img { height: 32px; width: auto; display: block; }
+      .pu-main { width: min(100% - 1.5rem, 40rem); margin: 0 auto; padding: 1rem 0 calc(1.5rem + env(safe-area-inset-bottom)); }
+      .pu-card {
+        background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
+        padding: 1rem; margin: 0 0 0.9rem; min-width: 0;
+      }
+      .pu-card h1 { font-size: 1.3rem; color: var(--hs-navy); margin: 0 0 0.4rem; }
+      .pu-h1 { font-size: 1.4rem; color: var(--hs-navy); margin: 0.2rem 0 0.4rem; overflow-wrap: anywhere; }
+      .pu-intro { margin: 0 0 0.6rem; }
+      .pu-status { font-weight: 600; margin: 0 0 0.8rem; min-height: 1.2em; overflow-wrap: anywhere; }
+      .pu-leads { list-style: none; margin: 0; padding: 0; }
+      .pu-ref { font-size: 1.1rem; color: var(--hs-navy); margin: 0 0 0.25rem; overflow-wrap: anywhere; }
+      .pu-sub { margin: 0.1rem 0; color: var(--muted); overflow-wrap: anywhere; }
+      .pu-due { margin: 0.3rem 0 0.6rem; font-weight: 600; }
+      .pu-due--late { color: var(--btn-red); }
+      .pu-q { border: 0; margin: 0.6rem 0 0; padding: 0; min-width: 0; }
+      .pu-q legend { font-weight: 600; margin-bottom: 0.2rem; padding: 0; }
+      .pu-opt { display: flex; align-items: center; gap: 0.6rem; min-height: 44px; cursor: pointer; overflow-wrap: anywhere; }
+      .pu-opt input { width: 1.2rem; height: 1.2rem; flex: 0 0 auto; margin: 0; }
+      .pu-field { display: flex; flex-direction: column; gap: 0.25rem; margin: 0.6rem 0 0; font-weight: 600; }
+      .pu-field input, .pu-field select {
+        min-height: 44px; font: inherit; font-weight: 400; padding: 0.4rem 0.6rem; border: 1px solid var(--line);
+        border-radius: 8px; width: 100%; box-sizing: border-box; background: #fff;
+      }
+      .pu-more[hidden], .pu-err[hidden] { display: none; }
+      .pu-err { color: var(--btn-red); font-weight: 600; margin: 0.6rem 0 0; overflow-wrap: anywhere; }
+      .pu-card:disabled { opacity: 0.75; }
+      .pu-save {
+        min-height: 48px; width: 100%; font: inherit; font-weight: 700; font-size: 1.05rem; border: 0; border-radius: 10px;
+        background: var(--hs-blue); color: #fff; cursor: pointer;
+      }
+      .pu-save:disabled { opacity: 0.6; cursor: default; }
+      .pu-save:focus-visible, .pu-opt input:focus-visible, .pu-field input:focus-visible, .pu-field select:focus-visible {
+        outline: 3px solid var(--hs-sky); outline-offset: 2px;
+      }
+    </style>
+
+    <script>
+      import { CLIENT_WAIT_MS } from '../../lib/field-form.mjs';
+      import { MAX_UPDATES, SAVE_WORDS, checkUpdate, easternToday, fieldWords, reloadWords, savedWords } from '../../lib/partner-form.mjs';
+
+      const form = document.getElementById('pu-form') as HTMLFormElement | null;
+      const button = document.getElementById('pu-save') as HTMLButtonElement | null;
+      const status = document.getElementById('pu-status');
+      if (form && button && status) {
+        const key = form.dataset.key ?? '';
+        const leads = [...form.querySelectorAll<HTMLLIElement>('.pu-lead')];
+        // A save with no clear answer keeps its id and its exact body, so Save resends it.
+        let pending: { submissionId: string; updates: Record<string, unknown>[] } | null = null;
+        let busy = false;
+
+        const field = (li: HTMLLIElement, name: string) => {
+          const item = form.elements.namedItem(`${name}-${li.dataset.id}`);
+          if (!item) return '';
+          if (item instanceof RadioNodeList) return item.value;
+          return (item as HTMLInputElement).value.trim();
+        };
+        const card = (li: HTMLLIElement) => li.querySelector('fieldset.pu-card') as HTMLFieldSetElement;
+        const errorLine = (li: HTMLLIElement) => li.querySelector('.pu-err') as HTMLElement;
+        // Talked To Doctor may already be stored; only a changed answer counts as touched.
+        const talkedChanged = (li: HTMLLIElement) => {
+          const start = li.querySelector<HTMLInputElement>('input[data-start="1"]')?.value ?? '';
+          return field(li, 'talked') !== start;
+        };
+        const touched = (li: HTMLLIElement) => Boolean(field(li, 'choice') || field(li, 'note') || talkedChanged(li));
+
+        const showMore = (li: HTMLLIElement) => {
+          const choice = field(li, 'choice');
+          li.querySelectorAll<HTMLElement>('[data-for]').forEach((el) => {
+            el.hidden = el.dataset.for !== choice;
+          });
+          const label = li.querySelector('[data-note-label]');
+          if (label) label.textContent = choice === 'handback' ? 'Note (required)' : 'Note (optional)';
+        };
+        leads.forEach((li) => {
+          showMore(li);
+          li.addEventListener('change', () => showMore(li));
+        });
+
+        const clearErrors = () =>
+          leads.forEach((li) => {
+            const line = errorLine(li);
+            line.hidden = true;
+            line.textContent = '';
+          });
+        const flag = (li: HTMLLIElement, words: string) => {
+          const line = errorLine(li);
+          line.textContent = words;
+          line.hidden = false;
+        };
+        const lock = (on: boolean) => leads.forEach((li) => (card(li).disabled = on));
+        const byId = (id: unknown) => leads.find((li) => li.dataset.id === String(id));
+
+        const collect = () => {
+          const today = easternToday();
+          const updates: Record<string, unknown>[] = [];
+          let first: { li: HTMLLIElement; words: string } | null = null;
+          for (const li of leads) {
+            if (!touched(li)) continue;
+            const ref = li.dataset.ref ?? '';
+            const result = checkUpdate(
+              {
+                id: Number(li.dataset.id),
+                choice: field(li, 'choice'),
+                talkedToDoctor: field(li, 'talked'),
+                meetingDate: field(li, 'meetingDate'),
+                signedDate: field(li, 'signedDate'),
+                signedProduct: field(li, 'signedProduct'),
+                closedReason: field(li, 'closedReason'),
+                note: field(li, 'note'),
+              },
+              today,
+            );
+            if (result.ok) {
+              updates.push(result.update);
+            } else {
+              const words = fieldWords(ref, result.field);
+              flag(li, words);
+              first ??= { li, words };
+            }
+          }
+          return { updates, first };
+        };
+
+        const send = async (submissionId: string, updates: Record<string, unknown>[]) => {
+          busy = true;
+          button.disabled = true;
+          lock(true);
+          status.textContent = SAVE_WORDS.sending;
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), CLIENT_WAIT_MS);
+          let res: Response | null = null;
+          let data: Record<string, unknown> | null = null;
+          try {
+            res = await fetch('/api/partner-save', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ key, submissionId, updates }),
+              signal: controller.signal,
+            });
+            data = await res.json().catch(() => null);
+          } catch {
+            res = null;
+          } finally {
+            clearTimeout(timer);
+          }
+          busy = false;
+          const code = res?.status ?? 0;
+          if (code === 200 && data?.ok === true && typeof data.saved === 'number') {
+            pending = null;
+            status.textContent = savedWords(data.saved);
+            location.replace(`${location.pathname}?saved=${data.saved}`);
+            return;
+          }
+          if (code === 404 || code === 410) {
+            pending = null;
+            status.textContent = code === 410 ? SAVE_WORDS.expired : SAVE_WORDS.badLink;
+            return;
+          }
+          if (code === 400 || code === 422) {
+            // A clear refusal: nothing in this save was written. Every typed answer stays.
+            pending = null;
+            lock(false);
+            button.disabled = false;
+            const li = byId(data?.id);
+            const ref = li?.dataset.ref ?? '';
+            let words = typeof data?.message === 'string' ? data.message : 'Check your answers, then press Save again.';
+            if (li && data?.error === 'reload') words = reloadWords(ref);
+            else if (li) words = fieldWords(ref, typeof data?.field === 'string' ? data.field : '');
+            if (li) flag(li, words);
+            status.textContent = words;
+            return;
+          }
+          // No clear answer (timeout, dropped connection, 429, 5xx): it may have gone through.
+          // Keep the id and the exact updates; the answers stay locked so Save resends them.
+          pending = { submissionId, updates };
+          button.disabled = false;
+          status.textContent = code === 429 ? SAVE_WORDS.busy : SAVE_WORDS.timeout;
+        };
+
+        form.addEventListener('submit', (event) => {
+          event.preventDefault();
+          if (busy) return;
+          if (pending) {
+            void send(pending.submissionId, pending.updates);
+            return;
+          }
+          clearErrors();
+          const { updates, first } = collect();
+          if (first) {
+            status.textContent = first.words;
+            first.li.querySelector<HTMLElement>('input, select')?.focus();
+            return;
+          }
+          if (updates.length === 0) {
+            status.textContent = SAVE_WORDS.nothing;
+            return;
+          }
+          if (updates.length > MAX_UPDATES) {
+            status.textContent = SAVE_WORDS.tooMany;
+            return;
+          }
+          void send(crypto.randomUUID(), updates);
+        });
+
+        button.disabled = false;
+        // A saved message shows once; a refresh does not repeat it.
+        if (location.search.includes('saved=')) history.replaceState(null, '', location.pathname);
+      }
+    </script>
+  </body>
+</html>

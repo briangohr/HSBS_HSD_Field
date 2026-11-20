@@ -1,7 +1,7 @@
 # Field app: what the site sends and expects
 
-The site side of the contract between this site and its two Power Automate flows. The
-flow side (how 1F and 1J are built, step by step) lives in the build sheets in `docs/build/`
+The site side of the contract between this site and its three Power Automate flows. The
+flow side (how 1F, 1J and 7F are built, step by step) lives in the build sheets in `docs/build/`
 and on the Field Build Desk. When the two disagree, stop and ask Brian.
 
 Rules for both flows: one HTTP trigger per flow, method POST, JSON in and JSON out. The
@@ -22,6 +22,8 @@ route answers 404 and no flow is called.
 | `REP_APP_ENABLED` | The switch above | No |
 | `FIELD_FLOW_URL` | HSBS 1F trigger URL, `https` only | Yes |
 | `REGISTER_FLOW_URL` | HSBS 1J trigger URL, `https` only | Yes |
+| `PARTNER_PAGE_ENABLED` | `/update/<key>` and `/api/partner-save`, exactly `true` (and `REP_APP_ENABLED`). Off: 404 and no 7F call | No |
+| `PARTNER_FLOW_URL` | HSBS 7F Field partner (new site) trigger URL, `https` only | Yes |
 | `REP_APP_COMPANIES` | Which companies Send offers: `HealthFirst`, `Staffing`, comma separated. Unset is HealthFirst only | No |
 | `REP_PAY_ENABLED` | Dollar amounts on screens, exactly `true`. Off until Brian approves pay | No |
 | `REP_PAY_PLAN` | HealthFirst pay plan words (`src/lib/rep-pay-plan.mjs`) | No |
@@ -198,6 +200,13 @@ because the 3F flows set Status, not Partner Status. Such a line reads "Sent to"
 company ("Sent to Direct Dental"). Only a referral with no line at all reads "Sent to
 HealthFirst".
 
+**`updated` (sheet PU, piece E).** 1F (new site) sends a case's `updated` from Last Partner
+Update, not Modified: `@coalesce(item()?['Last_x0020_Partner_x0020_Update'], '')` in
+`Select_cases_rep` and `Select_cases_team`. Only a partner save (7F) or a partner reply
+(7H) stamps it, so a flow's own write to a case (7G's miss count) never reads on Track as an
+update. A blank `updated` falls back to `lastTouch`, then to the referral's sent date, as
+before.
+
 ### earnings
 
 ```json
@@ -224,9 +233,71 @@ ledger rows with Payee Role `Manager`. Only 404 means "no team"; every other fai
 never a team cut short. The raw answer stays on the server; `src/lib/rep-team.mjs` shapes
 what the browser gets (no rep email, no key).
 
+## HSBS 7F Field partner (`/update/<key>`)
+
+The partner update page (sheet PU, `docs/build/field-partner-updates.md`, pieces A and B).
+`<key>` is a Partner Links Link Key: 40 hex characters. Any other key is 404 before any
+call. Every body carries `key` and nothing that names a person. 7F is the gate: it finds
+exactly one Active Partner Links row with the key and lists or writes only that partner's
+open cases, Test matching the row. `src/lib/partner-flow.mjs` is the only module that posts
+to 7F. Waits: 20 s for `leads`, 55 s for `save`.
+
+### leads
+
+```json
+{ "action": "leads", "key": "<40 hex>" }
+```
+
+200 `{ "partner": "<Partner Links Title>", "leads": [ ... ] }`. Each lead: `id` (Service
+Cases item id), `ref` (the Referrals Title: `HSBS-F<n>`, or `HSBS-A<n>` for the 12 moved
+from the old site), `practice`, `contact`, `company`, `introducedOn`,
+`status` (Partner Status), `talkedToDoctor`, `meetingDate`, `nextUpdateDue`,
+`missedUpdates`. Dates are `yyyy-MM-dd`. The site keeps only these (`readLead`); anything
+else, a phone, email or JDE included, is dropped. A lead with a bad `id` or `ref` is
+dropped. More than 500 leads is a failed read. The page sorts overdue (Missed Updates above
+0) first, then by due date.
+
+### save
+
+```json
+{
+  "action": "save",
+  "key": "<40 hex>",
+  "submissionId": "<uuid>",
+  "updates": [
+    { "id": 36, "choice": "meeting", "talkedToDoctor": "Yes", "meetingDate": "2026-11-24",
+      "signedDate": "", "signedProduct": "", "closedReason": "", "note": "" }
+  ]
+}
+```
+
+1 to 50 updates, each lead once, only the leads the partner touched. `choice` is one of
+`meeting`, `proposal`, `signed`, `lost`, `handback`, `nochange` (`STAND_CHOICES`). The site
+checks every update first (`checkUpdate` in `src/lib/partner-form.mjs`) and sends fields
+that don't belong to the choice blank: `talkedToDoctor` one of the three Talked To Doctor
+choices, required except on `nochange`; `meeting` a `meetingDate` today or later; `signed` a
+`signedDate` not after today, `signedProduct` up to 100; `lost` a `closedReason` of the six;
+`handback` a `note`; `note` one line, up to 300. Today is Eastern time. The two day rules
+(meeting today or later, signed not after today) are checked by the page and by 7F, not by
+`/api/partner-save`, so a resend after midnight still reaches 7F's tag check. 7F skips the
+day rules on a save whose tag it already holds on any of its cases.
+
+| 7F answers | Site |
+|---|---|
+| 200 `{"ok":true,"saved":n}` | Success, "Saved n updates." Nothing else is success: a 202, a 200 without `ok` true and a whole `saved`, or non-JSON is no clear answer |
+| 404 | "This link does not work." |
+| 410 (Key Expires past or blank) | "This link has expired. Use the link in your latest email." |
+| 422 `{"error":"reload","id":n}` | "Lead HSBS-F<n> changed. Reload the page." Nothing was written |
+| 422 `{"error":"bad_value","id":n}` | Names the lead. Nothing was written |
+| 3xx, 408, 429, 5xx, timeout | "This is taking too long. It may already have gone through. Press Save again; it will not save twice." |
+
+A save with no clear answer keeps its `submissionId` and the exact updates; the answers
+lock and Save resends them. 7F tags each Status Log line `[s:<submissionId>]` and skips a
+case that already holds the tag, so a resend writes nothing twice.
+
 ## What must stay true
 
-- The key is a secret in the URL. Pages that carry it set `Cache-Control: no-store`,
+- The key (Referral Key or Partner Links Link Key) is a secret in the URL. Pages that carry it set `Cache-Control: no-store`,
   `X-Robots-Tag: noindex, nofollow` and load no analytics.
 - Track and Earnings return rows only for a key the lookup confirms as a Rep. A key the
   lookup refuses gets 404 and a failed lookup gets 502, even when `list` or `earnings`
