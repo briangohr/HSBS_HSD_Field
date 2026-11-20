@@ -330,19 +330,22 @@ below reads only Service Cases with Test on and only Partner Links rows whose Ti
 ## D. HSBS 7H Field email reply capture (new site)
 
 Trigger: Office 365 "When a new email arrives (V3)", Inbox, subject filter
-`HSBS referral HSBS-F`. Runs on Brian's mailbox, the connection 3F already uses. It only
+`HSBS referral HSBS-`, so refs `HSBS-A<n>` (moved from the old site) and `HSBS-F<n>` both match. Runs on Brian's mailbox, the connection 3F already uses. It only
 reads and writes SharePoint. It sends nothing.
 
 1. Condition: the sender is not Brian, and the sender's address equals the Email or a
    CC Email of an Active Partner Links row. Otherwise Terminate (Succeeded).
-2. Ref: the first `HSBS-F` followed by digits in the subject. None: Terminate.
+2. Ref: the word right after `HSBS referral ` in the subject, cut at the first `:` or space. It must be
+   `HSBS-A` or `HSBS-F` followed by digits only. Anything else: Terminate. The ref is checked
+   before it goes into the OData filter, so a subject cannot change the filter.
 3. Find the case: Service Cases whose Title starts with `<ref> |`, whose Service is in that
    partner's Services, and whose Test matches the row (TEST row: Test on; real row: Test
    off), as "Its cases" says. Not exactly 1, or not open: Terminate. So the TEST mailbox can
    never touch a real case.
 4. Update the case: Last Partner Update = received time, Missed Updates 0, Next Update Due =
    today + `Window_days` business days, Partner Updated By = partner Title, Status Log new line
-   `<today> <partner>: replied by email.` Partner Status is left as it is. The email body is
+   `<today> <partner>: replied by email. [r:<received yyyyMMddHHmmss>]`. A fresh copy that already
+   holds that tag is done, so a resubmitted run writes nothing twice. Partner Status is left as it is. The email body is
    not stored.
 
 The reply resets the clock so the partner is not asked again for a lead they just answered.
@@ -380,7 +383,9 @@ Each one is a paste-ready block or a package from the build thread, with a direc
 2. Import 7F. Turn it On. Copy its trigger URL into Vercel `PARTNER_FLOW_URL` (Preview first).
 3. Approve and merge the page PR. Set `PARTNER_PAGE_ENABLED=true` on Preview.
 4. Import 7G with `Test_only` `true`, and paste the page PR's Preview address into
-   `Preview_base`. Leave it Off; run it by hand for the TEST checks.
+   `Preview_base` (the package already holds the Preview address used for part A). Turn it On:
+   with `Test_only` `true` its 8:00 AM runs touch only Test cases and mail only Brian. Run it by
+   hand (Run) for the TEST checks.
 5. Import 7H and turn it On.
 6. Paste piece E into 1F (new site), both Select boxes, and save with 0 errors. 1F stays On;
    the change is safe for the live Track.
@@ -442,13 +447,15 @@ Use the TEST rep and the TEST field partner. Mail may go only to Brian.
   about it once and writes the line again. The run after that does not email about it.
 - **PU-16 (reads).** In 7F, 7G and 7H every Get items on Service Cases has an OData filter
   and Pagination on at 5000, and no Top Count. Checked in each action's settings.
-- **PU-17 (overlapping writes).** On a TEST case, run the 7F write with an etag read before a
-  hand edit to its Status Log (the build thread gives a TEST-only manual trigger for this).
-  The MERGE gets 412, re-reads, and the case ends with both the hand edit and the save's
-  tagged line.
-  Second part: on a TEST case past due, run the 7G C1 write with an etag read before a 7F
-  save on that case. The MERGE gets 412, re-reads, sees the future due date and skips. The
-  case keeps Missed Updates 0 and the save's due date.
+- **PU-17 (overlapping writes).** A flow run cannot be paused between its etag read and its
+  MERGE, so this check has two halves (part B, 11/20). Server: on a TEST case, read the item
+  and keep its etag, hand edit its Status Log, then send a MERGE with the old etag. SharePoint
+  answers 412 and the hand edit stays (Claude in Brian's Chrome with his go-ahead, TEST case
+  only). Flows: in 7F, 7G (C0, C1, escalation line) and 7H, every Service Case write is a
+  `Write_until` loop whose GET runs on every try, whose re-check reads only that fresh copy,
+  and whose MERGE sends that copy's etag in `IF-MATCH`; a 412 retries, anything else fails
+  the run. Checked in each package. Together these show a 7G C1 write that loses to a 7F
+  save re-reads, sees the new due date and skips.
 - **PU-13 (TEST guard).** With `Test_only` `true` and the real rows off, a manual 7G run
   touches only Test cases and mails only Brian.
 
