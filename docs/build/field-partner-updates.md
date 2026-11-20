@@ -23,7 +23,7 @@ Part 1 audit, 11/20: field partners get an intro and nothing after it.
 
 | # | Fact | Evidence |
 |---|---|---|
-| 1 | Track already shows Partner Status. 1F `list` sends each case's `Partner_x0020_Status` as `partnerStatus` and `Modified` as `updated`. A save that writes Partner Status shows on Track with no site or 1F change | 1F (new site) package, `Select_cases_rep`; `src/lib/track.mjs` `sanitizeLine` |
+| 1 | Track already shows Partner Status. 1F `list` sends each case's `Partner_x0020_Status` as `partnerStatus` and `Modified` as `updated`. A save that writes Partner Status shows on Track with no site change. But Track reads `updated` (Modified) as the update date and for its 7-day stale line, so any flow write to a case (7G's miss count) would look like a partner update. Piece E fixes that | 1F (new site) package, `Select_cases_rep`; `src/lib/track.mjs` `sanitizeLine` |
 | 2 | 1F `list` sends no note, history or meeting date. Track can show the status word and "Updated <date>" only | Same |
 | 3 | Partner Status choices on Service Cases already hold every word Track knows: `Meeting set`, `Proposal or agreement sent`, `Signed`, `Not moving forward`, `Hand back to HSBS`, `No change this week`, plus older values | Service Cases field read, `src/lib/partner-status-words.mjs` `STAND_WORDS` |
 | 4 | Service Cases has every column the save needs: Partner Status, Talked To Doctor (`Yes`, `Not yet, still trying`, `Not yet, haven't tried`), Last Touch, Last Partner Update, Partner Updated By, Missed Updates, Next Update Due, Meeting Date, Signed Date, Signed Product, Closed Reason (8 choices), Closed On, Hand Back Note, Status Log, Test, Referral (lookup) | Service Cases field read. No column to add |
@@ -46,6 +46,7 @@ old 7A, 7B, 7C or 7D, or any "FSC copy".
 | B | HSBS 7F Field partner (new site) | HTTP flow: `leads` and `save` for the page | Package |
 | C | HSBS 7G Field daily ask (new site) | Weekdays 8:00 AM ET: count misses, email each partner its due leads, escalate to Brian at 2 misses | Package |
 | D | HSBS 7H Field email reply capture (new site) | A partner's reply to an intro logs an update on the case | Package (Q1, Brian, 11/20: yes) |
+| E | 1F (new site) list date | `updated` comes from Last Partner Update, not Modified | One paste-ready block per Select box |
 
 Names: "7F" to "7H" are new numbers so no field flow shares a name with an old one.
 
@@ -242,7 +243,7 @@ check package does). First step: when today is on `Holidays`, Terminate (Succeed
 **TEST guard.** A Compose `Test_only`, `true` in the package. While it is `true`, every step
 below reads only Service Cases with Test on and only Partner Links rows whose Title contains
 `TEST`, so a run can neither mail a real partner nor change a real case. Brian sets it to
-`false` at go-live (live step 7), the only edit the package needs.
+`false` at go-live (live step 8), the only edit the package needs.
 
 0. **Set missing due dates.** Get Service Cases (top 500). For each open case with Introduced
    On and a blank Next Update Due: write Next Update Due = the later of today and `Created` +
@@ -290,7 +291,15 @@ show one.
 
 ## What the site, 1F and 3F keep
 
-- 1F, 3F HealthFirst and 3F Staffing: no change. Track needs none (fact 1).
+- 3F HealthFirst and 3F Staffing: no change. The site: no change (fact 1).
+- **E. 1F (new site), one change.** In `Select_cases_rep` and `Select_cases_team`, the
+  `updated` value becomes `@coalesce(item()?['Last_x0020_Partner_x0020_Update'], '')` in place
+  of `@item()?['Modified']`. Only a partner save (7F) or a partner reply (7H) stamps Last
+  Partner Update, so 7G's miss count and due-date writes never read on Track as an update. A
+  case with no partner update sends `""`; the site then falls back to `lastTouch` (also only
+  stamped by 7F) and then to the referral's sent date, so "No update in N days" counts from
+  the send, as today. The build PR records this in `docs/field-flow-contract.md`, `list`.
+  Rollback: paste `@item()?['Modified']` back.
 - The 7-day "No update in N days" line on Track stays (O5).
 - Later, not in this build: 1F sends the case's last Status Log line as `detail`, so Track
   shows the partner's note. That is a 1F and contract change of its own; it must drop the
@@ -304,17 +313,19 @@ Each one is a paste-ready block or a package from the build thread, with a direc
    `TEST field partner` (Active on, Email: Brian, Services: HealthFirst and the staffing
    service); `HealthFirst` (Active **off**, Email and CC as the 3F HealthFirst intro sends
    today, Services: HealthFirst); `Direct Dental` (Active **off**, Email as the Routing row,
-   Services: the staffing service). The real rows stay off until step 7, so no TEST run, page
+   Services: the staffing service). The real rows stay off until step 8, so no TEST run, page
    or reply capture can reach a real partner.
 2. Import 7F. Turn it On. Copy its trigger URL into Vercel `PARTNER_FLOW_URL` (Preview first).
 3. Approve and merge the page PR. Set `PARTNER_PAGE_ENABLED=true` on Preview.
 4. Import 7G with `Test_only` `true`. Leave it Off; run it by hand for the TEST checks.
 5. Import 7H and turn it On.
-6. Run every check below on Preview with TEST rows.
-7. Only after all pass: `PARTNER_PAGE_ENABLED=true` and `PARTNER_FLOW_URL` on Production; turn
+6. Paste piece E into 1F (new site), both Select boxes, and save with 0 errors. 1F stays On;
+   the change is safe for the live Track.
+7. Run every check below on Preview with TEST rows.
+8. Only after all pass: `PARTNER_PAGE_ENABLED=true` and `PARTNER_FLOW_URL` on Production; turn
    the HealthFirst and Direct Dental rows Active on; set 7G's `Test_only` to `false`; turn 7G
    On. Its first 8:00 AM run sends each real partner one full list (O7).
-8. Send the two-line partner note (Claude drafts, Brian sends) the same day.
+9. Send the two-line partner note (Claude drafts, Brian sends) the same day.
 
 Imports arrive Off: turn each On when its step says so.
 
@@ -346,8 +357,11 @@ Use the TEST rep and the TEST field partner. Mail may go only to Brian.
 - **PU-9 (reply capture).** A reply from a TEST partner address to a
   `[TEST] HSBS referral HSBS-F<n>` intro stamps Last Partner Update and the Status Log line
   and changes no Partner Status. A reply from any other sender changes nothing.
-- **PU-10 (no other mail).** No run in PU-1 to PU-13 mailed anyone but Brian, and no real
+- **PU-10 (no other mail).** No run in PU-1 to PU-14 mailed anyone but Brian, and no real
   case's Missed Updates, Next Update Due or Status Log changed.
+- **PU-14 (Track date).** After a manual 7G run that adds a miss to a TEST case, the TEST
+  rep's Track shows no new "Updated" date for it. After a 7F save on it, Track shows "Updated
+  <today>".
 - **PU-11 (retry).** Post the same TEST save twice with one `submissionId` (a Hand back and a
   Meeting set): both answer 200 `saved` 2, each case has one Status Log line with the tag,
   and Brian gets one hand back email, not two.
@@ -362,8 +376,9 @@ Use the TEST rep and the TEST field partner. Mail may go only to Brian.
 - Page: set `PARTNER_PAGE_ENABLED` off. The page and APIs answer 404. Nothing else reads it.
 - 7G: turn Off. No more asks. Cases keep their due dates; nothing else reads them.
 - 7F: turn Off. The page shows "not available". 7H: turn Off.
-- No existing flow, list column or row is changed by this build except Partner Links rows and
-  the Service Case columns listed in B5, C0, C1 and D4.
+- 1F: paste `@item()?['Modified']` back into both Select boxes (piece E).
+- No other existing flow, and no list column or row, is changed by this build except Partner
+  Links rows and the Service Case columns listed in B5, C0, C1 and D4.
 
 ## Estimate for the build thread
 
