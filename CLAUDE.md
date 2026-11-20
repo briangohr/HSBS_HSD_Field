@@ -12,12 +12,14 @@ repo on 11/17/2026 because Brian wants the field build entirely separate (Brian,
 - `/join`: sign-up. Posts to HSBS 1J (`REGISTER_FLOW_URL`).
 - `/refer/<key>`: each person's own app link (Send, Track, My Earnings, My Team). Every
   read and send posts to HSBS 1F (`FIELD_FLOW_URL`), the field app's own flow.
+- `/update/<key>`: a field partner's lead update page (sheet PU). Reads and saves post to
+  HSBS 7F Field partner (`PARTNER_FLOW_URL`). Off (404) unless `PARTNER_PAGE_ENABLED=true`.
 - `/confirm/<token>`: kept in code, off (404) unless `REP_CONFIRM_ENABLED=true`.
 - Everything answers 404 unless `REP_APP_ENABLED=true`.
 
-The field build talks to no other flow and no other team's lists. Field work, desk files,
-status updates and questions to Brian stay on the field side only. A field flow that still
-touches another team's flow or list is a defect to remove, not a feature to keep.
+The field build talks to no flow but 1J, 1F and 7F, and to no other team's lists. Field
+work, desk files, status updates and questions to Brian stay on the field side only. A
+field flow that still touches another team's flow or list is a defect to remove, not a feature to keep.
 
 ## Folder layout and imports
 
@@ -25,7 +27,8 @@ touches another team's flow or list is a defect to remove, not a feature to keep
 - `src/components/`: page UI. Components may import lib, not API routes.
 - `src/lib/`: server and shared logic, with tests beside the module. Lib must not import
   pages or components. `field-flow.mjs` is the only module that posts to 1F;
-  `register-flow.mjs` the only one that posts to 1J.
+  `register-flow.mjs` the only one that posts to 1J; `partner-flow.mjs` the only one that
+  posts to 7F.
 - `docs/`: the contract. A change to what a route sends to or expects from a flow updates
   `docs/field-flow-contract.md` in the same PR. `docs/build/` holds the flow-side build
   sheets moved from the old repo; read its README first.
