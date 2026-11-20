@@ -1,0 +1,113 @@
+---
+// "Ask a DPT rep to join you" on the rep app's Send tab (src/lib/rep-dpt-form.mjs). Shown
+// only when REP_APP_COMPANIES lists DPT. The form works without JavaScript: it POSTs to
+// /refer/<key> with company=DPT, and the server runs the same path as /api/referral
+// (src/lib/rep-submit.ts). With JavaScript, RepReferral.astro's script sends it. It reuses
+// the staffing form's rs- styles (RepStaffingSend.astro) and adds its own only where needed.
+import {
+  DPT_CONSENT,
+  DPT_NAME,
+  DPT_SITUATIONS,
+  DPT_STAR,
+  dptSendLabel,
+} from '../lib/rep-dpt-form.mjs';
+
+interface Props {
+  repName: string;
+  referralKey: string;
+  submissionId: string;
+  /** The server's answer to a no-JavaScript DPT post, and the values it carried. */
+  result?: { ok?: true; error?: string; errors?: { field: string; message: string }[] };
+  values?: Record<string, unknown>;
+}
+const { repName, referralKey, submissionId, result, values = {} } = Astro.props;
+const sent = result?.ok === true;
+const fieldError = (f: string) => result?.errors?.find((e) => e.field === f)?.message ?? '';
+const v = (k: string) => (sent ? '' : typeof values[k] === 'string' ? (values[k] as string) : '');
+const label = dptSendLabel(sent ? {} : { ...values, permission: values.permission === true });
+---
+
+<style is:inline>
+  .rd-h2 { font-size: 1.05rem; margin: 1.25rem 0 0.5rem; }
+  .rd-lead { margin: 0.4rem 0 0; font-size: 0.92rem; }
+  .rd-form .rs-field input, .rd-form .rs-field textarea { font: inherit; font-weight: 400; font-size: 1rem; padding: 0.65rem 0.75rem; min-height: 44px; border: 1px solid #c3cad6; border-radius: 10px; background: #fff; color: var(--text); width: 100%; box-sizing: border-box; }
+  .rd-form .rs-field { display: grid; gap: 0.2rem; margin-top: 0.75rem; font-weight: 600; font-size: 0.92rem; border: 0; padding: 0; }
+  .rd-form .rs-choices { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .rd-form .rs-choices legend { width: 100%; padding: 0; margin-bottom: 0.2rem; }
+  .rd-form .rs-field .rs-choice { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 500; border: 1px solid #c3cad6; border-radius: 999px; padding: 0.45rem 0.9rem; min-height: 44px; box-sizing: border-box; background: #fff; }
+  .rd-form .rs-field .rs-choice input { width: auto; min-height: 0; }
+  .rd-form .rs-ok { display: flex; gap: 0.6rem; align-items: flex-start; margin-top: 1rem; font-weight: 600; }
+  .rd-form .rs-ok input { width: 1.4rem; height: 1.4rem; margin-top: 0.1rem; flex: none; }
+  .rd-form .rs-star { margin: 0.6rem 0 0; font-size: 0.88rem; color: var(--muted); }
+  .rd-form .rs-err { font-weight: 500; font-size: 0.85rem; color: var(--btn-red); }
+  .rd-form .rs-err:empty { display: none; }
+  .rd-form .rs-alert { margin: 1rem 0 0; color: var(--btn-red); font-weight: 500; }
+  .rd-form .rs-send { display: block; width: 100%; margin-top: 1rem; min-height: 48px; border: 0; border-radius: 12px; background: var(--btn-red); color: #fff; font: inherit; font-weight: 600; font-size: 1.05rem; cursor: pointer; }
+  .rd-form .rs-send:disabled { opacity: 0.6; cursor: default; }
+</style>
+<div class="rep-dpt" data-dpt>
+  <h2 class="rd-h2" id="rd-title">Ask a {DPT_NAME} rep to join you</h2>
+  <p>Sending as {repName}.</p>
+  <p class="rd-lead">For a doctor thinking about selling, retiring, buying or bringing in a partner.</p>
+
+  <form class="rd-form" id="dpt-form" method="post" action={`/refer/${referralKey}`} novalidate>
+    <input type="hidden" name="app" value="rep" />
+    <input type="hidden" name="company" value="DPT" />
+    <input type="hidden" name="submissionId" value={submissionId} />
+
+    <label class="rs-field">
+      Doctor's name
+      <input name="contactName" value={v('contactName')} maxlength="120" autocomplete="off" required />
+      <span class="rs-err" data-for="contactName">{fieldError('contactName')}</span>
+    </label>
+    <label class="rs-field">
+      Practice name
+      <input name="practiceName" value={v('practiceName')} maxlength="160" autocomplete="off" required />
+      <span class="rs-err" data-for="practiceName">{fieldError('practiceName')}</span>
+    </label>
+    <label class="rs-field">
+      Office phone
+      <input name="officePhone" value={v('officePhone')} type="tel" inputmode="tel" maxlength="40" autocomplete="off" required />
+      <span class="rs-err" data-for="officePhone">{fieldError('officePhone')}</span>
+    </label>
+    <label class="rs-field">
+      JDE # (optional)
+      <input name="jde" value={v('jde')} inputmode="numeric" pattern="[0-9]*" maxlength="40" autocomplete="off" />
+      <span class="rs-err" data-for="jde">{fieldError('jde')}</span>
+    </label>
+
+    <fieldset class="rs-field rs-choices">
+      <legend>What is the doctor thinking about?</legend>
+      {
+        DPT_SITUATIONS.map((s) => (
+          <label class="rs-choice">
+            <input type="radio" name="practiceSituation" value={s} checked={v('practiceSituation') === s} />
+            {s}
+          </label>
+        ))
+      }
+      <span class="rs-err" data-for="practiceSituation">{fieldError('practiceSituation')}</span>
+    </fieldset>
+
+    <label class="rs-field">
+      When should they join you? (optional)
+      <input name="joinWhen" value={v('joinWhen')} maxlength="200" autocomplete="off" placeholder="Example: Tue 12/2, 10 AM visit" />
+      <span class="rs-err" data-for="joinWhen">{fieldError('joinWhen')}</span>
+    </label>
+    <label class="rs-field">
+      Notes (optional)
+      <textarea name="notes" maxlength="2000" rows="3">{v('notes')}</textarea>
+      <span class="rs-err" data-for="notes">{fieldError('notes')}</span>
+    </label>
+
+    <label class="rs-ok">
+      <input type="checkbox" name="permission" value="yes" checked={!sent && values.permission === true} />
+      <span data-dpt-consent>{DPT_CONSENT}</span>
+    </label>
+    <span class="rs-err" data-for="permission">{fieldError('permission')}</span>
+    <p class="rs-star">{DPT_STAR}</p>
+
+    <p class="rs-alert" id="dpt-alert" role="alert" hidden={!result?.error}>{result?.error ?? ''}</p>
+    <button class="rs-send" type="submit" id="dpt-send-button">{label}</button>
+  </form>
+</div>

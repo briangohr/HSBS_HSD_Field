@@ -2653,6 +2653,52 @@ try {
   killDev(dev);
 }
 
+// DPT ask (src/lib/rep-dpt-form.mjs): with DPT in REP_APP_COMPANIES the Send tab offers
+// Dental Practice Transition. JavaScript off and on, a good ask posts one DPT body to the
+// fake 1F and shows a receipt with no money line. Off by default: tested above, every
+// earlier run leaves DPT out and shows no DPT form.
+try {
+  dev = await startDev({ ...env, REP_APP_ENABLED: 'true', REP_APP_COMPANIES: 'HealthFirst,Staffing,DPT' });
+  for (const js of [false, true]) {
+    const tag = js ? 'JS on' : 'JS off';
+    await check(`DPT ${tag}: the choice offers it, a good ask posts one DPT body and shows the receipt`, async () => {
+      const ctx = await browser.newContext({ ...devices['iPhone 13'], javaScriptEnabled: js, reducedMotion: 'reduce' });
+      try {
+        const page = await ctx.newPage();
+        await page.goto(`${BASE}/refer/${REP_KEY}`);
+        const names = (await page.locator('.rep-pick-company').allTextContents()).map((t) => t.trim());
+        assert.deepEqual(names, ['HealthFirst', 'Direct Dental', 'Dental Practice Transition']);
+        await page.click('.rep-pick-company[data-company=DPT]');
+        await page.waitForSelector('#dpt-form', { state: 'visible' });
+        assert.equal(await page.isVisible('#rep-form'), false);
+        await page.fill('#dpt-form [name=contactName]', 'TEST Dr. Smith');
+        await page.fill('#dpt-form [name=practiceName]', 'TEST North Side Dental');
+        await page.fill('#dpt-form [name=officePhone]', '303-555-0100');
+        await page.check('#dpt-form [name=practiceSituation][value="Selling or retiring"]');
+        await page.fill('#dpt-form [name=joinWhen]', 'Tue 12/2, 10 AM');
+        await page.check('#dpt-form [name=permission]');
+        if (js) assert.equal((await page.textContent('#dpt-send-button')).trim(), 'Ask Dental Practice Transition');
+        bodies.length = 0;
+        await page.click('#dpt-send-button');
+        await page.waitForSelector('#rep-receipt:not([hidden])', { timeout: 15000 });
+        assert.equal((await page.textContent('#rep-receipt h2')).trim(), 'Sent to Dental Practice Transition');
+        assert.equal(await page.isVisible('#rep-receipt-money'), false);
+        const sent = bodies.filter((b) => b.action === 'submit');
+        assert.equal(sent.length, 1);
+        assert.deepEqual(sent[0].companies, ['Dental Practice Transition']);
+        assert.equal(sent[0].contactFirst, true);
+        assert.equal(sent[0].practiceSituation, 'Selling or retiring');
+        assert.equal(sent[0].contactInstructions, 'Join me: Tue 12/2, 10 AM');
+        assert.equal(PRIVATE.test(decodeURIComponent(page.url())), false, page.url());
+      } finally {
+        await ctx.close();
+      }
+    });
+  }
+} finally {
+  killDev(dev);
+}
+
 await browser.close();
 flow.close();
 for (const [status, label] of results) console.log(`${status}  ${label}`);

@@ -22,7 +22,7 @@ route answers 404 and no flow is called.
 | `REP_APP_ENABLED` | The switch above | No |
 | `FIELD_FLOW_URL` | HSBS 1F trigger URL, `https` only | Yes |
 | `REGISTER_FLOW_URL` | HSBS 1J trigger URL, `https` only | Yes |
-| `REP_APP_COMPANIES` | Which companies Send offers: `HealthFirst`, `Staffing`, comma separated. Unset is HealthFirst only | No |
+| `REP_APP_COMPANIES` | Which companies Send offers: `HealthFirst`, `Staffing`, `DPT`, comma separated. Unset is HealthFirst only. `DPT` is the DPT ask (below), off until listed | No |
 | `REP_PAY_ENABLED` | Dollar amounts on screens, exactly `true`. Off until Brian approves pay | No |
 | `REP_PAY_PLAN` | HealthFirst pay plan words (`src/lib/rep-pay-plan.mjs`) | No |
 | `REP_PAY_PLAN_STAFFING` | Staffing pay plan words | No |
@@ -127,8 +127,8 @@ Success is 200 with:
 
 ### submit
 
-Two shapes, one per company (`src/lib/rep-referral-form.mjs`,
-`src/lib/rep-staffing-form.mjs`). Every fixed value is set by the site, never the page:
+Three shapes, one per company (`src/lib/rep-referral-form.mjs`,
+`src/lib/rep-staffing-form.mjs`, `src/lib/rep-dpt-form.mjs`). Every fixed value is set by the site, never the page:
 
 ```json
 {
@@ -168,6 +168,18 @@ Two shapes, one per company (`src/lib/rep-referral-form.mjs`,
   states from `US_STATES`, and picking one fills it in. Text that is not one state sends
   no state, so the send is refused the same way. With JavaScript off it is a plain list.
   Either way the body carries the same two-letter code.
+- A DPT ask (`company` `DPT`, `src/lib/rep-dpt-form.mjs`) asks a Dental Practice
+  Transition rep to join the sender at an office. It replaced the pilot FSC app's button
+  of the same kind, on field flows only. It uses only fields 1F maps today, so 1F needs
+  no change: `companies: ["Dental Practice Transition"]`, `needs: ["Practice transition"]`,
+  `contactFirst: true` (the DPT rep calls the sender first), `contactInstructions`
+  (`Join me: <when>`, or `Call me to set a time to visit together.`), `practiceSituation`
+  (one of `Selling or retiring`, `Buying or adding a location`, `Bringing in a partner or
+  associate`, `Not sure yet`), `preferredContact: ""`, `doctorEmail: ""`, an optional
+  `jde`, its own consent sentence, and no `practiceType` or `practiceState`. It earns no
+  pay and its receipt has no money line. The field flow `HSBS 3F DPT ask (new site)`
+  sends the intro to the Routing row titled `Dental Practice Transition`; `HSBS 3F
+  HealthFirst (new site)` must skip these rows before `DPT` is listed.
 - `PVApermission` is a column name 1F maps today. It stays until 1F stops reading it;
   removing it is a 1F change first.
 - The site refuses, before any 1F call, a company that is off in `REP_APP_COMPANIES`, two

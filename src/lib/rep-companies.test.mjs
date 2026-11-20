@@ -17,12 +17,13 @@ import {
 import { REP_COMPANY } from './rep-referral-form.mjs';
 
 describe('rep app company table (field two-track spec, section 4)', () => {
-  test('two keys, each with the Solutions value that exists today and its screen name', () => {
+  test('three keys, each with its Solutions value and its screen name', () => {
     assert.deepEqual(
       REP_COMPANIES.map((c) => [c.key, c.solutions, c.name]),
       [
         ['HealthFirst', 'HealthFirst', 'HealthFirst'],
         ['Staffing', 'HS Staffing / Recruiting Services (including GoTu)', 'Direct Dental'],
+        ['DPT', 'Dental Practice Transition', 'Dental Practice Transition'],
       ],
     );
     // The Solutions values exactly as Referrals and Service Cases store them today.
@@ -55,8 +56,8 @@ describe('rep app company table (field two-track spec, section 4)', () => {
     assert.throws(() => /** @type {any} */ (DEFAULT_REP_COMPANIES).push('Staffing'));
   });
 
-  test('both companies have a send form (HealthFirst, and staffing since S3)', () => {
-    assert.deepEqual(REP_COMPANIES.filter((c) => c.form).map((c) => c.key), ['HealthFirst', 'Staffing']);
+  test('every company has a send form (HealthFirst, staffing since S3, the DPT ask)', () => {
+    assert.deepEqual(REP_COMPANIES.filter((c) => c.form).map((c) => c.key), ['HealthFirst', 'Staffing', 'DPT']);
   });
 
   test('every company with a form has a server sender, and no sender lacks a form (S3 seam)', async () => {

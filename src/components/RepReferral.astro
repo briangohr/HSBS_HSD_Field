@@ -17,6 +17,8 @@ import MyTeam from './MyTeam.astro';
 import LeadStyles from './LeadStyles.astro';
 import RepCompanyPanel from './RepCompanyPanel.astro';
 import RepStaffingSend from './RepStaffingSend.astro';
+import RepDptSend from './RepDptSend.astro';
+import { dptReceipt } from '../lib/rep-dpt-form.mjs';
 
 interface Props {
   repName: string;
@@ -58,6 +60,7 @@ const choice = companies.length > 1;
 const open = choice ? (companies.includes(picked) ? picked : '') : companies[0];
 const hasHealthFirst = companies.includes('HealthFirst');
 const hasStaffing = companies.includes('Staffing');
+const hasDpt = companies.includes('DPT');
 const payEnabled = pay ?? payPlan !== null;
 // Two or three tabs keep today's labels. Four (pay on and My Team) use short ones.
 const tabCount = 2 + (payEnabled ? 1 : 0) + (showTeam ? 1 : 0);
@@ -67,32 +70,38 @@ const sent = result?.ok === true;
 // A staffing send's answer is worded for Direct Dental, never HealthFirst. No dollars
 // unless pay is on and a staffing plan is set.
 const staffingSend = values.company === 'Staffing';
+// A DPT ask (src/lib/rep-dpt-form.mjs) has its own form, answer and receipt, never money.
+const dptSend = values.company === 'DPT';
+const otherSend = staffingSend || dptSend;
 // The form a no-JavaScript post came from: Staffing, or else HealthFirst (a post naming no
 // company, two, or one that is not offered is treated as the HealthFirst form, the only
 // form main has). Its answer shows inside that form only when that form is the open panel.
 // Otherwise (REP_APP_COMPANIES changed between page load and post, or the post named no
 // company, two or an unknown one) the refusal shows above the panels, so it is never dropped.
-const postedPanel = staffingSend ? 'Staffing' : 'HealthFirst';
+const postedPanel = staffingSend ? 'Staffing' : dptSend ? 'DPT' : 'HealthFirst';
 const ownPanel = Boolean(result) && postedPanel === open;
 const refusedHere = Boolean(result?.error) && !ownPanel;
 // Names the company whose referral was refused when it is not the one on screen.
 const refusedName = refusedHere && typeof values.company === 'string' && values.company !== open ? companyName(values.company) : '';
 // The HealthFirst form keeps only its own answer and values: never a staffing post's
 // errors, consent or fields.
-const hfResult = ownPanel && !staffingSend ? result : undefined;
-const hfValues = ownPanel && !staffingSend ? values : {};
+const hfResult = ownPanel && !otherSend ? result : undefined;
+const hfValues = ownPanel && !otherSend ? values : {};
 const fieldError = (f: string) => hfResult?.errors?.find((e) => e.field === f)?.message ?? '';
 const v = (k: string) => (sent ? '' : typeof hfValues[k] === 'string' ? (hfValues[k] as string) : '');
 const sPlan = payEnabled ? staffingPlan : null;
 const receipt = staffingSend
   ? staffingReceipt({ contactName: values.contactName, practiceType: values.practiceType, plan: sPlan })
-  : repReceipt({ contactName: values.contactName, plan: payPlan });
+  : dptSend
+    ? dptReceipt({ contactName: values.contactName })
+    : repReceipt({ contactName: values.contactName, plan: payPlan });
 const label = repSendLabel(sent ? {} : hfValues, { askState });
 // Each company form has its own submission id, so a send from one never reuses the other's
 // (1F remembers a good send by its id). The id the server holds belongs to the form that was
 // posted; the other form gets a fresh one.
-const healthFirstId = staffingSend ? crypto.randomUUID() : submissionId;
+const healthFirstId = otherSend ? crypto.randomUUID() : submissionId;
 const staffingId = staffingSend ? submissionId : crypto.randomUUID();
+const dptId = dptSend ? submissionId : crypto.randomUUID();
 ---
 
 <div class="rep" id="rep-app" data-referral-key={referralKey} data-pay-plan={payTerms(payEnabled, payPlan, sPlan)} data-staffing-plan={staffingTerms(sPlan) || undefined}>
@@ -254,6 +263,20 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
         </RepCompanyPanel>
       )
     }
+    {
+      hasDpt && (
+        <RepCompanyPanel wrap company="DPT" open={open === 'DPT'}>
+          {choice && <a class="rep-pick-again" href={`/refer/${referralKey}`} data-pick-again>Pick another company</a>}
+          <RepDptSend
+            repName={repName}
+            referralKey={referralKey}
+            submissionId={dptId}
+            result={ownPanel && dptSend ? result : undefined}
+            values={ownPanel && dptSend ? values : {}}
+          />
+        </RepCompanyPanel>
+      )
+    }
   </section>
 
   <section class="rep-receipt" id="rep-receipt" hidden={!sent} tabindex="-1">
@@ -333,6 +356,7 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
   import { matchStates, repReceipt, repSendLabel, stateFromText, stateName, validateRepReferral } from '../lib/rep-referral-form.mjs';
   import { PAY_TERMS_EVENT, TERMS_CHANGED, healthFirstTerms, parsePayPlan } from '../lib/rep-pay-plan.mjs';
   import { staffingReceipt, staffingSendLabel, validateStaffingReferral } from '../lib/rep-staffing-form.mjs';
+  import { dptReceipt, dptSendLabel, validateDptReferral } from '../lib/rep-dpt-form.mjs';
 
   const root = document.getElementById('rep-app');
   if (root) {
@@ -722,6 +746,111 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
           sSending = false;
           sButton.disabled = false;
           sRefresh();
+        }
+      });
+    }
+
+    // DPT ask (src/lib/rep-dpt-form.mjs): the same send path as the staffing form, with its
+    // own fields and receipt and never a money line. Absent unless REP_APP_COMPANIES lists DPT.
+    const dForm = document.getElementById('dpt-form') as HTMLFormElement | null;
+    if (dForm) {
+      const dButton = document.getElementById('dpt-send-button') as HTMLButtonElement;
+      const dAlert = document.getElementById('dpt-alert') as HTMLElement;
+      const dRead = () => {
+        const data = new FormData(dForm);
+        return {
+          contactName: String(data.get('contactName') ?? ''),
+          practiceName: String(data.get('practiceName') ?? ''),
+          officePhone: String(data.get('officePhone') ?? ''),
+          jde: String(data.get('jde') ?? ''),
+          practiceSituation: String(data.get('practiceSituation') ?? ''),
+          joinWhen: String(data.get('joinWhen') ?? ''),
+          notes: String(data.get('notes') ?? ''),
+          permission: data.get('permission') === 'yes',
+        };
+      };
+      let dSending = false;
+      const dRefresh = () => {
+        if (!dSending) dButton.textContent = dptSendLabel(dRead());
+      };
+      dForm.addEventListener('input', dRefresh);
+      dForm.addEventListener('change', dRefresh);
+      const dErrors = (errors: { field: string; message: string }[]) => {
+        dForm.querySelectorAll<HTMLElement>('.rs-err').forEach((el) => {
+          el.textContent = errors.find((e) => e.field === el.dataset.for)?.message ?? '';
+        });
+        const first = errors[0]?.field;
+        const el = first ? dForm.elements.namedItem(first) : null;
+        if (el instanceof HTMLElement) el.focus();
+        else if (el instanceof RadioNodeList && el[0] instanceof HTMLElement) el[0].focus();
+      };
+      const dSay = (text: string) => {
+        dAlert.textContent = text;
+        dAlert.hidden = !text;
+      };
+      // No clear answer: the retry resends exactly what was first posted, under the same id.
+      let dPending: { id: string; fields: ReturnType<typeof dRead> } | null = null;
+      const dRestore = (fields: ReturnType<typeof dRead>) => {
+        for (const [name, value] of Object.entries(fields)) {
+          const el = dForm.elements.namedItem(name);
+          if (el instanceof RadioNodeList) {
+            el.forEach((r) => {
+              if (r instanceof HTMLInputElement) r.checked = r.value === value;
+            });
+          } else if (el instanceof HTMLInputElement && el.type === 'checkbox') el.checked = value === true;
+          else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) el.value = String(value);
+        }
+      };
+      dForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (dSending) return;
+        if (dPending) dRestore(dPending.fields);
+        const fields = dPending ? dPending.fields : dRead();
+        const check = validateDptReferral(fields);
+        if (!check.ok) {
+          dErrors(check.errors);
+          dSay('');
+          return;
+        }
+        dErrors([]);
+        dSay('');
+        dSending = true;
+        dButton.disabled = true;
+        dButton.textContent = SENDING_MESSAGE;
+        const submissionId = dPending ? dPending.id : String(new FormData(dForm).get('submissionId') ?? '');
+        dPending = { id: submissionId, fields };
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), CLIENT_WAIT_MS);
+        try {
+          const res = await fetch('/api/referral', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ app: 'rep', company: 'DPT', referralKey, submissionId, ...fields }),
+            signal: controller.signal,
+          });
+          if (res.status < 500) dPending = null;
+          const body = await res.json().catch(() => ({}));
+          if (res.ok && body.ok) {
+            noteTerms(body.terms);
+            showSent(dptReceipt({ contactName: fields.contactName }));
+            dForm.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea').forEach((el) => {
+              if (el instanceof HTMLInputElement && el.type === 'hidden') return;
+              if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) el.checked = false;
+              else el.value = '';
+            });
+            const id = dForm.elements.namedItem('submissionId');
+            if (id instanceof HTMLInputElement) id.value = crypto.randomUUID();
+            return;
+          }
+          if (Array.isArray(body.errors)) dErrors(body.errors);
+          dSay(body.error ?? (body.timeout ? TIMEOUT_MESSAGE : 'This request did not send.'));
+        } catch {
+          dSay(controller.signal.aborted ? TIMEOUT_MESSAGE : 'This request did not send. Check your connection and try again.');
+        } finally {
+          clearTimeout(timer);
+          dSending = false;
+          dButton.disabled = false;
+          dRefresh();
         }
       });
     }

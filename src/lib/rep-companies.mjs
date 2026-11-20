@@ -35,6 +35,9 @@ export const REP_COMPANIES = Object.freeze([
     name: 'Direct Dental',
     form: true,
   }),
+  // Not a partner: a request for a Dental Practice Transition rep to join the rep at an
+  // office (src/lib/rep-dpt-form.mjs). It has no pay plan, so it never shows dollars.
+  Object.freeze({ key: 'DPT', solutions: 'Dental Practice Transition', name: 'Dental Practice Transition', form: true }),
 ]);
 
 /** Unset, empty or nothing known in REP_APP_COMPANIES: today's app, HealthFirst only. */

@@ -16,8 +16,9 @@ import { repAppCompanies, repAppEnabled, repAskState } from './register-flow.mjs
 import { COMPANY_OFF_MESSAGE, ONE_COMPANY_MESSAGE, checkSendCompany } from './rep-companies.mjs';
 import { repFlowPayload, validateRepReferral } from './rep-referral-form.mjs';
 import { staffingFlowPayload, validateStaffingReferral } from './rep-staffing-form.mjs';
+import { dptFlowPayload, validateDptReferral } from './rep-dpt-form.mjs';
 
-const STRINGS = ['contactName', 'practiceName', 'jde', 'officePhone', 'email', 'preferredContact', 'practiceType', 'practiceState', 'notes'] as const;
+const STRINGS = ['contactName', 'practiceName', 'jde', 'officePhone', 'email', 'preferredContact', 'practiceType', 'practiceState', 'practiceSituation', 'joinWhen', 'notes'] as const;
 
 /**
  * One sender per company that has a send form (field two-track spec, section 4). A
@@ -36,6 +37,7 @@ type RepSender = {
 export const REP_SENDERS: Readonly<Record<string, RepSender>> = Object.freeze({
   HealthFirst: { validate: validateRepReferral, payload: repFlowPayload, options: () => ({ askState: repAskState() }) },
   Staffing: { validate: validateStaffingReferral, payload: staffingFlowPayload },
+  DPT: { validate: validateDptReferral, payload: dptFlowPayload },
 });
 
 export type RepSubmitResult = {
