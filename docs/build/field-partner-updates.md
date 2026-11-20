@@ -185,7 +185,8 @@ Every body carries `key`. Answers are JSON.
 
 **Saving twice is safe.** Every Status Log line a save writes ends with `[s:<submissionId>]`.
 A case whose Status Log already holds this save's tag was written by an earlier try: 7F
-skips it, sends no second email for it, and counts it as saved. A retry after a lost answer
+skips it, sends no hand back email for it (step 6 sent it before the tag was written), and
+counts it as saved. A retry after a lost answer
 or a partial write therefore finishes the rest and answers 200. A retry is the only way the
 same `submissionId` arrives twice.
 
@@ -211,7 +212,8 @@ HTTP trigger, POST, schema from the contract above. Trigger concurrency on, limi
    `nochange`; `meeting` has no `meetingDate` or one before today; `signed` has no
    `signedDate` or one after today; `lost` has a `closedReason` not in the six; `handback`
    has a blank `note`; `note` is over 300 characters or `signedProduct` over 100.
-5. **`save`, write loop:** for each update not marked done, Update item on Service Cases:
+5. **`save`, write loop:** for each update not marked done: a `handback` sends its email
+   first (step 6), then every update does Update item on Service Cases:
 
    | Column | Value |
    |---|---|
@@ -229,10 +231,12 @@ HTTP trigger, POST, schema from the contract above. Trigger concurrency on, limi
    | Status Log | Old text + new line `<today> <partner>: <label>. <note> [s:<submissionId>]` |
 
    Stage, Status and Pipeline Stage are not written.
-6. **Hand back email:** for each `handback` written in step 5 (not one marked done), right
-   after its Update item, one email to Brian only, subject
-   `Field lead handed back: <ref>`, body: partner, practice, note. No other email. A save
-   never mails the partner, the rep or anyone else.
+6. **Hand back email:** for each `handback` not marked done, before its Update item, one
+   email to Brian only, subject `Field lead handed back: <ref>`, body: partner, practice,
+   note. If the email fails, the case is not written and 7F answers 5xx, so a retry sends it
+   again. The tag is written only after the email went, so a tagged case never owes one. The
+   one cost: if the email goes and the Update item then fails, the retry sends Brian a second
+   copy. No other email. A save never mails the partner, the rep or anyone else.
 7. **Answer** 200 `{"ok":true,"saved":<count>}`, the count of written plus done updates.
 
 ## C. HSBS 7G Field daily ask (new site)
@@ -310,8 +314,10 @@ show one.
 Each one is a paste-ready block or a package from the build thread, with a direct link.
 
 1. Partner Links on `sites/HSBSField`: add 3 rows, Link Key blank.
-   `TEST field partner` (Active on, Email: Brian, Services: HealthFirst and the staffing
-   service); `HealthFirst` (Active **off**, Email and CC as the 3F HealthFirst intro sends
+   `TEST field partner` (Active on, Email: Brian, CC Email: a second mailbox Brian controls
+   that is not his work address, used only as the TEST reply sender for PU-9; Services:
+   HealthFirst and the staffing service). 7G mails a TEST row To Brian only with no CC, so
+   the CC Email never gets mail; `HealthFirst` (Active **off**, Email and CC as the 3F HealthFirst intro sends
    today, Services: HealthFirst); `Direct Dental` (Active **off**, Email as the Routing row,
    Services: the staffing service). The real rows stay off until step 8, so no TEST run, page
    or reply capture can reach a real partner.
@@ -354,9 +360,11 @@ Use the TEST rep and the TEST field partner. Mail may go only to Brian.
   Hand back with `TEST note one`: Hand Back Note, one email to Brian only.
 - **PU-8 (refusals).** A changed key: "This link does not work." An expired key: the
   expired words. A case closed in another tab: "Reload the page", nothing written.
-- **PU-9 (reply capture).** A reply from a TEST partner address to a
-  `[TEST] HSBS referral HSBS-F<n>` intro stamps Last Partner Update and the Status Log line
-  and changes no Partner Status. A reply from any other sender changes nothing.
+- **PU-9 (reply capture).** Brian forwards a `[TEST] HSBS referral HSBS-F<n>` intro to the
+  TEST row's CC Email mailbox and replies from there to his work address, keeping the
+  subject. 7H stamps Last Partner Update and the Status Log line on that TEST case and
+  changes no Partner Status. A reply from Brian's own address, or from any address not on an
+  Active row, changes nothing.
 - **PU-10 (no other mail).** No run in PU-1 to PU-14 mailed anyone but Brian, and no real
   case's Missed Updates, Next Update Due or Status Log changed.
 - **PU-14 (Track date).** After a manual 7G run that adds a miss to a TEST case, the TEST
