@@ -253,6 +253,12 @@ HTTP trigger, POST, schema from the contract above. Trigger concurrency on, limi
 Recurrence: weekdays, 8:00 AM, Eastern Standard Time (the `timeZone` setting, as the gap
 check package does). First step: when today is on `Holidays`, Terminate (Succeeded).
 
+**Page address.** Two Composes: `Prod_base` = `https://hsbs-hsd-field.vercel.app` and
+`Preview_base` = the Vercel Preview address of the page PR's branch, which Brian pastes at
+import (live step 4). A TEST row's email links to `Preview_base`, where the page is on during
+testing; a real row's email links to `Prod_base`. So the TEST loop runs on the emailed link
+without turning the page on in Production.
+
 **TEST guard.** A Compose `Test_only`, `true` in the package. While it is `true`, every step
 below reads only Service Cases with Test on and only Partner Links rows whose Title contains
 `TEST`, so a run can neither mail a real partner nor change a real case. Brian sets it to
@@ -285,7 +291,7 @@ below reads only Service Cases with Test on and only Partner Links rows whose Ti
    - c. One email. To: Email. CC: CC Email. A TEST partner: To Brian only, no CC, subject
      starts `[TEST] `. Subject: `Field leads due for an update: <n>`. Body: one line on the
      rhythm ("Please update each lead within 2 business days. One link covers all of
-     them."), the link `https://hsbs-hsd-field.vercel.app/update/<key>`, then a table, overdue
+     them."), the link `<base>/update/<key>`, then a table, overdue
      first: ref, practice, introduced, last status, due date. Brian is not copied (O3).
 4. Brian is copied on nothing else. No rep is emailed.
 
@@ -341,7 +347,8 @@ Each one is a paste-ready block or a package from the build thread, with a direc
    or reply capture can reach a real partner.
 2. Import 7F. Turn it On. Copy its trigger URL into Vercel `PARTNER_FLOW_URL` (Preview first).
 3. Approve and merge the page PR. Set `PARTNER_PAGE_ENABLED=true` on Preview.
-4. Import 7G with `Test_only` `true`. Leave it Off; run it by hand for the TEST checks.
+4. Import 7G with `Test_only` `true`, and paste the page PR's Preview address into
+   `Preview_base`. Leave it Off; run it by hand for the TEST checks.
 5. Import 7H and turn it On.
 6. Paste piece E into 1F (new site), both Select boxes, and save with 0 errors. 1F stays On;
    the change is safe for the live Track.
@@ -359,7 +366,7 @@ Use the TEST rep and the TEST field partner. Mail may go only to Brian.
 
 - **PU-1 (T1, the loop).** A TEST send makes a TEST case. A manual 7G run emails Brian
   `[TEST] Field leads due for an update` with that lead once it is due (or after setting its
-  Next Update Due to today). The link opens the page and lists the lead. Save Meeting set
+  Next Update Due to today). The emailed link points at the Preview address and opens the page and lists the lead. Save Meeting set
   with tomorrow's date: Partner Status `Meeting set`, Meeting Date, Last Partner Update and
   Next Update Due (1 business day after the meeting) are on the case, and the TEST rep's
   Track shows "Meeting set" and "Updated <today>".
