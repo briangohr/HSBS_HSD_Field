@@ -256,7 +256,9 @@ below reads only Service Cases with Test on and only Partner Links rows whose Ti
    (O7), and a case made yesterday keeps its own 2 business days.
 1. **Count misses.** For each open case with Introduced On whose Next Update Due is before
    today: Missed Updates + 1, Next Update Due = today + `Window_days` business days. A
-   partner who never saves therefore gains one miss each business day the lead stays due.
+   partner who never saves therefore gains one miss per missed window: the first business
+   day after each due date, about every 2 business days, so 2 misses take about 4 business
+   days (O4).
 2. **Escalate.** Cases whose Missed Updates became exactly 2 in step 1: one email to Brian
    listing them (ref, practice, partner). Test cases go in the same email marked `[TEST]`.
    Nothing reached 2: no email.
@@ -282,8 +284,10 @@ reads and writes SharePoint. It sends nothing.
 1. Condition: the sender is not Brian, and the sender's address equals the Email or a
    CC Email of an Active Partner Links row. Otherwise Terminate (Succeeded).
 2. Ref: the first `HSBS-F` followed by digits in the subject. None: Terminate.
-3. Find the case: Service Cases whose Title starts with `<ref> |` and whose Service is in
-   that partner's Services. Not exactly 1, or not open: Terminate.
+3. Find the case: Service Cases whose Title starts with `<ref> |`, whose Service is in that
+   partner's Services, and whose Test matches the row (TEST row: Test on; real row: Test
+   off), as "Its cases" says. Not exactly 1, or not open: Terminate. So the TEST mailbox can
+   never touch a real case.
 4. Update the case: Last Partner Update = received time, Missed Updates 0, Next Update Due =
    today + `Window_days` business days, Partner Updated By = partner Title, Status Log new line
    `<today> <partner>: replied by email.` Partner Status is left as it is. The email body is
@@ -364,7 +368,8 @@ Use the TEST rep and the TEST field partner. Mail may go only to Brian.
   TEST row's CC Email mailbox and replies from there to his work address, keeping the
   subject. 7H stamps Last Partner Update and the Status Log line on that TEST case and
   changes no Partner Status. A reply from Brian's own address, or from any address not on an
-  Active row, changes nothing.
+  Active row, changes nothing. A reply from the TEST mailbox to a real (Test off) intro
+  changes nothing on that case.
 - **PU-10 (no other mail).** No run in PU-1 to PU-14 mailed anyone but Brian, and no real
   case's Missed Updates, Next Update Due or Status Log changed.
 - **PU-14 (Track date).** After a manual 7G run that adds a miss to a TEST case, the TEST
@@ -374,8 +379,11 @@ Use the TEST rep and the TEST field partner. Mail may go only to Brian.
   Meeting set): both answer 200 `saved` 2, each case has one Status Log line with the tag,
   and Brian gets one hand back email, not two.
 - **PU-12 (unanswered lead).** A TEST case with a blank Next Update Due and `Created` 3
-  business days ago: run 1 stores today as its due date and lists it. With no save, run 2 on
-  the next business day gives Missed Updates 1, run 3 gives 2 and one escalation email.
+  business days ago. Run 1 stores today as its due date and lists it, Missed Updates 0. With
+  no save, run 2 on the next business day gives Missed Updates 1 and a due date 2 business
+  days out. Run 3 on the first business day after that due date gives Missed Updates 2 and
+  one escalation email. A run between those two dates adds no miss. To test in one sitting,
+  set the case's Next Update Due to yesterday before runs 2 and 3.
 - **PU-13 (TEST guard).** With `Test_only` `true` and the real rows off, a manual 7G run
   touches only Test cases and mails only Brian.
 
