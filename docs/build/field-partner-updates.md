@@ -230,7 +230,7 @@ same `submissionId` arrives twice.
 
 ## B. HSBS 7F Field partner (new site)
 
-HTTP trigger, POST, schema from the contract above. Trigger concurrency on, limit 1.
+HTTP trigger, POST, schema from the contract above. No trigger concurrency: Power Automate refuses it on a Request trigger that has Response actions (import, 11/20). Overlapping runs are safe because every case write is etag-checked.
 
 1. **Find the partner.** Get Partner Links items, filter `LinkKey eq '<key>' and Active eq 1`.
    Not exactly 1 row: 404. Key Expires before now: 410. `TestPartner` =
