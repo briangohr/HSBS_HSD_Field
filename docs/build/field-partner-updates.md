@@ -45,7 +45,7 @@ old 7A, 7B, 7C or 7D, or any "FSC copy".
 | A | Partner page | `/update/<key>` on this site, behind `PARTNER_PAGE_ENABLED` | Code PR |
 | B | HSBS 7F Field partner (new site) | HTTP flow: `leads` and `save` for the page | Package |
 | C | HSBS 7G Field daily ask (new site) | Weekdays 8:00 AM ET: count misses, email each partner its due leads, escalate to Brian at 2 misses | Package |
-| D | HSBS 7H Field email reply capture (new site) | A partner's reply to an intro logs an update on the case | Package, only if Brian says yes (open question Q1) |
+| D | HSBS 7H Field email reply capture (new site) | A partner's reply to an intro logs an update on the case | Package (Q1, Brian, 11/20: yes) |
 
 Names: "7F" to "7H" are new numbers so no field flow shares a name with an old one.
 
@@ -245,7 +245,7 @@ check package does). First step: when today is on `Holidays`, Terminate (Succeed
      first: ref, practice, introduced, last status, due date. Brian is not copied (O3).
 4. Brian is copied on nothing else. No rep is emailed.
 
-## D. HSBS 7H Field email reply capture (new site), if Q1 is yes
+## D. HSBS 7H Field email reply capture (new site)
 
 Trigger: Office 365 "When a new email arrives (V3)", Inbox, subject filter
 `HSBS referral HSBS-F`. Runs on Brian's mailbox, the connection 3F already uses. It only
@@ -283,7 +283,7 @@ Each one is a paste-ready block or a package from the build thread, with a direc
 2. Import 7F. Turn it On. Copy its trigger URL into Vercel `PARTNER_FLOW_URL` (Preview first).
 3. Approve and merge the page PR. Set `PARTNER_PAGE_ENABLED=true` on Preview.
 4. Import 7G. Leave it Off; run it by hand for the TEST checks.
-5. If Q1 is yes: import 7H and turn it On.
+5. Import 7H and turn it On.
 6. After every check below passes on Preview with TEST rows: `PARTNER_PAGE_ENABLED=true` and
    `PARTNER_FLOW_URL` on Production, then turn 7G On. Its first 8:00 AM run sends each real
    partner one full list (O7).
@@ -316,7 +316,7 @@ Use the TEST rep and the TEST field partner. Mail may go only to Brian.
   Hand back with `TEST note one`: Hand Back Note, one email to Brian only.
 - **PU-8 (refusals).** A changed key: "This link does not work." An expired key: the
   expired words. A case closed in another tab: "Reload the page", nothing written.
-- **PU-9 (reply capture, if Q1 is yes).** A reply from a TEST partner address to a
+- **PU-9 (reply capture).** A reply from a TEST partner address to a
   `[TEST] HSBS referral HSBS-F<n>` intro stamps Last Partner Update and the Status Log line
   and changes no Partner Status. A reply from any other sender changes nothing.
 - **PU-10 (no other mail).** No run in PU-1 to PU-9 mailed anyone but Brian.
@@ -335,8 +335,6 @@ Use the TEST rep and the TEST field partner. Mail may go only to Brian.
 3 imports, 2 env vars on 2 environments, one merge, the TEST checks on the page, since
 `vercel.app` pages are filled by Brian). Split if it passes 20M: page PR first, flows second.
 
-## Open question (ask Brian before piece D)
+## Decided
 
-| # | Question | Recommendation |
-|---|---|---|
-| Q1 | Should a partner's email reply to an intro count as an update? | Yes. Direct Dental already answers by email. Without it, the daily ask nags the Direct Dental contact about leads already answered. It reads Brian's inbox and sends nothing |
+- Q1, Brian, 11/20: a partner's email reply to an intro counts as an update (piece D). It reads Brian's inbox and sends nothing.
