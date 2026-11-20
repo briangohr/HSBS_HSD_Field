@@ -279,6 +279,7 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
       <h2 class="rep-h2">Your referrals</h2>
       <p class="rep-status" id="rep-track-status" role="status">Open this tab to load your referrals.</p>
       <ul class="lead-list" id="rep-track-list"></ul>
+      <button type="button" class="rep-link" id="rep-track-more" hidden>Show more</button>
       <button type="button" class="rep-link" id="rep-refresh">Refresh</button>
       <h2 class="rep-h2">Latest updates</h2>
       <ul class="rep-feed" id="rep-feed"></ul>
@@ -872,6 +873,10 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
       return (await res.json()) as Money;
     };
     let showAllFeed = false;
+    // Track draws 50 rows at a time; "Show more" adds 50. The counts are always the true total.
+    const TRACK_PAGE = 50;
+    let trackShown = TRACK_PAGE;
+    const trackMore = document.getElementById('rep-track-more') as HTMLButtonElement;
     const trackStatus = document.getElementById('rep-track-status') as HTMLElement;
     const trackList = document.getElementById('rep-track-list') as HTMLElement;
     const feedList = document.getElementById('rep-feed') as HTMLElement;
@@ -1035,7 +1040,8 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
         feedList.append(li);
       }
       feedAll.hidden = showAllFeed || feed.length <= 10;
-      trackList.replaceChildren(...rows.map(renderRow));
+      trackList.replaceChildren(...rows.slice(0, trackShown).map(renderRow));
+      trackMore.hidden = rows.length <= trackShown;
       trackStatus.hidden = rows.length > 0;
       trackStatus.textContent = 'No referrals yet. Send one and it will show up here.';
       // An open lead screen redraws from the new answer, or closes if the office is gone.
@@ -1074,6 +1080,7 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
       const seq = ++moneySeq;
       trackStatus.hidden = false;
       trackStatus.textContent = 'Loading your referrals.';
+      trackMore.hidden = true;
       try {
         const res = await fetch('/api/referral-list', {
           method: 'POST',
@@ -1126,8 +1133,18 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
         feedList.replaceChildren();
         trackStatus.hidden = false;
         trackStatus.textContent = 'Your referrals did not load. Try again in a minute.';
+        trackMore.hidden = true;
       }
     };
+    trackMore.addEventListener('click', () => {
+      // Only a loaded list pages; a failed read must never redraw as an empty history.
+      if (!loaded) {
+        trackMore.hidden = true;
+        return;
+      }
+      trackShown += TRACK_PAGE;
+      renderTrack();
+    });
     feedAll.addEventListener('click', () => {
       showAllFeed = true;
       renderTrack();

@@ -541,7 +541,7 @@ export function moneyForReferrals(referrals, rows, today = todayInNewYork(), pla
   const byRef = groupByReferral(rows);
   /** @type {Record<string, string>} */
   const lines = {};
-  for (const raw of (Array.isArray(referrals) ? referrals : []).slice(0, 200)) {
+  for (const raw of (Array.isArray(referrals) ? referrals : [])) {
     const ref = sanitizeReferral(raw);
     if (!ref) continue;
     lines[ref.id] = moneyLine(ref, byRef.get(ref.id) ?? [], plan, referralFacts(raw));

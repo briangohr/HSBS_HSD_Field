@@ -15,13 +15,12 @@
 
 import { daysBetween, decorateReferrals, sanitizeReferral, shortDate, todayInNewYork } from './track.mjs';
 import { ROLES, normalizeName } from './register-form.mjs';
-import { ReferralAppWriteError, TEAM_MAX_MEMBERS } from './field-flow.mjs';
+import { REFERRAL_READ_MAX, ReferralAppWriteError, TEAM_MAX_MEMBERS } from './field-flow.mjs';
 import { companyText, dollars, managerPay, moneyForReferrals, referralFacts, sanitizeLedger, summarizeEarnings } from './rep-earnings.mjs';
 import { usableStaffingPlan } from './rep-pay-plan.mjs';
 import { leadViews } from './rep-lead.mjs';
 
 export const TEAM_MAX = TEAM_MAX_MEMBERS;
-const REFERRAL_MAX = 200;
 const NUDGE_DAYS = 14;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 /** A signed-up rep whose roster name fails the name rule still counts, under this name. */
@@ -143,7 +142,9 @@ export function shapeTeam(raw, plan, today = todayInNewYork(), opts = {}) {
     const roleText = s(m.role, 30);
     const role = ROLES.includes(roleText) || roleText === 'Manager' ? roleText : '';
     const registeredOn = day(m.registeredOn);
-    const rawReferrals = m.referrals.slice(0, REFERRAL_MAX);
+    // The same bound as a rep's own list read: more is a failed load, never a short list.
+    if (m.referrals.length > REFERRAL_READ_MAX) throw new ReferralAppWriteError(200);
+    const rawReferrals = m.referrals;
     const d = decorateReferrals(rawReferrals, today);
 
     // Reached is only the flow's roll-up flag (Talked To Doctor ever Yes), never a status.

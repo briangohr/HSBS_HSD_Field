@@ -198,6 +198,13 @@ because the 3F flows set Status, not Partner Status. Such a line reads "Sent to"
 company ("Sent to Direct Dental"). Only a referral with no line at all reads "Sent to
 HealthFirst".
 
+Every row counts. The site sorts newest sent first and keeps all of them: Sent, In progress
+and Signed are the true totals, and Track draws 50 rows at a time with "Show more". 1F must
+answer every one of the rep's rows: on its Referrals Get items, Pagination on (limit 5,000),
+because SharePoint returns only 100 with it off. More than 5,000 referrals, or an answer over
+4 MB, is a failed read ("Your referrals did not load."), never a short list. The same holds
+for each member's referrals in `team` (inside that answer's 2 MB limit).
+
 ### earnings
 
 ```json

@@ -196,8 +196,9 @@ function routeLabel(row) {
  * @param {string} [today]
  */
 export function decorateReferrals(list, today = todayInNewYork()) {
+  // Every row, sorted newest first. No cap here: the read already refuses an oversized list,
+  // and a cap before the sort dropped the newest referral (field MVP plan R5).
   const rows = (Array.isArray(list) ? list : [])
-    .slice(0, 200)
     .map(sanitizeReferral)
     .filter(Boolean)
     .sort((a, b) => (a.sentOn < b.sentOn ? 1 : a.sentOn > b.sentOn ? -1 : a.id < b.id ? 1 : -1));
