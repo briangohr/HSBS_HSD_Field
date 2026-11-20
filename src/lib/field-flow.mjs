@@ -48,6 +48,13 @@ export const submitBudgetMs = (spentMs) =>
 /** My Team. The flow answers within 20s (contract); the site waits 25s. */
 export const TEAM_TIMEOUT_MS = 25_000;
 const TEAM_MAX_CHARS = 2_000_000;
+/**
+ * The most referrals one list read may hold (SharePoint's paginated read limit on the Low
+ * plan). More is a failed read, never a list cut short: a short list would show a wrong total.
+ */
+export const REFERRAL_READ_MAX = 5000;
+/** The most text a list or earnings answer may hold. Over it is a failed read. */
+const READ_MAX_CHARS = 4_000_000;
 /** Same cap as TEAM_MAX in rep-team.mjs. */
 export const TEAM_MAX_MEMBERS = 200;
 const SAVED_MS = 30 * 60 * 1000;
@@ -223,11 +230,13 @@ export async function listReferrals(key) {
   let body;
   try {
     const text = await res.text();
-    body = JSON.parse(text.slice(0, 500_000));
+    if (text.length > READ_MAX_CHARS) throw new Error('too large');
+    body = JSON.parse(text);
   } catch {
     throw new ReferralAppWriteError(200);
   }
   if (!body || typeof body !== 'object' || !Array.isArray(body.referrals)) throw new ReferralAppWriteError(200);
+  if (body.referrals.length > REFERRAL_READ_MAX) throw new ReferralAppWriteError(200);
   return body.referrals;
 }
 
@@ -251,7 +260,8 @@ export async function listEarnings(key) {
   let body;
   try {
     const text = await res.text();
-    body = JSON.parse(text.slice(0, 500_000));
+    if (text.length > READ_MAX_CHARS) throw new Error('too large');
+    body = JSON.parse(text);
   } catch {
     throw new ReferralAppWriteError(200);
   }
