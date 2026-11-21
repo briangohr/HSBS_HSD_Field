@@ -199,7 +199,10 @@ try {
 
     await check(`${tag}: opening a confirm link only peeks; it never confirms`, async () => {
       flowBodies.length = 0;
-      await page.goto(`${BASE}/confirm/${js ? TOKENS.on : TOKENS.off}`);
+      const opened = await page.goto(`${BASE}/confirm/${js ? TOKENS.on : TOKENS.off}`);
+      // G2 finding 12: the token is in the URL, so the page is never cached or indexed.
+      assert.equal(opened.headers()['cache-control'], 'no-store');
+      assert.equal(opened.headers()['x-robots-tag'], 'noindex, nofollow');
       assert.equal(await page.textContent('#cf-ask h1'), 'Is Test Rep on your team?');
       assert.deepEqual(flowBodies.map((b) => b.action), ['confirm-peek']);
     });
@@ -234,6 +237,8 @@ try {
       flowBodies.length = 0;
       const res = await page.goto(`${BASE}/confirm/not-a-token`);
       assert.equal(res.status(), 404);
+      assert.equal(res.headers()['cache-control'], 'no-store');
+      assert.equal(res.headers()['x-robots-tag'], 'noindex, nofollow');
       assert.equal(await page.textContent('h1'), 'This link does not work.');
       assert.equal(flowBodies.length, 0);
     });
@@ -249,7 +254,10 @@ try {
   await check('launch (app on, REP_CONFIRM_ENABLED unset): /confirm and /api/confirm answer 404 and no token reaches 1J; /join still works', async () => {
     flowBodies.length = 0;
     for (const token of [TOKENS.off, TOKENS.on, 'c3'.repeat(32)]) {
-      assert.equal((await fetch(`${BASE}/confirm/${token}`)).status, 404, token);
+      const off = await fetch(`${BASE}/confirm/${token}`);
+      assert.equal(off.status, 404, token);
+      assert.equal(off.headers.get('cache-control'), 'no-store', token);
+      assert.equal(off.headers.get('x-robots-tag'), 'noindex, nofollow', token);
       const form = await fetch(`${BASE}/confirm/${token}`, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded', origin: BASE },

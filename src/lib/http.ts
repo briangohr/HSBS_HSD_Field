@@ -26,10 +26,8 @@ export const env = (k: string): string | undefined => {
 
 // Best-effort per-IP limit. Serverless instances don't share memory, so this slows a
 // single noisy client rather than guaranteeing a global cap. Pair it with Vercel's
-// firewall rate limiting if abuse shows up.
-// 20 per 10 minutes by default, not 5: doctors at a study club or trade show scan the QR
-// on the same venue Wi-Fi, so they share one public IP. At 5, the sixth doctor was
-// blocked. LEAD_RATE_LIMIT overrides it (raise it for a big event, or for local tests).
+// firewall rate limiting if abuse shows up. Every caller names its own limit; there is no
+// default and no environment setting for it.
 //
 // Two maps: one for addresses and plain names, one for per-key buckets. New keys can't
 // push an address's count out, and neither map is ever cleared whole. When a map is full,
@@ -38,7 +36,6 @@ const hits = new Map<string, number[]>();
 const keyHits = new Map<string, number[]>();
 /** Most buckets one map holds on a warm instance before it evicts. */
 export const MAX_BUCKETS = 20_000;
-const defaultLimit = () => Number(env('LEAD_RATE_LIMIT')) || 20;
 
 function count(map: Map<string, number[]>, name: string, limit: number, windowMs: number): boolean {
   const now = Date.now();
@@ -64,7 +61,7 @@ function evict<T>(map: Map<string, T[]>, now: number, windowMs: number, at: (ent
   }
 }
 
-export function rateLimited(ip: string, limit = defaultLimit(), windowMs = 10 * 60 * 1000): boolean {
+export function rateLimited(ip: string, limit: number, windowMs = 10 * 60 * 1000): boolean {
   return count(hits, ip, limit, windowMs);
 }
 
@@ -149,6 +146,19 @@ export function journeyLimited(scope: string, secret: string, ip: string, perKey
 
 /** Test hook: the bucket names held now. Lets a test prove no raw key is stored. */
 export const rateBuckets = (): string[] => [...hits.keys(), ...keyHits.keys(), ...keyHolds.keys()];
+
+/**
+ * Headers for every answer from a page whose URL carries a secret (Referral Key, Link Key,
+ * confirm token), the 404 included: no cache may keep it and no search engine may list it.
+ */
+export const SECRET_URL_HEADERS = { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' } as const;
+
+/** The plain-text 404 a secret-URL page answers when its switch is off. */
+export const secretUrlNotFound = (): Response =>
+  new Response('Not found', {
+    status: 404,
+    headers: { 'content-type': 'text/plain; charset=utf-8', ...SECRET_URL_HEADERS },
+  });
 
 export const clientIp = (request: Request, fallback = 'unknown') =>
   request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || fallback;

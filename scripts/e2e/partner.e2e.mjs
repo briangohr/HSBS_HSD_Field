@@ -166,6 +166,8 @@ let dev = await startDev({ REP_APP_ENABLED: 'true', PARTNER_FLOW_URL: FLOW_URL }
 await check('off: page and save are 404, nothing posted', async () => {
   const page = await fetch(`${BASE}/update/${KEY}`);
   assert.equal(page.status, 404);
+  assert.equal(page.headers.get('cache-control'), 'no-store');
+  assert.equal(page.headers.get('x-robots-tag'), 'noindex, nofollow');
   assert.equal(await page.text(), 'Not found');
   const save = await postSave({ key: KEY, submissionId: crypto.randomUUID(), updates: [] });
   assert.equal(save.status, 404);

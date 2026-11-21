@@ -11,7 +11,7 @@
 // "true", and REP_CONFIRM_ENABLED stays unset at launch. The copy below is #43's and is not
 // used at launch: a yes grants nothing (My Team reads only the Team Roster). Removable later.
 import '../../styles/global.css';
-import { clientIp, rateLimited } from '../../lib/http';
+import { SECRET_URL_HEADERS, clientIp, rateLimited, secretUrlNotFound } from '../../lib/http';
 import {
   ConfirmUnknownError,
   ConfirmUsedError,
@@ -24,8 +24,12 @@ import { submitConfirm } from '../../lib/confirm-submit';
 export const prerender = false;
 
 if (!confirmEnabled()) {
-  return new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+  return secretUrlNotFound();
 }
+
+// The token is a secret in the URL: no cache keeps this page and no search engine lists it,
+// whatever the answer.
+for (const [name, value] of Object.entries(SECRET_URL_HEADERS)) Astro.response.headers.set(name, value);
 
 const token = String(Astro.params.token ?? '').trim();
 let state: 'invalid' | 'used' | 'unavailable' | 'ready' | 'confirmed' | 'declined' = 'invalid';
