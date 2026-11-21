@@ -85,8 +85,10 @@ export function sanitizeReferral(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const row = /** @type {Record<string, unknown>} */ (raw);
   const id = referralId(row);
+  // Only the id is required. A blank Doctor Name (the contact) still shows on Track, named
+  // by its practice or its id (officeName), so a referral is never missing (G2 finding 7).
   const doctorName = s(row.doctorName, 120) || s(row.doctor, 120);
-  if (!id || !doctorName) return null;
+  if (!id) return null;
   const source = Array.isArray(row.lines) ? row.lines : Array.isArray(row.cases) ? row.cases : [];
   const lines = source.slice(0, 20).map(sanitizeLine).filter(Boolean);
   const history = Array.isArray(row.history) ? row.history.slice(0, 50).map(sanitizeHistory).filter(Boolean) : [];
@@ -138,6 +140,15 @@ function sanitizeHistory(raw) {
   if (!text) return null;
   const on = s(row.on, 10);
   return { on: DATE.test(on) ? on : '', text };
+}
+
+/**
+ * The name a rep sees for a referral: the practice, else the contact, else "Referral <id>".
+ * A manager's view never uses this, because it never shows the contact.
+ * @param {{ id: string, doctorName: string, practiceName: string }} row
+ */
+export function officeName(row) {
+  return row.practiceName || row.doctorName || `Referral ${row.id}`;
 }
 
 /**

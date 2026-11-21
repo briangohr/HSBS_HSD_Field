@@ -4,7 +4,7 @@
 // Each line is in the same plain words as Track's rows and lead screen (rep-lead.mjs):
 // "Nov 14. North Side Dental: Signed and billed."
 
-import { decorateReferrals, sanitizeReferral, shortDate, todayInNewYork } from './track.mjs';
+import { decorateReferrals, officeName, sanitizeReferral, shortDate, todayInNewYork } from './track.mjs';
 import { displayStatus } from './partner-status-words.mjs';
 import { historyWords, labelSentences, lineCompany, mainLine, closeWordsFor, isStaffingCompany } from './rep-lead.mjs';
 
@@ -58,7 +58,7 @@ export function repFeed(list, today = todayInNewYork()) {
   /** @type {FeedItem[]} */
   const items = [];
   for (const row of rows) {
-    const place = row.practiceName || row.doctorName;
+    const place = officeName(row);
     const company = lineCompany(mainLine(row));
     for (const h of row.history) {
       if (!h.on) continue;

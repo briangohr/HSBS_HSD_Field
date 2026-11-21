@@ -101,8 +101,14 @@ describe('Rep app Latest updates feed', () => {
     assert.match(feed[1].label, /^Nov 18\. South Park Dental: /);
   });
 
-  test('a row without an id or a doctor never reaches the feed', () => {
+  test('a row without an id never reaches the feed', () => {
     assert.deepEqual(repFeed([{ practice: 'X', history: [{ on: '2026-11-01', text: 'Sent' }] }], '2026-11-02'), []);
+  });
+
+  test('a row with a blank Doctor Name still reaches the feed, by practice name or referral id (G2 finding 7)', () => {
+    const blank = (o) => ({ id: 'HSBS-F12', created: '2026-11-18', cases: [{ company: 'HealthFirst', partnerStatus: 'Sent', updated: '2026-11-18' }], history: [{ on: '2026-11-18', text: 'Sent' }], ...o });
+    assert.match(repFeed([blank({ doctorName: '', practiceName: 'TEST South Park Dental' })], '2026-11-19')[0].label, /^Nov 18\. TEST South Park Dental: /);
+    assert.match(repFeed([blank({})], '2026-11-19')[0].label, /^Nov 18\. Referral HSBS-F12: /);
   });
 });
 

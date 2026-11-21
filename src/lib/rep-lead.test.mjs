@@ -179,9 +179,23 @@ describe('the lead screen (test 18)', () => {
     assert.equal(flagged.steps.at(-1).label, 'Signed and billed');
   });
 
-  test('no update text means no update block; a row without an id or contact is dropped', () => {
+  test('no update text means no update block; a row without an id is dropped', () => {
     assert.equal('update' in leadViews([row({})], TODAY)[0], false);
     assert.deepEqual(leadViews([{ practiceName: 'x' }, null, 'x'], TODAY), []);
+  });
+
+  test('a blank Doctor Name keeps the referral on Track (G2 finding 7)', () => {
+    // Practice name only: the office is the practice, and no empty Contact line.
+    const [practiceOnly] = leadViews([row({ id: 'HSBS-F12', doctorName: '' })], TODAY);
+    assert.equal(practiceOnly.office, 'TEST North Side Dental');
+    assert.equal('contact' in practiceOnly, false);
+    // Neither name: the rep sees the referral id, a manager still sees "Office".
+    const neither = row({ id: 'HSBS-F12', doctorName: '', practiceName: '' });
+    assert.equal(leadViews([neither], TODAY)[0].office, 'Referral HSBS-F12');
+    assert.equal(leadViews([neither], TODAY, { team: true })[0].office, 'Office');
+    // The list's other names for the same fields (doctor, practice) read the same way.
+    const alias = { id: 'HSBS-F13', doctor: '', practice: 'TEST Alias Dental', created: '2026-11-03', cases: [{ company: 'HealthFirst', partnerStatus: 'Sent' }] };
+    assert.equal(leadViews([alias], TODAY)[0].office, 'TEST Alias Dental');
   });
 });
 

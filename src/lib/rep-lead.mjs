@@ -32,7 +32,7 @@
 // free-text update, and its timeline holds only the mapped step words and dates: a
 // Status Log line the map doesn't know is dropped there, since it can name the doctor.
 
-import { decorateReferrals, isNotQualifiedClose, sanitizeReferral, shortDate, todayInNewYork } from './track.mjs';
+import { decorateReferrals, isNotQualifiedClose, officeName, sanitizeReferral, shortDate, todayInNewYork } from './track.mjs';
 import { displayStatus, displayStatusText, isSignedStatus } from './partner-status-words.mjs';
 import { companyName, keyForSolutions } from './rep-companies.mjs';
 
@@ -318,7 +318,7 @@ export function leadViews(list, today = todayInNewYork(), opts = {}) {
     /** @type {Lead} */
     const lead = {
       id: row.id,
-      office: row.practiceName || (team ? 'Office' : row.doctorName),
+      office: team ? row.practiceName || 'Office' : officeName(row),
       sentLabel: d.sentLabel,
       company,
       chip: chip.words,
@@ -334,7 +334,7 @@ export function leadViews(list, today = todayInNewYork(), opts = {}) {
       lead.companyLine = `${company}${type}`;
     }
     if (!team) {
-      if (row.practiceName) lead.contact = row.doctorName;
+      if (row.practiceName && row.doctorName) lead.contact = row.doctorName;
       const detail = line ? displayStatusText(line.detail).trim() : '';
       if (detail) lead.update = { on: line?.updatedOn ? shortDate(line.updatedOn) : '', text: detail };
     }
