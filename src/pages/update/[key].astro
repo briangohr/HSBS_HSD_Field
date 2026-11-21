@@ -15,10 +15,11 @@ import {
   SAVE_WORDS,
   easternToday,
   isPartnerKey,
+  nowLine,
   savedWords,
   showDate,
 } from '../../lib/partner-form.mjs';
-import { STAND_CHOICES, STAND_GROUPS, displayStatus } from '../../lib/partner-status-words.mjs';
+import { STAND_CHOICES, STAND_GROUPS } from '../../lib/partner-status-words.mjs';
 
 export const prerender = false;
 
@@ -63,7 +64,6 @@ Astro.response.status = { invalid: 404, expired: 410, busy: 429, unavailable: 50
 const today = easternToday();
 const savedParam = Number(Astro.url.searchParams.get('saved') ?? '');
 const saved = state === 'ready' && Number.isSafeInteger(savedParam) && savedParam > 0 && savedParam <= MAX_UPDATES ? savedWords(savedParam) : '';
-const nowLine = (status: string) => displayStatus(status) || 'No update yet';
 ---
 
 <!doctype html>
@@ -141,8 +141,7 @@ const nowLine = (status: string) => displayStatus(status) || 'No update yet';
                     </h2>
                     <p class="pu-sub">{[lead.contact, lead.company].filter(Boolean).join(', ')}</p>
                     <p class="pu-sub">
-                      {lead.introducedOn ? `Introduced ${showDate(lead.introducedOn)}. ` : ''}Now: {nowLine(lead.status)}
-                      {lead.meetingDate ? `, meeting ${showDate(lead.meetingDate)}` : ''}
+                      {lead.introducedOn ? `Introduced ${showDate(lead.introducedOn)}. ` : ''}Now: {nowLine(lead.status, lead.meetingDate)}
                     </p>
                     <p class={lead.missedUpdates > 0 ? 'pu-due pu-due--late' : 'pu-due'}>
                       {lead.missedUpdates > 0 ? 'Overdue' : lead.nextUpdateDue ? `Update due ${showDate(lead.nextUpdateDue)}` : ''}

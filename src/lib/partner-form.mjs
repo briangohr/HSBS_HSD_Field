@@ -3,7 +3,7 @@
 // key, no flow URL and no lead data. Contract: docs/field-flow-contract.md, "HSBS 7F".
 
 import { oneLine } from './one-line.mjs';
-import { STAND_CHOICES } from './partner-status-words.mjs';
+import { STAND_CHOICES, displayStatus } from './partner-status-words.mjs';
 
 /** A Partner Links Link Key: 40 hex characters. Anything else is 404 before any flow call. */
 export const isPartnerKey = (key) => typeof key === 'string' && /^[0-9a-fA-F]{40}$/.test(key);
@@ -173,4 +173,21 @@ export function checkUpdates(updates, today) {
     clean.push(result.update);
   }
   return { ok: true, updates: clean };
+}
+
+/** Statuses where the case's Meeting Date still describes the lead. */
+const MEETING_STATUSES = ['Meeting set', 'Meeting held'];
+
+/**
+ * The "Now:" words on a lead card. The case keeps its old Meeting Date after a later save
+ * (7F leaves the column alone), so the date shows only while the lead stands at a meeting.
+ * Brian, 11/21/2026: "Trying to reach, meeting Nov 24" made no sense.
+ * @param {string} status Partner Status as stored
+ * @param {string} meetingDate YYYY-MM-DD or blank
+ */
+export function nowLine(status, meetingDate) {
+  const shown = displayStatus(status);
+  if (!shown) return 'No update yet';
+  const date = MEETING_STATUSES.includes(shown) ? showDate(meetingDate) : '';
+  return date ? `${shown}, meeting ${date}` : shown;
 }

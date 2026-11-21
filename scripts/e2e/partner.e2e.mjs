@@ -65,6 +65,20 @@ const LEADS = [
     missedUpdates: 1,
     doctorEmail: 'doctor@example.com',
   },
+  {
+    // Moved on from a meeting: the case still holds the old Meeting Date.
+    id: 38,
+    ref: 'HSBS-F92',
+    practice: 'TEST West Dental',
+    contact: 'TEST Doctor',
+    company: 'HealthFirst',
+    introducedOn: eastern(-6),
+    status: 'Trying to reach',
+    talkedToDoctor: 'No, still trying',
+    meetingDate: eastern(3),
+    nextUpdateDue: eastern(5),
+    missedUpdates: 0,
+  },
 ];
 
 const bodies = [];
@@ -190,6 +204,11 @@ await check('page lists leads overdue first, no private fields, no analytics, no
   assert.ok(html.indexOf('HSBS-F91') < html.indexOf('HSBS-F90'), 'overdue lead is not first');
   assert.match(html, /Overdue/);
   assert.match(html, /Lead updates for TEST field partner/);
+  // A meeting date shows only while the lead stands at a meeting.
+  const card = (ref) => html.slice(html.indexOf(ref), html.indexOf('</fieldset>', html.indexOf(ref)));
+  assert.match(card('HSBS-F91'), /Now: Meeting set, meeting /);
+  assert.match(card('HSBS-F92'), /Now: Trying to reach/);
+  assert.doesNotMatch(card('HSBS-F92'), /meeting [A-Z][a-z]{2} \d/);
 });
 
 const phone = await browser.newContext({ ...devices['iPhone 13'], viewport: { width: 375, height: 812 } });

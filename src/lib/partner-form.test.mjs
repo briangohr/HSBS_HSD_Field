@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { STAND_CHOICES } from './partner-status-words.mjs';
 import { describe, test } from 'node:test';
-import { CLOSED_REASONS, LEGACY_CLOSED_REASONS, TALKED_CHOICES, TALKED_FOR, checkUpdate, checkUpdates, easternToday, isDate, isPartnerKey, showDate } from './partner-form.mjs';
+import { CLOSED_REASONS, LEGACY_CLOSED_REASONS, TALKED_CHOICES, TALKED_FOR, checkUpdate, checkUpdates, easternToday, isDate, isPartnerKey, nowLine, showDate } from './partner-form.mjs';
 
 const TODAY = '2026-11-20';
 // The new page sends no Talked To Doctor answer; checkUpdate fills it in from the choice.
@@ -135,4 +135,16 @@ describe('checkUpdates', () => {
   test('the first bad lead is named', () => {
     assert.deepEqual(checkUpdates([base, { ...base, id: 37, choice: 'lost' }], TODAY), { ok: false, id: 37, field: 'closedReason' });
   });
+});
+
+test('the Now line shows the meeting date only while the lead stands at a meeting', () => {
+  assert.equal(nowLine('Meeting set', '2026-11-24'), 'Meeting set, meeting Nov 24, 2026');
+  assert.equal(nowLine('Scheduled', '2026-11-24'), 'Meeting set, meeting Nov 24, 2026');
+  assert.equal(nowLine('Complete', '2026-11-24'), 'Meeting held, meeting Nov 24, 2026');
+  assert.equal(nowLine('Meeting set', ''), 'Meeting set');
+  // The case keeps an old Meeting Date after a later save (TEST F60, 11/21/2026).
+  assert.equal(nowLine('Trying to reach', '2026-11-24'), 'Trying to reach');
+  assert.equal(nowLine('Proposal or agreement sent', '2026-11-24'), 'Proposal or agreement sent');
+  assert.equal(nowLine('Not moving forward', '2026-11-24'), 'Not moving forward');
+  assert.equal(nowLine('', '2026-11-24'), 'No update yet');
 });
