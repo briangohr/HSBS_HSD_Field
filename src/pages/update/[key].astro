@@ -325,7 +325,11 @@ const nowLine = (status: string) => displayStatus(status) || 'No update yet';
               today,
             );
             if (result.ok) {
-              updates.push(result.update);
+              // The server fills in Talked To Doctor from the choice. Sending one marks an
+              // old page (docs/field-flow-contract.md, 7F), so the new page leaves it out.
+              const sent = { ...result.update };
+              delete sent.talkedToDoctor;
+              updates.push(sent);
             } else {
               const words = fieldWords(ref, result.field);
               flag(li, words);

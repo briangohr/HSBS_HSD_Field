@@ -281,15 +281,20 @@ dropped. More than 500 leads is a failed read. The page sorts overdue (Missed Up
 deal). The site checks every update first (`checkUpdate` in `src/lib/partner-form.mjs`) and
 sends fields that don't belong to the choice blank. The page no longer asks "Have you talked
 to the doctor?": the site sets `talkedToDoctor` from the choice (`TALKED_FOR`): `Not yet,
-still trying` for `trying` and `dq_noanswer`, blank for `nochange`, `Yes` for the rest. The
-browser's value is ignored. `meeting` (page label "Demo set") needs a `meetingDate` today or
+still trying` for `trying` and `dq_noanswer`, blank for `nochange`, `Yes` for the rest. `meeting` (page label "Demo set") needs a `meetingDate` today or
 later; `signed` a `signedDate` not after today, `signedProduct` up to 100; `lost` a
 `closedReason` of the five (`No response` is the `dq_noanswer` choice now); `note` is
 optional, one line, up to 300. Today is Eastern time. The two day rules (meeting today or
 later, signed not after today) are checked by the page and by 7F, not by
 `/api/partner-save`, so a resend after midnight still reaches 7F's tag check. 7F skips the
-day rules on a save whose tag it already holds on any of its cases. 7F still accepts
-`handback` from an older page; this page no longer sends it.
+day rules on a save whose tag it already holds on any of its cases.
+
+A page loaded before 11/20/2026 still sends its own `talkedToDoctor` answer. An update that
+carries one gets the old rules, so an open tab or a retry of a partly written save still
+reaches 7F: `talkedToDoctor` must be one of the three Talked To Doctor choices and is sent
+as is; `choice` is one of `meeting`, `proposal`, `signed`, `lost`, `handback`, `nochange`;
+`handback` needs a note; `lost` also takes `No response`. 7F accepts all of these. The new
+page never sends `talkedToDoctor` or `handback`.
 
 What 7F stores per choice (the words are placeholders until HealthFirst sends its
 Salesforce picklist; every stored value is an existing column choice):

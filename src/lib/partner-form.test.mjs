@@ -3,10 +3,11 @@
 import assert from 'node:assert/strict';
 import { STAND_CHOICES } from './partner-status-words.mjs';
 import { describe, test } from 'node:test';
-import { CLOSED_REASONS, TALKED_CHOICES, TALKED_FOR, checkUpdate, checkUpdates, easternToday, isDate, isPartnerKey, showDate } from './partner-form.mjs';
+import { CLOSED_REASONS, LEGACY_CLOSED_REASONS, TALKED_CHOICES, TALKED_FOR, checkUpdate, checkUpdates, easternToday, isDate, isPartnerKey, showDate } from './partner-form.mjs';
 
 const TODAY = '2026-11-20';
-const base = { id: 36, choice: 'proposal', talkedToDoctor: 'Yes', meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note: '' };
+// The new page sends no Talked To Doctor answer; checkUpdate fills it in from the choice.
+const base = { id: 36, choice: 'proposal', talkedToDoctor: '', meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note: '' };
 const ok = (raw) => {
   const r = checkUpdate(raw, TODAY);
   assert.equal(r.ok, true, JSON.stringify(r));
@@ -48,6 +49,7 @@ describe('checkUpdate', () => {
     assert.deepEqual(ok({ ...base, choice: 'meeting', meetingDate: '2026-11-24', signedDate: '2026-11-01', closedReason: 'Price' }), {
       ...base,
       choice: 'meeting',
+      talkedToDoctor: 'Yes',
       meetingDate: '2026-11-24',
     });
     ok({ ...base, choice: 'meeting', meetingDate: TODAY });
@@ -80,15 +82,25 @@ describe('checkUpdate', () => {
   test('hand back is no longer a page choice', () => {
     bad({ ...base, choice: 'handback', note: 'TEST note one' }, 'choice');
   });
-  test('Talked To Doctor follows the choice; the browser value is ignored', () => {
-    assert.equal(ok({ ...base, choice: 'trying', talkedToDoctor: 'Yes' }).talkedToDoctor, 'Not yet, still trying');
-    assert.equal(ok({ ...base, choice: 'dq_noanswer', talkedToDoctor: 'Yes' }).talkedToDoctor, 'Not yet, still trying');
-    assert.equal(ok({ ...base, choice: 'qualified', talkedToDoctor: 'Maybe' }).talkedToDoctor, 'Yes');
-    assert.equal(ok({ ...base, choice: 'nochange', talkedToDoctor: 'Yes' }).talkedToDoctor, '');
+  test('Talked To Doctor follows the choice when the page sends none', () => {
+    assert.equal(ok({ ...base, choice: 'trying' }).talkedToDoctor, 'Not yet, still trying');
+    assert.equal(ok({ ...base, choice: 'dq_noanswer' }).talkedToDoctor, 'Not yet, still trying');
+    assert.equal(ok({ ...base, choice: 'qualified' }).talkedToDoctor, 'Yes');
+    assert.equal(ok({ ...base, choice: 'nochange' }).talkedToDoctor, '');
     for (const c of STAND_CHOICES) {
       const t = TALKED_FOR[c.code];
       assert.ok(t === '' ? c.code === 'nochange' : TALKED_CHOICES.includes(t), c.code);
     }
+  });
+  test('a page loaded before the change still saves with the old rules (Codex P1 on #20)', () => {
+    const old = { ...base, talkedToDoctor: "Not yet, haven't tried" };
+    assert.equal(ok({ ...old, choice: 'handback', note: 'TEST wrong number' }).choice, 'handback');
+    assert.equal(ok({ ...old, choice: 'handback', note: 'TEST wrong number' }).talkedToDoctor, "Not yet, haven't tried");
+    bad({ ...old, choice: 'handback' }, 'note');
+    for (const reason of LEGACY_CLOSED_REASONS) assert.equal(ok({ ...old, choice: 'lost', closedReason: reason }).closedReason, reason);
+    assert.equal(ok({ ...old, choice: 'nochange' }).talkedToDoctor, "Not yet, haven't tried");
+    bad({ ...base, talkedToDoctor: 'Maybe' }, 'talkedToDoctor');
+    bad({ ...old, choice: 'qualified' }, 'choice');
   });
   test('every page choice has a heading group and a label', () => {
     assert.deepEqual(STAND_CHOICES.map((c) => c.code), ['trying', 'qualified', 'dq_noanswer', 'dq_notinterested', 'meeting', 'proposal', 'signed', 'lost', 'nochange']);

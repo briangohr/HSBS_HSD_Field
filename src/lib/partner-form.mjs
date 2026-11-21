@@ -35,6 +35,15 @@ export const DISQUALIFIED = ['dq_noanswer', 'dq_notinterested'];
 export const CLOSED_REASONS = ['Chose another provider', 'Price', 'Timing', 'Not a fit', 'Other'];
 
 export const CHOICE_CODES = STAND_CHOICES.map((c) => c.code);
+
+/**
+ * A page loaded before 11/20/2026 still asks "Have you talked to the doctor?" and sends its
+ * answer, and may send `handback` or the reason "No response". The save keeps taking those,
+ * with the old rules, so an open tab or a retry of a partly written save still reaches 7F
+ * (Codex P1 on #20). The new page never sends talkedToDoctor, so it gets the new rules.
+ */
+export const LEGACY_CHOICE_CODES = ['meeting', 'proposal', 'signed', 'lost', 'handback', 'nochange'];
+export const LEGACY_CLOSED_REASONS = ['No response', ...CLOSED_REASONS];
 export const MAX_UPDATES = 50;
 export const NOTE_MAX = 300;
 export const PRODUCT_MAX = 100;
@@ -45,6 +54,7 @@ export const UPDATE_FIELDS = ['talkedToDoctor', 'meetingDate', 'signedDate', 'si
 /** What the page names when a field is missing or wrong. */
 export const FIELD_WORDS = {
   choice: 'Where does it stand?',
+  talkedToDoctor: 'Have you talked to the doctor?',
   meetingDate: 'Demo date',
   signedDate: 'Signed date',
   signedProduct: 'Product',
@@ -112,11 +122,15 @@ export function checkUpdate(raw, today) {
   if (id === null) return { ok: false, id: null, field: 'id' };
   const bad = (field) => ({ ok: false, id, field });
   const choice = text(u.choice);
-  if (!CHOICE_CODES.includes(choice)) return bad('choice');
-  const talked = TALKED_FOR[choice] ?? '';
+  const sentTalked = text(u.talkedToDoctor);
+  const legacy = sentTalked !== '';
+  if (!(legacy ? LEGACY_CHOICE_CODES : CHOICE_CODES).includes(choice)) return bad('choice');
+  if (legacy && !TALKED_CHOICES.includes(sentTalked)) return bad('talkedToDoctor');
+  const talked = legacy ? sentTalked : (TALKED_FOR[choice] ?? '');
   const rawNote = text(u.note);
   const note = oneLine(rawNote, NOTE_MAX + 1);
   if (note.length > NOTE_MAX) return bad('note');
+  if (choice === 'handback' && !note) return bad('note');
   const update = { id, choice, talkedToDoctor: talked, meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note };
   if (choice === 'meeting') {
     const date = text(u.meetingDate);
@@ -133,7 +147,7 @@ export function checkUpdate(raw, today) {
   }
   if (choice === 'lost') {
     const reason = text(u.closedReason);
-    if (!CLOSED_REASONS.includes(reason)) return bad('closedReason');
+    if (!(legacy ? LEGACY_CLOSED_REASONS : CLOSED_REASONS).includes(reason)) return bad('closedReason');
     update.closedReason = reason;
   }
   return { ok: true, update };
