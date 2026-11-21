@@ -34,6 +34,7 @@ How to read them:
 | F3, staffing intro | `field-two-track-staffing-intro.md` |
 | 3F-F, the 3F Field copy | `field-two-track-3f-field-copy.md` |
 | F4, pay and ledger | `field-two-track-pay-sheet.md` |
+| Promo file: one per pay promotion (11/21) | `field-promo-file.md`, files in `promos/` |
 | F5, roster load | `field-two-track-roster-load.md` |
 | F7, send on | `field-two-track-send-on.md` |
 | SR, sender role | `field-two-track-sender-role.md` |
