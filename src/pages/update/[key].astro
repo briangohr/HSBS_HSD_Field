@@ -18,6 +18,7 @@ import {
   isPartnerKey,
   noChangeHint,
   nowLine,
+  saveResultWords,
   savedWords,
   showDate,
 } from '../../lib/partner-form.mjs';
@@ -64,8 +65,21 @@ Astro.response.headers.set('X-Robots-Tag', 'noindex, nofollow');
 Astro.response.status = { invalid: 404, expired: 410, busy: 429, unavailable: 503, ready: 200 }[state];
 
 const today = easternToday();
-const savedParam = Number(Astro.url.searchParams.get('saved') ?? '');
-const saved = state === 'ready' && Number.isSafeInteger(savedParam) && savedParam > 0 && savedParam <= MAX_UPDATES ? savedWords(savedParam) : '';
+// After a save the page reloads with ?saved=<n>&of=<sent>, so a partial or zero save keeps
+// its words. A page opened before `of` existed sends ?saved=<n> alone: a full save.
+const params = Astro.url.searchParams;
+const savedParam = params.get('saved');
+const ofParam = params.get('of');
+const wholeParam = (v: string | null) => (v !== null && /^\d{1,3}$/.test(v) ? Number(v) : NaN);
+const savedCount = wholeParam(savedParam);
+const saved =
+  state !== 'ready' || savedParam === null
+    ? ''
+    : ofParam === null
+      ? savedCount > 0 && savedCount <= MAX_UPDATES
+        ? savedWords(savedCount)
+        : ''
+      : (saveResultWords(savedCount, wholeParam(ofParam)) ?? '');
 ---
 
 <!doctype html>
@@ -288,7 +302,7 @@ const saved = state === 'ready' && Number.isSafeInteger(savedParam) && savedPara
 
     <script>
       import { CLIENT_WAIT_MS } from '../../lib/field-form.mjs';
-      import { MAX_UPDATES, SAVE_WORDS, checkUpdate, easternToday, fieldWords, reloadWords, savedWords } from '../../lib/partner-form.mjs';
+      import { MAX_UPDATES, SAVE_WORDS, checkUpdate, easternToday, fieldWords, reloadWords, saveResultWords } from '../../lib/partner-form.mjs';
 
       const form = document.getElementById('pu-form') as HTMLFormElement | null;
       const button = document.getElementById('pu-save') as HTMLButtonElement | null;
@@ -407,10 +421,13 @@ const saved = state === 'ready' && Number.isSafeInteger(savedParam) && savedPara
           }
           busy = false;
           const code = res?.status ?? 0;
-          if (code === 200 && data?.ok === true && typeof data.saved === 'number') {
+          // A 200 whose count is above what was sent is not a save answer: no clear answer.
+          const savedCount = code === 200 && data?.ok === true && typeof data.saved === 'number' ? data.saved : NaN;
+          const doneWords = saveResultWords(savedCount, updates.length);
+          if (doneWords !== null) {
             pending = null;
-            status.textContent = savedWords(data.saved);
-            location.replace(`${location.pathname}?saved=${data.saved}`);
+            status.textContent = doneWords;
+            location.replace(`${location.pathname}?saved=${savedCount}&of=${updates.length}`);
             return;
           }
           if (code === 404 || code === 410) {

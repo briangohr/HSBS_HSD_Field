@@ -74,6 +74,28 @@ export const SAVE_WORDS = {
 
 /** @param {number} n */
 export const savedWords = (n) => `Saved ${n} ${n === 1 ? 'update' : 'updates'}.`;
+
+/**
+ * Words for a save that 7F answered with 200 {"ok":true,"saved":n}, given how many updates
+ * were sent. 7F skips a lead that closed or moved between its check and its write, so
+ * `saved` can be below `sent`; the page must say so (Codex FT-3). `saved` above `sent`, or
+ * either count not a whole number in range, is not a save answer: null.
+ * @param {number} saved
+ * @param {number} sent
+ * @returns {string | null}
+ */
+export function saveResultWords(saved, sent) {
+  if (!Number.isSafeInteger(saved) || !Number.isSafeInteger(sent)) return null;
+  if (sent < 1 || sent > MAX_UPDATES || saved < 0 || saved > sent) return null;
+  if (saved === sent) return savedWords(saved);
+  const missed = sent - saved;
+  if (saved === 0) {
+    return sent === 1
+      ? 'Nothing saved. This lead closed or changed while you worked. The list below is current.'
+      : `Nothing saved. These ${sent} leads closed or changed while you worked. The list below is current.`;
+  }
+  return `Saved ${saved} of ${sent} updates. ${missed === 1 ? '1 lead' : `${missed} leads`} closed or changed while you worked and did not save. The list below is current.`;
+}
 /** @param {string} ref */
 export const reloadWords = (ref) => `Lead ${ref} changed. Reload the page.`;
 /** @param {string} ref @param {string} field */

@@ -3,7 +3,7 @@
 
 import { isSubmissionId } from './field-form.mjs';
 import { PartnerFlowError, saveUpdates } from './partner-flow.mjs';
-import { SAVE_WORDS, checkUpdates, isPartnerKey, savedWords } from './partner-form.mjs';
+import { SAVE_WORDS, checkUpdates, isPartnerKey, saveResultWords, savedWords } from './partner-form.mjs';
 
 /**
  * The day rules (meeting today or later, signed not after today) are left to the page and to
@@ -22,8 +22,11 @@ export async function partnerSave(raw) {
     return { status: 422, body: { error: 'bad_value', id: checked.id, field: checked.field } };
   }
   try {
+    const sent = checked.updates.length;
     const saved = await saveUpdates(String(b.key), String(b.submissionId), checked.updates);
-    return { status: 200, body: { ok: true, saved, message: savedWords(saved) } };
+    // saveUpdates refuses saved above sent, so the words are never null here.
+    const message = saveResultWords(saved, sent) ?? savedWords(saved);
+    return { status: 200, body: { ok: true, saved, sent, partial: saved < sent, message } };
   } catch (err) {
     const kind = err instanceof PartnerFlowError ? err.kind : 'failed';
     if (kind === 'unknown') return { status: 404, body: { error: SAVE_WORDS.badLink } };

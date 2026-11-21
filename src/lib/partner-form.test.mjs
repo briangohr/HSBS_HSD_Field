@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { STAND_CHOICES } from './partner-status-words.mjs';
 import { describe, test } from 'node:test';
-import { CLOSED_REASONS, LEGACY_CLOSED_REASONS, TALKED_CHOICES, TALKED_FOR, checkUpdate, checkUpdates, easternToday, dueLine, isDate, isPartnerKey, noChangeHint, nowLine, showDate } from './partner-form.mjs';
+import { CLOSED_REASONS, LEGACY_CLOSED_REASONS, TALKED_CHOICES, TALKED_FOR, checkUpdate, checkUpdates, easternToday, dueLine, isDate, isPartnerKey, noChangeHint, nowLine, saveResultWords, showDate } from './partner-form.mjs';
 
 const TODAY = '2026-11-20';
 // The new page sends no Talked To Doctor answer; checkUpdate fills it in from the choice.
@@ -164,4 +164,18 @@ test('the Next update line says when the update is due, or that it is overdue', 
   assert.equal(dueLine(2, '2026-11-24'), 'Overdue. Now due Nov 24, 2026');
   assert.equal(dueLine(1, ''), 'Overdue');
   assert.equal(dueLine(0, ''), 'Not set yet');
+});
+
+test('a save says exactly what saved: full, partial, none; more than sent is no answer', () => {
+  assert.equal(saveResultWords(1, 1), 'Saved 1 update.');
+  assert.equal(saveResultWords(3, 3), 'Saved 3 updates.');
+  assert.equal(saveResultWords(1, 2), 'Saved 1 of 2 updates. 1 lead closed or changed while you worked and did not save. The list below is current.');
+  assert.equal(saveResultWords(1, 4), 'Saved 1 of 4 updates. 3 leads closed or changed while you worked and did not save. The list below is current.');
+  assert.equal(saveResultWords(0, 1), 'Nothing saved. This lead closed or changed while you worked. The list below is current.');
+  assert.equal(saveResultWords(0, 2), 'Nothing saved. These 2 leads closed or changed while you worked. The list below is current.');
+  for (const [saved, sent] of [[3, 2], [1, 0], [-1, 1], [1.5, 2], [NaN, 1], [1, 51], [0, 0]]) {
+    assert.equal(saveResultWords(saved, sent), null, `${saved} of ${sent}`);
+  }
+  // Partner-facing copy: no em dashes or arrows.
+  for (const words of [saveResultWords(1, 2), saveResultWords(0, 1), saveResultWords(0, 2)]) assert.doesNotMatch(String(words), /[\u2014\u2013\u2192]/);
 });

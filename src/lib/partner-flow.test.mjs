@@ -123,6 +123,17 @@ describe('save', () => {
     reply = () => [202, { ok: true, saved: 1 }];
     await assert.rejects(saveUpdates(KEY, SID, [UPDATE]), kind('failed'));
   });
+  test('saved 0 or below the count is an answer; above the count breaks the contract', async () => {
+    const two = [UPDATE, { ...UPDATE, id: 37 }];
+    reply = () => [200, { ok: true, saved: 0 }];
+    assert.equal(await saveUpdates(KEY, SID, two), 0);
+    reply = () => [200, { ok: true, saved: 1 }];
+    assert.equal(await saveUpdates(KEY, SID, two), 1);
+    reply = () => [200, { ok: true, saved: 3 }];
+    await assert.rejects(saveUpdates(KEY, SID, two), kind('failed'));
+    reply = () => [200, { ok: true, saved: 2 }];
+    await assert.rejects(saveUpdates(KEY, SID, [UPDATE]), kind('failed'));
+  });
   test('422 carries reload or bad_value and the lead id', async () => {
     reply = () => [422, { error: 'reload', id: 36 }];
     await assert.rejects(saveUpdates(KEY, SID, [UPDATE]), (e) => kind('reload')(e) && e.id === 36);
@@ -151,7 +162,7 @@ describe('partnerSave (the save route)', () => {
   test('sends only the cleaned updates and words the answers', async () => {
     reply = () => [200, { ok: true, saved: 1 }];
     const done = await partnerSave({ key: KEY, submissionId: SID, updates: [{ ...UPDATE, repEmail: 'x@y.z', signedDate: '2026-11-01' }] });
-    assert.deepEqual(done, { status: 200, body: { ok: true, saved: 1, message: 'Saved 1 update.' } });
+    assert.deepEqual(done, { status: 200, body: { ok: true, saved: 1, sent: 1, partial: false, message: 'Saved 1 update.' } });
     assert.deepEqual(posts[0].updates, [UPDATE]);
     reply = () => [404, ''];
     assert.equal((await partnerSave({ key: KEY, submissionId: SID, updates: [UPDATE] })).status, 404);
@@ -166,5 +177,29 @@ describe('partnerSave (the save route)', () => {
     const unclear = await partnerSave({ key: KEY, submissionId: SID, updates: [UPDATE] });
     assert.equal(unclear.status, 502);
     assert.equal(unclear.body.error, 'timeout');
+  });
+  test('a partial or zero save says so; more saved than sent is no clear answer', async () => {
+    const two = [UPDATE, { ...UPDATE, id: 37 }];
+    reply = () => [200, { ok: true, saved: 1 }];
+    assert.deepEqual(await partnerSave({ key: KEY, submissionId: SID, updates: two }), {
+      status: 200,
+      body: {
+        ok: true,
+        saved: 1,
+        sent: 2,
+        partial: true,
+        message: 'Saved 1 of 2 updates. 1 lead closed or changed while you worked and did not save. The list below is current.',
+      },
+    });
+    reply = () => [200, { ok: true, saved: 0 }];
+    assert.deepEqual(await partnerSave({ key: KEY, submissionId: SID, updates: two }), {
+      status: 200,
+      body: { ok: true, saved: 0, sent: 2, partial: true, message: 'Nothing saved. These 2 leads closed or changed while you worked. The list below is current.' },
+    });
+    reply = () => [200, { ok: true, saved: 3 }];
+    const over = await partnerSave({ key: KEY, submissionId: SID, updates: two });
+    assert.equal(over.status, 502);
+    assert.equal(over.body.error, 'timeout');
+    assert.equal(over.body.ok, undefined);
   });
 });
