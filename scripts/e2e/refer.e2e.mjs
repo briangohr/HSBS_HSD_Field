@@ -455,6 +455,9 @@ try {
         assert.equal(await page.textContent('#rep-lead-title'), 'TEST South Park Dental');
         assert.deepEqual(await page.locator('#rep-lead-body .lead-sub').allTextContents(), ['Sent Nov 2. HealthFirst.', 'Contact: TEST Office Manager']);
         assert.equal(await page.textContent('#rep-lead-body .lead-now .lead-chip'), 'Meeting set');
+        // Last updated and What happens next (Brian, 11/21), under the chip.
+        assert.equal(await page.textContent('#rep-lead-body .lead-last'), 'Last updated Nov 4.');
+        assert.equal(await page.textContent('#rep-lead-body .lead-next'), 'What happens next: HealthFirst meets with the office, then sends a proposal.');
         assert.deepEqual(await page.locator('#rep-lead-body .lead-steps li').allTextContents(), ['Nov 2 Sent to HealthFirst', 'Nov 4 Meeting set']);
         assert.equal(await page.textContent('#rep-lead-back'), 'Back to Track');
         // No new route and no key in a new URL: the screen is drawn from the list answer.
@@ -633,6 +636,33 @@ try {
         assert.equal(sent.length, 1, 'the second office must reach 1F');
         assert.equal(sent[0].jde, '005678');
         assert.notEqual(sent[0].submissionId, firstSubmissionId);
+      });
+
+      await check('JS on: an open referral for the same office and company warns once, sends nothing, and Send again sends it (Brian, 11/21)', async () => {
+        await page.click('.rep-another');
+        await page.waitForSelector('#rep-form', { state: 'visible' });
+        bodies.length = 0;
+        await page.fill('[name=contactName]', 'TEST Front Desk');
+        // The list's open row (Meeting set), typed another way.
+        await page.fill('[name=practiceName]', 'test south-park dental');
+        await page.fill('[name=jde]', '007777');
+        await page.fill('[name=officePhone]', '303-555-0199');
+        await page.check('[name=preferredContact][value=Call]');
+        await page.check('[name=permission]');
+        await submit();
+        assert.equal(
+          await page.textContent('#rep-alert'),
+          'You already sent TEST South Park Dental to HealthFirst on Nov 2, and it is still open. Check Track first. To send another referral anyway, press Send again.',
+        );
+        assert.equal(bodies.filter((b) => b.action === 'submit').length, 0, 'a warning sends nothing');
+        assert.equal(await page.isDisabled('#rep-send-button'), false);
+        // The check posts the office, never the rep's name or email.
+        for (const b of bodies.filter((x) => x.action === 'list')) assert.deepEqual(Object.keys(b).sort(), ['action', 'referralKey']);
+        await submit();
+        await page.waitForSelector('#rep-receipt:not([hidden])', { timeout: 10000 });
+        const sent = bodies.filter((b) => b.action === 'submit');
+        assert.equal(sent.length, 1, 'the second press sends');
+        assert.equal(sent[0].practiceName, 'test south-park dental');
       });
     }
 

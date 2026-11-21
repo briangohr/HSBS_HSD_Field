@@ -66,7 +66,8 @@ describe('S4: words per company', () => {
   test('a row with none of the new values has no company line and the same keys as on main', () => {
     const [lead] = leadViews([hf('Yes')], TODAY);
     assert.equal('companyLine' in lead, false);
-    assert.deepEqual(Object.keys(lead), ['id', 'office', 'sentLabel', 'company', 'chip', 'tone', 'stale', 'steps', 'contact']);
+    // Last updated and What happens next (Brian, 11/21) are on every rep lead.
+    assert.deepEqual(Object.keys(lead), ['id', 'office', 'sentLabel', 'company', 'chip', 'tone', 'stale', 'steps', 'contact', 'lastUpdated', 'next']);
   });
 
   test('the company line: the company, and the practice type for staffing', () => {
