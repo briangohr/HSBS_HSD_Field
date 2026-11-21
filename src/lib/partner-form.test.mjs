@@ -1,8 +1,9 @@
 // The partner page's answer checks (sheet PU, A and B4). The page and /api/partner-save
 // both use checkUpdate, so these rules hold before any 7F call.
 import assert from 'node:assert/strict';
+import { STAND_CHOICES } from './partner-status-words.mjs';
 import { describe, test } from 'node:test';
-import { CLOSED_REASONS, TALKED_CHOICES, checkUpdate, checkUpdates, easternToday, isDate, isPartnerKey, showDate } from './partner-form.mjs';
+import { CLOSED_REASONS, TALKED_CHOICES, TALKED_FOR, checkUpdate, checkUpdates, easternToday, isDate, isPartnerKey, showDate } from './partner-form.mjs';
 
 const TODAY = '2026-11-20';
 const base = { id: 36, choice: 'proposal', talkedToDoctor: 'Yes', meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note: '' };
@@ -64,21 +65,34 @@ describe('checkUpdate', () => {
     assert.deepEqual(checkUpdate({ ...base, choice: 'meeting', meetingDate: '' }, null), { ok: false, id: 36, field: 'meetingDate' });
     assert.deepEqual(checkUpdate({ ...base, choice: 'signed', signedDate: '11/20/2026' }, null), { ok: false, id: 36, field: 'signedDate' });
   });
-  test('lost needs one of the six reasons', () => {
+  test('lost needs one of the five reasons; no answer is the disqualified choice now', () => {
     for (const reason of CLOSED_REASONS) assert.equal(ok({ ...base, choice: 'lost', closedReason: reason }).closedReason, reason);
     bad({ ...base, choice: 'lost', closedReason: 'Bored' }, 'closedReason');
     bad({ ...base, choice: 'lost' }, 'closedReason');
+    bad({ ...base, choice: 'lost', closedReason: 'No response' }, 'closedReason');
   });
-  test('hand back needs a note', () => {
-    assert.equal(ok({ ...base, choice: 'handback', note: 'TEST note one' }).note, 'TEST note one');
-    bad({ ...base, choice: 'handback', note: '   ' }, 'note');
+  test('the qualify choices need nothing more, and a note stays optional', () => {
+    for (const choice of ['trying', 'qualified', 'dq_noanswer', 'dq_notinterested']) {
+      assert.deepEqual(ok({ ...base, choice, closedReason: 'Price' }), { ...base, choice, talkedToDoctor: TALKED_FOR[choice] });
+    }
+    assert.equal(ok({ ...base, choice: 'dq_notinterested', note: 'TEST using another vendor' }).note, 'TEST using another vendor');
   });
-  test('talked to doctor is required except on No change', () => {
-    for (const t of TALKED_CHOICES) ok({ ...base, talkedToDoctor: t });
-    bad({ ...base, talkedToDoctor: '' }, 'talkedToDoctor');
-    bad({ ...base, talkedToDoctor: 'Maybe' }, 'talkedToDoctor');
-    assert.equal(ok({ ...base, choice: 'nochange', talkedToDoctor: '' }).talkedToDoctor, '');
-    bad({ ...base, choice: 'nochange', talkedToDoctor: 'Maybe' }, 'talkedToDoctor');
+  test('hand back is no longer a page choice', () => {
+    bad({ ...base, choice: 'handback', note: 'TEST note one' }, 'choice');
+  });
+  test('Talked To Doctor follows the choice; the browser value is ignored', () => {
+    assert.equal(ok({ ...base, choice: 'trying', talkedToDoctor: 'Yes' }).talkedToDoctor, 'Not yet, still trying');
+    assert.equal(ok({ ...base, choice: 'dq_noanswer', talkedToDoctor: 'Yes' }).talkedToDoctor, 'Not yet, still trying');
+    assert.equal(ok({ ...base, choice: 'qualified', talkedToDoctor: 'Maybe' }).talkedToDoctor, 'Yes');
+    assert.equal(ok({ ...base, choice: 'nochange', talkedToDoctor: 'Yes' }).talkedToDoctor, '');
+    for (const c of STAND_CHOICES) {
+      const t = TALKED_FOR[c.code];
+      assert.ok(t === '' ? c.code === 'nochange' : TALKED_CHOICES.includes(t), c.code);
+    }
+  });
+  test('every page choice has a heading group and a label', () => {
+    assert.deepEqual(STAND_CHOICES.map((c) => c.code), ['trying', 'qualified', 'dq_noanswer', 'dq_notinterested', 'meeting', 'proposal', 'signed', 'lost', 'nochange']);
+    for (const c of STAND_CHOICES) assert.ok(c.label && ['qualify', 'deal', 'other'].includes(c.group), c.code);
   });
   test('note is one line, up to 300 characters', () => {
     assert.equal(ok({ ...base, note: 'line one\nReferred by: x' }).note, 'line one Referred by: x');

@@ -206,7 +206,6 @@ await check('a missing answer names the lead and posts nothing', async () => {
   const page = await phone.newPage();
   await open(page);
   await page.check('input[name="choice-36"][value="signed"]');
-  await page.check('input[name="talked-36"][value="Yes"]');
   await page.click('#pu-save');
   await page.waitForTimeout(300);
   assert.match(await page.textContent('#pu-status'), /Lead HSBS-F90: check Signed date\./);
@@ -219,7 +218,6 @@ await check('save sends only touched leads and shows Saved', async () => {
   await open(page);
   await page.check('input[name="choice-36"][value="meeting"]');
   assert.equal(await page.isVisible('input[name="meetingDate-36"]'), true);
-  await page.check('input[name="talked-36"][value="Yes"]');
   await page.fill('input[name="meetingDate-36"]', TOMORROW);
   await page.fill('input[name="note-36"]', 'TEST call booked');
   await Promise.all([page.waitForURL(/saved=1/), page.click('#pu-save')]);
@@ -234,13 +232,39 @@ await check('save sends only touched leads and shows Saved', async () => {
   await page.close();
 });
 
-await check('No change on a lead with a stored answer sends that answer', async () => {
+await check('the page asks one question, grouped, with no talked-to-doctor question', async () => {
+  const page = await phone.newPage();
+  await open(page);
+  assert.equal(await page.locator('input[name="talked-36"]').count(), 0);
+  assert.equal(await page.locator('input[name="choice-36"][value="handback"]').count(), 0);
+  const values = await page.$$eval('input[name="choice-36"]', (els) => els.map((e) => e.value));
+  assert.deepEqual(values, ['trying', 'qualified', 'dq_noanswer', 'dq_notinterested', 'meeting', 'proposal', 'signed', 'lost', 'nochange']);
+  const text = await page.textContent('li[data-id="36"]');
+  assert.match(text, /Qualifying/);
+  assert.match(text, /After qualified/);
+  assert.match(text, /wants a demo/);
+  await page.close();
+});
+
+await check('Qualified sends Talked To Doctor Yes with no other field', async () => {
+  bodies.length = 0;
+  const page = await phone.newPage();
+  await open(page);
+  await page.check('input[name="choice-36"][value="qualified"]');
+  await Promise.all([page.waitForURL(/saved=1/), page.click('#pu-save')]);
+  assert.deepEqual(saves()[0].updates, [
+    { id: 36, choice: 'qualified', talkedToDoctor: 'Yes', meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note: '' },
+  ]);
+  await page.close();
+});
+
+await check('No change sends no Talked To Doctor, so the stored answer stays', async () => {
   bodies.length = 0;
   const page = await phone.newPage();
   await open(page);
   await page.check('input[name="choice-37"][value="nochange"]');
   await Promise.all([page.waitForURL(/saved=1/), page.click('#pu-save')]);
-  assert.deepEqual(saves()[0].updates.map((u) => [u.id, u.choice, u.talkedToDoctor]), [[37, 'nochange', 'Yes']]);
+  assert.deepEqual(saves()[0].updates.map((u) => [u.id, u.choice, u.talkedToDoctor]), [[37, 'nochange', '']]);
   await page.close();
 });
 
@@ -266,8 +290,7 @@ await check('no clear answer: Save again resends the same id and updates', async
   saveReplies.push([503, undefined]);
   const page = await phone.newPage();
   await open(page);
-  await page.check('input[name="choice-36"][value="handback"]');
-  await page.check('input[name="talked-36"][value="Not yet, still trying"]');
+  await page.check('input[name="choice-36"][value="dq_noanswer"]');
   await page.fill('input[name="note-36"]', 'TEST note one');
   await page.click('#pu-save');
   await page.waitForFunction(() => /taking too long/.test(document.getElementById('pu-status')?.textContent ?? ''));

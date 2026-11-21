@@ -23,6 +23,8 @@ export const FEED_MAX = 50;
 const SIGNED = /^(?:[^:.]{1,80}:\s*)?(?:signed|won|closed - won|close won)\b/i;
 const TALKED = /^(?:[^:.]{1,80}:\s*)?talked with the doctor\b/i;
 const TALKED_STAFFING = /^(?:[^:.]{1,80}:\s*)?talked with the customer\b/i;
+/** "Qualified" on the partner page means the partner reached the office (11/20/2026). */
+const QUALIFIED = /^(?:[^:.]{1,80}:\s*)?qualified\b/i;
 
 /**
  * What a Status Log line reports. The log writes "<partner>: <label>" ("Unitas:
@@ -40,7 +42,7 @@ export function historyKinds(text, company = 'HealthFirst') {
     const t = sentence.trim();
     if (SIGNED.test(t) && !kinds.includes('signed')) kinds.push('signed');
     const bare = t.replace(/^[^:.]{1,80}:\s*/, '').replace(/\.$/, '');
-    if ((TALKED.test(t) || (isStaffingCompany(company) && TALKED_STAFFING.test(t)) || displayStatus(bare) === 'Reached the doctor') && !kinds.includes('reached')) kinds.push('reached');
+    if ((TALKED.test(t) || QUALIFIED.test(t) || (isStaffingCompany(company) && TALKED_STAFFING.test(t)) || displayStatus(bare) === 'Reached the doctor') && !kinds.includes('reached')) kinds.push('reached');
   }
   return kinds.length ? kinds : ['status'];
 }

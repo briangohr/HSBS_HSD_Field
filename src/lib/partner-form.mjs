@@ -8,11 +8,31 @@ import { STAND_CHOICES } from './partner-status-words.mjs';
 /** A Partner Links Link Key: 40 hex characters. Anything else is 404 before any flow call. */
 export const isPartnerKey = (key) => typeof key === 'string' && /^[0-9a-fA-F]{40}$/.test(key);
 
-/** "Have you talked to the doctor?" The Service Cases Talked To Doctor choices. */
+/** The Service Cases Talked To Doctor choices 7F accepts. */
 export const TALKED_CHOICES = ['Yes', 'Not yet, still trying', "Not yet, haven't tried"];
 
-/** "Not moving forward" reasons. */
-export const CLOSED_REASONS = ['No response', 'Chose another provider', 'Price', 'Timing', 'Not a fit', 'Other'];
+/**
+ * The page no longer asks "Have you talked to the doctor?" (Brian, 11/20/2026). The answer
+ * follows from the choice, so 7F still gets the Talked To Doctor it stores. No change sends
+ * none, and the stored answer stays.
+ */
+export const TALKED_FOR = {
+  trying: 'Not yet, still trying',
+  qualified: 'Yes',
+  dq_noanswer: 'Not yet, still trying',
+  dq_notinterested: 'Yes',
+  meeting: 'Yes',
+  proposal: 'Yes',
+  signed: 'Yes',
+  lost: 'Yes',
+  nochange: '',
+};
+
+/** The two disqualified choices. Each closes the lead and emails Brian, as a hand back did. */
+export const DISQUALIFIED = ['dq_noanswer', 'dq_notinterested'];
+
+/** "Not moving forward" reasons. No answer is its own choice now (Disqualified). */
+export const CLOSED_REASONS = ['Chose another provider', 'Price', 'Timing', 'Not a fit', 'Other'];
 
 export const CHOICE_CODES = STAND_CHOICES.map((c) => c.code);
 export const MAX_UPDATES = 50;
@@ -25,8 +45,7 @@ export const UPDATE_FIELDS = ['talkedToDoctor', 'meetingDate', 'signedDate', 'si
 /** What the page names when a field is missing or wrong. */
 export const FIELD_WORDS = {
   choice: 'Where does it stand?',
-  talkedToDoctor: 'Have you talked to the doctor?',
-  meetingDate: 'Meeting date',
+  meetingDate: 'Demo date',
   signedDate: 'Signed date',
   signedProduct: 'Product',
   closedReason: 'Reason',
@@ -94,8 +113,7 @@ export function checkUpdate(raw, today) {
   const bad = (field) => ({ ok: false, id, field });
   const choice = text(u.choice);
   if (!CHOICE_CODES.includes(choice)) return bad('choice');
-  const talked = text(u.talkedToDoctor);
-  if (talked ? !TALKED_CHOICES.includes(talked) : choice !== 'nochange') return bad('talkedToDoctor');
+  const talked = TALKED_FOR[choice] ?? '';
   const rawNote = text(u.note);
   const note = oneLine(rawNote, NOTE_MAX + 1);
   if (note.length > NOTE_MAX) return bad('note');
@@ -118,7 +136,6 @@ export function checkUpdate(raw, today) {
     if (!CLOSED_REASONS.includes(reason)) return bad('closedReason');
     update.closedReason = reason;
   }
-  if (choice === 'handback' && !note) return bad('note');
   return { ok: true, update };
 }
 

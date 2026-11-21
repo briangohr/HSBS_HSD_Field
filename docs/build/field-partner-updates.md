@@ -133,15 +133,25 @@ in the same PR (a new flow, HSBS 7F, and `PARTNER_FLOW_URL`).
   (`HSBS-F<n>`), practice, doctor or contact name, company, date introduced, current status,
   and "Update due <date>" or "Overdue" when Missed Updates is above 0. No phone, email, JDE
   or rep detail. The partner has those in the intro.
-- **What the partner answers per lead** (all optional per lead; only touched leads are sent):
-  1. "Have you talked to the doctor?" `Yes`, `Not yet, still trying`, `Not yet, haven't tried`.
-     Required on every choice except No change.
-  2. "Where does it stand?" the six `STAND_CHOICES`.
-  3. Meeting set: meeting date, required, today or later. Signed: signed date, required, not
-     in the future; product, optional, up to 100 characters. Not moving forward: reason,
-     required, one of `No response`, `Chose another provider`, `Price`, `Timing`,
-     `Not a fit`, `Other`. Hand back to HSBS: note, required.
-  4. Note: optional, up to 300 characters, one line.
+- **What the partner answers per lead** (all optional per lead; only touched leads are sent).
+  Changed 11/20/2026 (Brian, after the HealthFirst process call: qualified means reached
+  within up to 4 attempts, knows the partner will follow up, and wants a demo). The page asks
+  one question, no longer "Have you talked to the doctor?":
+  1. "Where does it stand?" in two groups. Qualifying: Trying to reach (attempts 1 to 3 so
+     far), Qualified, Disqualified (no answer after 4 attempts), Disqualified (not
+     interested). After qualified: Demo set, Proposal or agreement sent, Signed, Not moving
+     forward. Then No change this week. Hand back to HSBS is folded into the two
+     disqualified choices.
+  2. Demo set: demo date, required, today or later. Signed: signed date, required, not in
+     the future; product, optional, up to 100 characters. Not moving forward: reason,
+     required, one of `Chose another provider`, `Price`, `Timing`, `Not a fit`, `Other`.
+  3. Note: optional, up to 300 characters, one line.
+  The site sets Talked To Doctor from the choice. What 7F stores per choice is the table in
+  `docs/field-flow-contract.md` (HSBS 7F, save). The words are placeholders until HealthFirst
+  sends its Salesforce picklist (Tracy and Cat); swapping them is a text change in
+  `STAND_CHOICES` and 7F's `Labels`. 7F patch: `build/patch_7f_status_list.py` in the
+  project's partner-updates folder. Sections B4 to B6 below describe the first version; where
+  they differ, the contract table wins.
 - **One Save button** for the page. Success reads "Saved N updates." A refusal for one lead
   names that lead and keeps every typed answer.
 - **Retry:** each save carries a `submissionId` (a UUID made when the partner presses Save).

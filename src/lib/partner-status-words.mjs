@@ -12,13 +12,30 @@ export const STAND_WORDS = [
   'No change this week',
 ];
 
+/**
+ * "Where does it stand?" on the partner page, one list (Brian, 11/20/2026, after the
+ * HealthFirst process call): qualify first, then the deal. Qualified means reached, knows
+ * the partner will follow up, and wants a demo; up to 4 attempts, then disqualified. `group`
+ * sets the heading the page shows. The words are placeholders until HealthFirst sends its
+ * Salesforce picklist; 7F stores its own value per code (docs/field-flow-contract.md, 7F).
+ */
 export const STAND_CHOICES = [
-  { code: 'meeting', label: 'Meeting set' },
-  { code: 'proposal', label: 'Proposal or agreement sent' },
-  { code: 'signed', label: 'Signed' },
-  { code: 'lost', label: 'Not moving forward' },
-  { code: 'handback', label: 'Hand back to HSBS' },
-  { code: 'nochange', label: 'No change this week' },
+  { code: 'trying', label: 'Trying to reach', hint: 'Attempts 1 to 3 so far', group: 'qualify' },
+  { code: 'qualified', label: 'Qualified', hint: 'Reached, knows you will follow up, and wants a demo', group: 'qualify' },
+  { code: 'dq_noanswer', label: 'Disqualified, no answer after 4 attempts', hint: '', group: 'qualify' },
+  { code: 'dq_notinterested', label: 'Disqualified, not interested', hint: '', group: 'qualify' },
+  { code: 'meeting', label: 'Demo set', hint: '', group: 'deal' },
+  { code: 'proposal', label: 'Proposal or agreement sent', hint: '', group: 'deal' },
+  { code: 'signed', label: 'Signed', hint: '', group: 'deal' },
+  { code: 'lost', label: 'Not moving forward', hint: '', group: 'deal' },
+  { code: 'nochange', label: 'No change this week', hint: '', group: 'other' },
+];
+
+/** The headings over each group of STAND_CHOICES, in page order. */
+export const STAND_GROUPS = [
+  { group: 'qualify', heading: 'Qualifying' },
+  { group: 'deal', heading: 'After qualified' },
+  { group: 'other', heading: '' },
 ];
 
 /**
