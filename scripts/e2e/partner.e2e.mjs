@@ -205,9 +205,11 @@ await check('page lists leads overdue first, no private fields, no analytics, no
   assert.match(html, /Overdue/);
   assert.match(html, /Lead updates for TEST field partner/);
   // A meeting date shows only while the lead stands at a meeting.
-  const card = (ref) => html.slice(html.indexOf(ref), html.indexOf('</fieldset>', html.indexOf(ref)));
-  assert.match(card('HSBS-F91'), /Now: Meeting set, meeting /);
-  assert.match(card('HSBS-F92'), /Now: Trying to reach/);
+  const card = (ref) => html.slice(html.indexOf(ref), html.indexOf('</li>', html.indexOf(ref)));
+  assert.match(card('HSBS-F91'), /Stage<\/dt>\s*<dd[^>]*>Meeting set, meeting /);
+  assert.match(card('HSBS-F91'), /Next update<\/dt>\s*<dd[^>]*>Overdue/);
+  assert.match(card('HSBS-F92'), /Stage<\/dt>\s*<dd[^>]*>Not reached yet/);
+  assert.match(card('HSBS-F90'), /Introduced<\/dt>\s*<dd[^>]*>[A-Z][a-z]{2} \d{1,2}, \d{4}/);
   assert.doesNotMatch(card('HSBS-F92'), /meeting [A-Z][a-z]{2} \d/);
 });
 

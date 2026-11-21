@@ -149,6 +149,10 @@ in the same PR (a new flow, HSBS 7F, and `PARTNER_FLOW_URL`).
      the weeks between steps (a demo set 2 weeks out). Ticked, it clears and greys the stage
      list and sends `nochange`; 7F leaves Partner Status as it is. Its hint names the stage
      the lead keeps. Hand back to HSBS is folded into Disqualified.
+     Each lead card opens with the reference and practice, then one row each (Brian 11/21):
+     Contact, Service, Introduced, Stage, Next update ("Due <date>", or "Overdue. Now due
+     <date>" in red). Not reached yet carries the hint "Need help reaching them? Reply to the
+     intro email." The page shows no rep email: 7F's lead read sends none.
   2. Demo set: demo date, required, today or later. Signed: signed date, required, not in
      the future; product, optional, up to 100 characters. Not moving forward: reason,
      required, one of `Chose another provider`, `Price`, `Timing`, `Not a fit`, `Other`.

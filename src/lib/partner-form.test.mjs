@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { STAND_CHOICES } from './partner-status-words.mjs';
 import { describe, test } from 'node:test';
-import { CLOSED_REASONS, LEGACY_CLOSED_REASONS, TALKED_CHOICES, TALKED_FOR, checkUpdate, checkUpdates, easternToday, isDate, isPartnerKey, noChangeHint, nowLine, showDate } from './partner-form.mjs';
+import { CLOSED_REASONS, LEGACY_CLOSED_REASONS, TALKED_CHOICES, TALKED_FOR, checkUpdate, checkUpdates, easternToday, dueLine, isDate, isPartnerKey, noChangeHint, nowLine, showDate } from './partner-form.mjs';
 
 const TODAY = '2026-11-20';
 // The new page sends no Talked To Doctor answer; checkUpdate fills it in from the choice.
@@ -145,7 +145,7 @@ test('the Now line shows the meeting date only while the lead stands at a meetin
   assert.equal(nowLine('Complete', '2026-11-24'), 'Meeting held, meeting Nov 24, 2026');
   assert.equal(nowLine('Meeting set', ''), 'Meeting set');
   // The case keeps an old Meeting Date after a later save (TEST F60, 11/21/2026).
-  assert.equal(nowLine('Trying to reach', '2026-11-24'), 'Trying to reach');
+  assert.equal(nowLine('Trying to reach', '2026-11-24'), 'Not reached yet');
   assert.equal(nowLine('Proposal or agreement sent', '2026-11-24'), 'Proposal or agreement sent');
   assert.equal(nowLine('Not moving forward', '2026-11-24'), 'Not moving forward');
   assert.equal(nowLine('', '2026-11-24'), 'No update yet');
@@ -157,4 +157,11 @@ test('No change names the stage the lead keeps', () => {
   assert.equal(noChangeHint('Meeting set'), "Keeps it at Meeting set. Counts as this week's update.");
   assert.equal(noChangeHint('Reached'), "Keeps it at Reached the customer. Counts as this week's update.");
   assert.equal(noChangeHint(''), "Counts as this week's update.");
+});
+
+test('the Next update line says when the update is due, or that it is overdue', () => {
+  assert.equal(dueLine(0, '2026-11-24'), 'Due Nov 24, 2026');
+  assert.equal(dueLine(2, '2026-11-24'), 'Overdue. Now due Nov 24, 2026');
+  assert.equal(dueLine(1, ''), 'Overdue');
+  assert.equal(dueLine(0, ''), 'Not set yet');
 });

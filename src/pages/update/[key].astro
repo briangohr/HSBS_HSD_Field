@@ -14,6 +14,7 @@ import {
   PRODUCT_MAX,
   SAVE_WORDS,
   easternToday,
+  dueLine,
   isPartnerKey,
   noChangeHint,
   nowLine,
@@ -140,13 +141,28 @@ const saved = state === 'ready' && Number.isSafeInteger(savedParam) && savedPara
                     <h2 class="pu-ref" id={`lead-${lead.id}-title`}>
                       {lead.ref}: {lead.practice}
                     </h2>
-                    <p class="pu-sub">{[lead.contact, lead.company].filter(Boolean).join(', ')}</p>
-                    <p class="pu-sub">
-                      {lead.introducedOn ? `Introduced ${showDate(lead.introducedOn)}. ` : ''}Now: {nowLine(lead.status, lead.meetingDate)}
-                    </p>
-                    <p class={lead.missedUpdates > 0 ? 'pu-due pu-due--late' : 'pu-due'}>
-                      {lead.missedUpdates > 0 ? 'Overdue' : lead.nextUpdateDue ? `Update due ${showDate(lead.nextUpdateDue)}` : ''}
-                    </p>
+                    <dl class="pu-facts">
+                      <div>
+                        <dt>Contact</dt>
+                        <dd>{lead.contact || 'Not given'}</dd>
+                      </div>
+                      <div>
+                        <dt>Service</dt>
+                        <dd>{lead.company || 'Not given'}</dd>
+                      </div>
+                      <div>
+                        <dt>Introduced</dt>
+                        <dd>{showDate(lead.introducedOn) || 'Not yet'}</dd>
+                      </div>
+                      <div>
+                        <dt>Stage</dt>
+                        <dd>{nowLine(lead.status, lead.meetingDate)}</dd>
+                      </div>
+                      <div>
+                        <dt>Next update</dt>
+                        <dd class={lead.missedUpdates > 0 ? 'pu-due--late' : ''}>{dueLine(lead.missedUpdates, lead.nextUpdateDue)}</dd>
+                      </div>
+                    </dl>
 
                     <fieldset class="pu-q" data-q="choice">
                       <legend>Where does it stand?</legend>
@@ -237,9 +253,11 @@ const saved = state === 'ready' && Number.isSafeInteger(savedParam) && savedPara
       .pu-status { font-weight: 600; margin: 0 0 0.8rem; min-height: 1.2em; overflow-wrap: anywhere; }
       .pu-leads { list-style: none; margin: 0; padding: 0; }
       .pu-ref { font-size: 1.1rem; color: var(--hs-navy); margin: 0 0 0.25rem; overflow-wrap: anywhere; }
-      .pu-sub { margin: 0.1rem 0; color: var(--muted); overflow-wrap: anywhere; }
-      .pu-due { margin: 0.3rem 0 0.6rem; font-weight: 600; }
-      .pu-due--late { color: var(--btn-red); }
+      .pu-facts { margin: 0.4rem 0 0.6rem; display: grid; gap: 0.35rem; font-size: 1rem; }
+      .pu-facts div { display: grid; grid-template-columns: 8.5rem 1fr; gap: 0.5rem; }
+      .pu-facts dt { margin: 0; color: var(--muted); font-weight: 600; }
+      .pu-facts dd { margin: 0; overflow-wrap: anywhere; }
+      .pu-due--late { color: var(--btn-red); font-weight: 700; }
       .pu-q { border: 0; margin: 0.6rem 0 0; padding: 0; min-width: 0; }
       .pu-q legend { font-weight: 600; margin-bottom: 0.2rem; padding: 0; }
       .pu-opt { display: flex; align-items: center; gap: 0.6rem; min-height: 44px; cursor: pointer; overflow-wrap: anywhere; }

@@ -192,9 +192,12 @@ export function nowLine(status, meetingDate) {
   return date ? `${shown}, meeting ${date}` : shown;
 }
 
-/** The stage in the page's words. Reached the customer is stored as Reached (7F). @param {string} status */
+/** The stage in the page's words: 7F stores Reached and Trying to reach. @param {string} status */
 function stageWords(status) {
-  return (typeof status === 'string' ? status.trim() : '') === 'Reached' ? 'Reached the customer' : displayStatus(status);
+  const raw = typeof status === 'string' ? status.trim() : '';
+  if (raw === 'Reached') return 'Reached the customer';
+  if (raw === 'Trying to reach') return 'Not reached yet';
+  return displayStatus(status);
 }
 
 /**
@@ -205,4 +208,16 @@ function stageWords(status) {
 export function noChangeHint(status) {
   const shown = stageWords(status);
   return shown ? `Keeps it at ${shown}. Counts as this week's update.` : "Counts as this week's update.";
+}
+
+/**
+ * The "Next update" line on a lead card. A lead with missed updates is overdue; 7G has
+ * already moved its due date on.
+ * @param {number} missed Missed Updates
+ * @param {string} due Next Update Due, YYYY-MM-DD or blank
+ */
+export function dueLine(missed, due) {
+  const date = showDate(due);
+  if (missed > 0) return date ? `Overdue. Now due ${date}` : 'Overdue';
+  return date ? `Due ${date}` : 'Not set yet';
 }
