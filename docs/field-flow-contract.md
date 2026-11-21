@@ -257,6 +257,38 @@ Update, not Modified: `@coalesce(item()?['Last_x0020_Partner_x0020_Update'], '')
 update. A blank `updated` falls back to `lastTouch`, then to the referral's sent date, as
 before.
 
+**Last updated and What happens next (Brian, 11/21/2026).** The rep's lead screen shows two
+lines under the chip, worked out on the server (`leadViews` in `src/lib/rep-lead.mjs`) from
+what `list` already sends: "Last updated <date>." is the main line's `updated` (else
+`lastTouch`, else the sent date, as above), and "What happens next: ..." follows the chip's
+own words (`nextWords`), so it never disagrees with the chip and promises no time. A
+manager's view (My Team) carries neither. No new flow field.
+
+### Duplicate check (`/api/referral-check`, Brian 11/21/2026)
+
+Before a new send, the page posts `{ referralKey, company, practiceName, jde }` to
+`/api/referral-check`. The site reads the rep's own `list` (the same body and cache as
+Track, and the same lookup that must confirm a Rep key) and answers 200
+`{ "warning": "<words>" }`, or `{ "warning": "" }` for none. It sends nothing new to 1F and
+writes nothing. It warns, never blocks: the page shows the words once, and Send again for
+the same office sends it.
+
+- A match is a referral still in progress whose line for the same company (HealthFirst or
+  Staffing) is not closed, signed or closed as not qualified, with the same practice name
+  (letter case, spaces and punctuation ignored, `&` read as `and`) or the same JDE (as text,
+  so leading zeros count). A referral with no line yet counts as HealthFirst
+  (`src/lib/rep-duplicate.mjs`).
+- 1F `list` sends no JDE today, so only the name matches. The JDE match works, with no site
+  change, once 1F adds `jde` to each list row (`Append_referral_rep`, a Referrals
+  `JDEAccount` read). The JDE is read on the server only and is never in an answer.
+- The check sees only this rep's own referrals, never another rep's.
+- A bad key is 404 before any call, and a key the lookup refuses (or a role not `Rep`) is
+  404. Any other failure, a timeout or the rate limit (30 per key per 10 minutes) answers no
+  warning, so the send goes on to `/api/referral`, which checks the key again.
+- The page starts the check when the practice name or JDE is filled in, and Send waits for
+  it at most 5 seconds ("Checking"), then sends with no warning. A retry of a send with no
+  clear answer is never checked. With JavaScript off there is no check.
+
 ### earnings
 
 ```json

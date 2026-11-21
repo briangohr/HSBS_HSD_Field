@@ -15,6 +15,8 @@ export const PREFERRED_CONTACTS = ['Call', 'Text', 'Email'];
 
 /** Shown while the submit request is open. The flow can take the better part of a minute. */
 export const SENDING_MESSAGE = 'Sending, this can take up to a minute';
+// The Send button while the duplicate check runs (Brian, 11/21/2026), at most 5 seconds.
+export const CHECKING_MESSAGE = 'Checking';
 
 /**
  * The flow may have created the row before our wait ended. Do not offer another send.
