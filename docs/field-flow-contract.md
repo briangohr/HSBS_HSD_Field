@@ -199,11 +199,18 @@ Two shapes, one per company (`src/lib/rep-referral-form.mjs`,
 ```
 
 200 `{ "referrals": [ ... ] }`. The site keeps only display fields
-(`sanitizeReferral` in `src/lib/track.mjs`): `title` or `id`, `doctorName`,
-`practiceName`, `sentOn` or `created`, `route` (`Partner` only), `closed`, `signed`, and
-`lines` (or `cases`) with `company`, `status`, `detail`, `updatedOn` and the stored choices
-`solutions`, `practiceType`, `qualified`, `notQualifiedReason`, `closedReason`, and
-`history` with `on` and `text`. Anything else, an echoed key included, is dropped.
+(`sanitizeReferral` in `src/lib/track.mjs`): `title` or `id`, `doctorName` (or
+`doctor`), `practiceName` (or `practice`), `sentOn` or `created`, `route` (`Partner`
+only), `closed`, `signed`, and `lines` (or `cases`) with `company`, `status`, `detail`,
+`updatedOn` and the stored choices `solutions`, `practiceType`, `qualified`,
+`notQualifiedReason`, `closedReason`, and `history` with `on` and `text`. Anything else, an
+echoed key included, is dropped. When `doctorName` and `doctor` are both sent,
+`doctorName` wins unless it is blank. The same holds for `practiceName` and `practice`.
+
+A referral needs only an id to be kept. A blank `doctorName` never drops it. The rep sees
+the practice name, else the doctor name, else "Referral <id>" ("Referral HSBS-F12"). A
+manager in `team` sees the practice name, else "Office", never the contact. The lead
+screen shows "Contact:" only when both names are filled.
 
 A line needs only `company` to be kept. 1F sends a line's status as `partnerStatus` (the
 case's Partner Status), which is blank on a new case until the partner's first update,
