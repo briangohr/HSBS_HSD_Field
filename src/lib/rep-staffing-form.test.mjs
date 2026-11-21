@@ -44,6 +44,8 @@ describe('staffing form rules (field two-track spec, section 4)', () => {
   test('the body: needs Staffing, the saved consent is the words on the screen, practice type kept', () => {
     const b = staffingFlowPayload(good, { referralKey: 'k', submissionId: 's' });
     assert.deepEqual(b.needs, ['Staffing']);
+    // The field app sends no other team's permission field.
+    assert.equal('PVApermission' in b, false);
     assert.deepEqual(b.companies, ['HS Staffing / Recruiting Services (including GoTu)']);
     assert.equal(b.consentText, STAFFING_CONSENT);
     assert.equal(b.practiceType, 'Group');

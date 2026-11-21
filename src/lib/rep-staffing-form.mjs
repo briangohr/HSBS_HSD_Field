@@ -122,7 +122,6 @@ export function staffingFlowPayload(input, meta) {
     jde: cap(input.jde, 40),
     companies: [solutionsForKey(STAFFING_KEY)],
     needs: [STAFFING_NEED],
-    PVApermission: true,
     contactFirst: false,
     preferredContact: trim(input.preferredContact),
     consentText: STAFFING_CONSENT,

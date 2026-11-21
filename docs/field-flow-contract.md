@@ -178,7 +178,6 @@ Two shapes, one per company (`src/lib/rep-referral-form.mjs`,
   "jde": "001234",
   "companies": ["HealthFirst"],
   "needs": ["OSHA and HIPAA compliance"],
-  "PVApermission": true,
   "contactFirst": false,
   "preferredContact": "Call",
   "consentText": "<the consent sentence the rep ticked>",
@@ -202,8 +201,6 @@ Two shapes, one per company (`src/lib/rep-referral-form.mjs`,
   states from `US_STATES`, and picking one fills it in. Text that is not one state sends
   no state, so the send is refused the same way. With JavaScript off it is a plain list.
   Either way the body carries the same two-letter code.
-- `PVApermission` is a column name 1F maps today. It stays until 1F stops reading it;
-  removing it is a 1F change first.
 - The site refuses, before any 1F call, a company that is off in `REP_APP_COMPANIES`, two
   companies, or none.
 - Success is 200 with `{"ok":true}`, read in full. Anything else is not success.

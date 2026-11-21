@@ -64,7 +64,6 @@ describe('Rep app referral form (spec v3 section 2)', () => {
       jde: '001234',
       companies: ['HealthFirst'],
       needs: ['OSHA and HIPAA compliance'],
-      PVApermission: true,
       contactFirst: false,
       preferredContact: 'Text',
       consentText: REP_CONSENT,
