@@ -178,11 +178,18 @@ Two shapes, one per company (`src/lib/rep-referral-form.mjs`,
   removing it is a 1F change first.
 - The site refuses, before any 1F call, a company that is off in `REP_APP_COMPANIES`, two
   companies, or none.
-- Success is 200 with `{"ok":true}`, read in full. Anything else is not sent.
+- Success is 200 with `{"ok":true}`, read in full. Anything else is not success.
 - A retry reuses the same `submissionId`. The site also remembers a good send by key and
   id for 30 minutes and does not post it again.
 - 504 or no answer in 55 seconds: "This is taking too long. It may already have gone
-  through. Do not send it again."
+  through. Do not send it again. Email Brian at Brian.Gohr@henryschein.com."
+  (`TIMEOUT_MESSAGE` in `src/lib/field-form.mjs`).
+- 408, 429, 5xx, a 200 without `ok`, or a dropped connection: the site answers 502, "We
+  did not get a clear answer. It may already have gone through. Do not send it again.
+  Email Brian at Brian.Gohr@henryschein.com." (`UNCLEAR_MESSAGE`, same file).
+  The row may exist, so these never say "did not send". The page keeps the same
+  `submissionId` for any retry.
+- `FIELD_FLOW_URL` not set: 503, "This referral did not send." Nothing reached 1F.
 - Any 4xx except 408 and 429: "This link does not work."
 
 ### list

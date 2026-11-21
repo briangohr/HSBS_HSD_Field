@@ -23,6 +23,14 @@ export const SENDING_MESSAGE = 'Sending, this can take up to a minute';
 export const TIMEOUT_MESSAGE =
   'This is taking too long. It may already have gone through. Do not send it again. Email Brian at Brian.Gohr@henryschein.com.';
 
+/**
+ * A send with no clear answer: 1F failed (5xx, 408, 429, a 200 without ok) or the
+ * connection dropped. The row may exist, so this never says "did not send". The page
+ * keeps the same submissionId for any retry.
+ */
+export const UNCLEAR_MESSAGE =
+  'We did not get a clear answer. It may already have gone through. Do not send it again. Email Brian at Brian.Gohr@henryschein.com.';
+
 /** The browser waits longer than the server fetch so it can show the server's timeout answer. */
 export const CLIENT_WAIT_MS = 65_000;
 

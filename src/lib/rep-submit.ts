@@ -11,7 +11,7 @@ import {
   ReferralKeyUnknownError,
   submitReferral,
 } from './field-flow.mjs';
-import { TIMEOUT_MESSAGE, isReferralKey, isSubmissionId } from './field-form.mjs';
+import { TIMEOUT_MESSAGE, UNCLEAR_MESSAGE, isReferralKey, isSubmissionId } from './field-form.mjs';
 import { repAppCompanies, repAppEnabled, repAskState } from './register-flow.mjs';
 import { COMPANY_OFF_MESSAGE, ONE_COMPANY_MESSAGE, checkSendCompany } from './rep-companies.mjs';
 import { repFlowPayload, validateRepReferral } from './rep-referral-form.mjs';
@@ -117,13 +117,13 @@ export async function submitRep(
     }
     const status = err instanceof ReferralAppWriteError ? err.status : 0;
     // 1F answers 4xx when the key is not an active Rep (contract: "Refuse a mismatch").
-    // That link will never work, so say so. 408 and 429 are the flow being slow or busy,
-    // which a retry can fix, so they stay "did not send".
+    // That link will never work, so say so. Anything else (408, 429, 5xx, a 200 without
+    // ok, a dropped connection) may have saved the row, so it never says "did not send".
     if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
       return { status: 404, error: 'This link does not work.' };
     }
     console.error('rep referral: flow failed', status);
-    return { status: 502, error: 'This referral did not send.' };
+    return { status: 502, error: UNCLEAR_MESSAGE };
   }
   return { status: 200, ok: true };
 }
