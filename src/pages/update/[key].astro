@@ -13,13 +13,15 @@ import {
   NOTE_MAX,
   PRODUCT_MAX,
   SAVE_WORDS,
-  TALKED_CHOICES,
   easternToday,
+  dueLine,
   isPartnerKey,
+  noChangeHint,
+  nowLine,
   savedWords,
   showDate,
 } from '../../lib/partner-form.mjs';
-import { STAND_CHOICES, displayStatus } from '../../lib/partner-status-words.mjs';
+import { choiceGroupsFor } from '../../lib/partner-status-words.mjs';
 
 export const prerender = false;
 
@@ -64,7 +66,6 @@ Astro.response.status = { invalid: 404, expired: 410, busy: 429, unavailable: 50
 const today = easternToday();
 const savedParam = Number(Astro.url.searchParams.get('saved') ?? '');
 const saved = state === 'ready' && Number.isSafeInteger(savedParam) && savedParam > 0 && savedParam <= MAX_UPDATES ? savedWords(savedParam) : '';
-const nowLine = (status: string) => displayStatus(status) || 'No update yet';
 ---
 
 <!doctype html>
@@ -140,38 +141,59 @@ const nowLine = (status: string) => displayStatus(status) || 'No update yet';
                     <h2 class="pu-ref" id={`lead-${lead.id}-title`}>
                       {lead.ref}: {lead.practice}
                     </h2>
-                    <p class="pu-sub">{[lead.contact, lead.company].filter(Boolean).join(', ')}</p>
-                    <p class="pu-sub">
-                      {lead.introducedOn ? `Introduced ${showDate(lead.introducedOn)}. ` : ''}Now: {nowLine(lead.status)}
-                      {lead.meetingDate ? `, meeting ${showDate(lead.meetingDate)}` : ''}
-                    </p>
-                    <p class={lead.missedUpdates > 0 ? 'pu-due pu-due--late' : 'pu-due'}>
-                      {lead.missedUpdates > 0 ? 'Overdue' : lead.nextUpdateDue ? `Update due ${showDate(lead.nextUpdateDue)}` : ''}
-                    </p>
-
-                    <fieldset class="pu-q" data-q="talked">
-                      <legend>Have you talked to the doctor?</legend>
-                      {TALKED_CHOICES.map((c) => (
-                        <label class="pu-opt">
-                          <input type="radio" name={`talked-${lead.id}`} value={c} checked={lead.talkedToDoctor === c} data-start={lead.talkedToDoctor === c ? '1' : ''} />
-                          <span>{c}</span>
-                        </label>
-                      ))}
-                    </fieldset>
+                    <dl class="pu-facts">
+                      <div>
+                        <dt>Contact</dt>
+                        <dd>{lead.contact || 'Not given'}</dd>
+                      </div>
+                      <div>
+                        <dt>Service</dt>
+                        <dd>{lead.company || 'Not given'}</dd>
+                      </div>
+                      <div>
+                        <dt>Introduced</dt>
+                        <dd>{showDate(lead.introducedOn) || 'Not yet'}</dd>
+                      </div>
+                      <div>
+                        <dt>Stage</dt>
+                        <dd>{nowLine(lead.status, lead.meetingDate)}</dd>
+                      </div>
+                      <div>
+                        <dt>Next update</dt>
+                        <dd class={lead.missedUpdates > 0 ? 'pu-due--late' : ''}>{dueLine(lead.missedUpdates, lead.nextUpdateDue)}</dd>
+                      </div>
+                    </dl>
 
                     <fieldset class="pu-q" data-q="choice">
                       <legend>Where does it stand?</legend>
-                      {STAND_CHOICES.map((c) => (
-                        <label class="pu-opt">
-                          <input type="radio" name={`choice-${lead.id}`} value={c.code} />
-                          <span>{c.label}</span>
-                        </label>
+                      {choiceGroupsFor(lead.status).map((g) => (
+                        <div class="pu-group">
+                          {g.heading && <p class="pu-group-h">{g.heading}</p>}
+                          {g.done && <p class="pu-done" data-done={g.group}>{g.done} (done)</p>}
+                          {g.choices.map((c) => (
+                            <label class="pu-opt">
+                              <input type="radio" name={`choice-${lead.id}`} value={c.code} />
+                              <span>
+                                {c.label}
+                                {c.hint && <span class="pu-hint">{c.hint}</span>}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
                       ))}
                     </fieldset>
 
+                    <label class="pu-opt pu-checkin">
+                      <input type="checkbox" name={`nochange-${lead.id}`} value="nochange" data-nochange />
+                      <span>
+                        No change this week
+                        <span class="pu-hint">{noChangeHint(lead.status)}</span>
+                      </span>
+                    </label>
+
                     <div class="pu-more" data-for="meeting" hidden>
                       <label class="pu-field">
-                        <span>Meeting date</span>
+                        <span>Demo date</span>
                         <input type="date" name={`meetingDate-${lead.id}`} min={today} />
                       </label>
                     </div>
@@ -231,13 +253,21 @@ const nowLine = (status: string) => displayStatus(status) || 'No update yet';
       .pu-status { font-weight: 600; margin: 0 0 0.8rem; min-height: 1.2em; overflow-wrap: anywhere; }
       .pu-leads { list-style: none; margin: 0; padding: 0; }
       .pu-ref { font-size: 1.1rem; color: var(--hs-navy); margin: 0 0 0.25rem; overflow-wrap: anywhere; }
-      .pu-sub { margin: 0.1rem 0; color: var(--muted); overflow-wrap: anywhere; }
-      .pu-due { margin: 0.3rem 0 0.6rem; font-weight: 600; }
-      .pu-due--late { color: var(--btn-red); }
+      .pu-facts { margin: 0.4rem 0 0.6rem; display: grid; gap: 0.35rem; font-size: 1rem; }
+      .pu-facts div { display: grid; grid-template-columns: 8.5rem 1fr; gap: 0.5rem; }
+      .pu-facts dt { margin: 0; color: var(--muted); font-weight: 600; }
+      .pu-facts dd { margin: 0; overflow-wrap: anywhere; }
+      .pu-due--late { color: var(--btn-red); font-weight: 700; }
       .pu-q { border: 0; margin: 0.6rem 0 0; padding: 0; min-width: 0; }
       .pu-q legend { font-weight: 600; margin-bottom: 0.2rem; padding: 0; }
       .pu-opt { display: flex; align-items: center; gap: 0.6rem; min-height: 44px; cursor: pointer; overflow-wrap: anywhere; }
       .pu-opt input { width: 1.2rem; height: 1.2rem; flex: 0 0 auto; margin: 0; }
+      .pu-group { margin: 0.2rem 0 0.4rem; }
+      .pu-group-h { margin: 0.5rem 0 0; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+      .pu-checkin { margin-top: 0.4rem; padding: 0.3rem 0.6rem; border: 1px dashed var(--line); border-radius: 8px; }
+      .pu-opt input:disabled + span { color: var(--muted); }
+      .pu-done { margin: 0.2rem 0 0; min-height: 44px; display: flex; align-items: center; font-weight: 600; color: var(--muted); }
+      .pu-hint { display: block; font-size: 0.9rem; color: var(--muted); }
       .pu-field { display: flex; flex-direction: column; gap: 0.25rem; margin: 0.6rem 0 0; font-weight: 600; }
       .pu-field input, .pu-field select {
         min-height: 44px; font: inherit; font-weight: 400; padding: 0.4rem 0.6rem; border: 1px solid var(--line);
@@ -270,7 +300,11 @@ const nowLine = (status: string) => displayStatus(status) || 'No update yet';
         let pending: { submissionId: string; updates: Record<string, unknown>[] } | null = null;
         let busy = false;
 
+        const noChange = (li: HTMLLIElement) => li.querySelector<HTMLInputElement>('input[data-nochange]');
+        const stageInputs = (li: HTMLLIElement) => [...li.querySelectorAll<HTMLInputElement>(`input[name="choice-${li.dataset.id}"]`)];
         const field = (li: HTMLLIElement, name: string) => {
+          // No change is a check-in, not a stage: ticked, it is the answer and the stage stays.
+          if (name === 'choice' && noChange(li)?.checked) return 'nochange';
           const item = form.elements.namedItem(`${name}-${li.dataset.id}`);
           if (!item) return '';
           if (item instanceof RadioNodeList) return item.value;
@@ -278,24 +312,27 @@ const nowLine = (status: string) => displayStatus(status) || 'No update yet';
         };
         const card = (li: HTMLLIElement) => li.querySelector('fieldset.pu-card') as HTMLFieldSetElement;
         const errorLine = (li: HTMLLIElement) => li.querySelector('.pu-err') as HTMLElement;
-        // Talked To Doctor may already be stored; only a changed answer counts as touched.
-        const talkedChanged = (li: HTMLLIElement) => {
-          const start = li.querySelector<HTMLInputElement>('input[data-start="1"]')?.value ?? '';
-          return field(li, 'talked') !== start;
-        };
-        const touched = (li: HTMLLIElement) => Boolean(field(li, 'choice') || field(li, 'note') || talkedChanged(li));
+        const touched = (li: HTMLLIElement) => Boolean(field(li, 'choice') || field(li, 'note'));
 
         const showMore = (li: HTMLLIElement) => {
           const choice = field(li, 'choice');
           li.querySelectorAll<HTMLElement>('[data-for]').forEach((el) => {
             el.hidden = el.dataset.for !== choice;
           });
-          const label = li.querySelector('[data-note-label]');
-          if (label) label.textContent = choice === 'handback' ? 'Note (required)' : 'Note (optional)';
         };
         leads.forEach((li) => {
           showMore(li);
-          li.addEventListener('change', () => showMore(li));
+          li.addEventListener('change', (event) => {
+            const box = noChange(li);
+            if (box && event.target === box) {
+              // Ticked: the stage list clears and greys out, so the saved stage stays as it is.
+              for (const input of stageInputs(li)) {
+                if (box.checked) input.checked = false;
+                input.disabled = box.checked;
+              }
+            }
+            showMore(li);
+          });
         });
 
         const clearErrors = () =>
@@ -323,7 +360,6 @@ const nowLine = (status: string) => displayStatus(status) || 'No update yet';
               {
                 id: Number(li.dataset.id),
                 choice: field(li, 'choice'),
-                talkedToDoctor: field(li, 'talked'),
                 meetingDate: field(li, 'meetingDate'),
                 signedDate: field(li, 'signedDate'),
                 signedProduct: field(li, 'signedProduct'),
@@ -333,7 +369,11 @@ const nowLine = (status: string) => displayStatus(status) || 'No update yet';
               today,
             );
             if (result.ok) {
-              updates.push(result.update);
+              // The server fills in Talked To Doctor from the choice. Sending one marks an
+              // old page (docs/field-flow-contract.md, 7F), so the new page leaves it out.
+              const sent = { ...result.update };
+              delete sent.talkedToDoctor;
+              updates.push(sent);
             } else {
               const words = fieldWords(ref, result.field);
               flag(li, words);

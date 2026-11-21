@@ -113,6 +113,11 @@ function mapped(t, co) {
   if (/^already a customer\b/.test(x)) return 'Closed: already a customer';
   if (/^(hand back to hsbs|handed back to hsbs|returned to hsbs|held)$/.test(x)) return 'Closed: handed back to HSBS';
   if (/^not a fit$/.test(x)) return 'Closed: not a fit';
+  // The partner page's qualify choices (11/20/2026): "Qualified", "Disqualified, ...",
+  // "Demo set".
+  if (/^disqualified\b/.test(x)) return 'Closed: did not qualify';
+  if (/^qualified\b/.test(x)) return `${co} qualified the lead`;
+  if (/^demo set\b/.test(x)) return 'Meeting set';
   if (x === 'closed') return 'Closed';
   if (/^(sent|received)\b/.test(x)) return `Sent to ${co}`;
   // "Not yet, haven't tried" (the stored answer) and "Not called yet" (the label the

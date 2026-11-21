@@ -3,18 +3,47 @@
 // key, no flow URL and no lead data. Contract: docs/field-flow-contract.md, "HSBS 7F".
 
 import { oneLine } from './one-line.mjs';
-import { STAND_CHOICES } from './partner-status-words.mjs';
+import { RETIRED_CHOICE_CODES, STAND_CHOICES, displayStatus } from './partner-status-words.mjs';
 
 /** A Partner Links Link Key: 40 hex characters. Anything else is 404 before any flow call. */
 export const isPartnerKey = (key) => typeof key === 'string' && /^[0-9a-fA-F]{40}$/.test(key);
 
-/** "Have you talked to the doctor?" The Service Cases Talked To Doctor choices. */
+/** The Service Cases Talked To Doctor choices 7F accepts. */
 export const TALKED_CHOICES = ['Yes', 'Not yet, still trying', "Not yet, haven't tried"];
 
-/** "Not moving forward" reasons. */
-export const CLOSED_REASONS = ['No response', 'Chose another provider', 'Price', 'Timing', 'Not a fit', 'Other'];
+/**
+ * The page no longer asks "Have you talked to the doctor?" (Brian, 11/20/2026). The answer
+ * follows from the choice, so 7F still gets the Talked To Doctor it stores. No change sends
+ * none, and the stored answer stays.
+ */
+export const TALKED_FOR = {
+  trying: 'Not yet, still trying',
+  qualified: 'Yes',
+  dq_noanswer: 'Not yet, still trying',
+  dq_notinterested: 'Yes',
+  meeting: 'Yes',
+  proposal: 'Yes',
+  signed: 'Yes',
+  lost: 'Yes',
+  nochange: '',
+};
 
-export const CHOICE_CODES = STAND_CHOICES.map((c) => c.code);
+/** The disqualified codes (the page offers only dq_noanswer). Each closes the lead and emails Brian. */
+export const DISQUALIFIED = ['dq_noanswer', 'dq_notinterested'];
+
+/** "Not moving forward" reasons. No answer is its own choice now (Disqualified). */
+export const CLOSED_REASONS = ['Chose another provider', 'Price', 'Timing', 'Not a fit', 'Other'];
+
+export const CHOICE_CODES = [...STAND_CHOICES.map((c) => c.code), ...RETIRED_CHOICE_CODES];
+
+/**
+ * A page loaded before 11/20/2026 still asks "Have you talked to the doctor?" and sends its
+ * answer, and may send `handback` or the reason "No response". The save keeps taking those,
+ * with the old rules, so an open tab or a retry of a partly written save still reaches 7F
+ * (Codex P1 on #20). The new page never sends talkedToDoctor, so it gets the new rules.
+ */
+export const LEGACY_CHOICE_CODES = ['meeting', 'proposal', 'signed', 'lost', 'handback', 'nochange'];
+export const LEGACY_CLOSED_REASONS = ['No response', ...CLOSED_REASONS];
 export const MAX_UPDATES = 50;
 export const NOTE_MAX = 300;
 export const PRODUCT_MAX = 100;
@@ -26,7 +55,7 @@ export const UPDATE_FIELDS = ['talkedToDoctor', 'meetingDate', 'signedDate', 'si
 export const FIELD_WORDS = {
   choice: 'Where does it stand?',
   talkedToDoctor: 'Have you talked to the doctor?',
-  meetingDate: 'Meeting date',
+  meetingDate: 'Demo date',
   signedDate: 'Signed date',
   signedProduct: 'Product',
   closedReason: 'Reason',
@@ -93,12 +122,15 @@ export function checkUpdate(raw, today) {
   if (id === null) return { ok: false, id: null, field: 'id' };
   const bad = (field) => ({ ok: false, id, field });
   const choice = text(u.choice);
-  if (!CHOICE_CODES.includes(choice)) return bad('choice');
-  const talked = text(u.talkedToDoctor);
-  if (talked ? !TALKED_CHOICES.includes(talked) : choice !== 'nochange') return bad('talkedToDoctor');
+  const sentTalked = text(u.talkedToDoctor);
+  const legacy = sentTalked !== '';
+  if (!(legacy ? LEGACY_CHOICE_CODES : CHOICE_CODES).includes(choice)) return bad('choice');
+  if (legacy && !TALKED_CHOICES.includes(sentTalked)) return bad('talkedToDoctor');
+  const talked = legacy ? sentTalked : (TALKED_FOR[choice] ?? '');
   const rawNote = text(u.note);
   const note = oneLine(rawNote, NOTE_MAX + 1);
   if (note.length > NOTE_MAX) return bad('note');
+  if (choice === 'handback' && !note) return bad('note');
   const update = { id, choice, talkedToDoctor: talked, meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note };
   if (choice === 'meeting') {
     const date = text(u.meetingDate);
@@ -115,10 +147,9 @@ export function checkUpdate(raw, today) {
   }
   if (choice === 'lost') {
     const reason = text(u.closedReason);
-    if (!CLOSED_REASONS.includes(reason)) return bad('closedReason');
+    if (!(legacy ? LEGACY_CLOSED_REASONS : CLOSED_REASONS).includes(reason)) return bad('closedReason');
     update.closedReason = reason;
   }
-  if (choice === 'handback' && !note) return bad('note');
   return { ok: true, update };
 }
 
@@ -142,4 +173,51 @@ export function checkUpdates(updates, today) {
     clean.push(result.update);
   }
   return { ok: true, updates: clean };
+}
+
+/** Statuses where the case's Meeting Date still describes the lead. */
+const MEETING_STATUSES = ['Meeting set', 'Meeting held'];
+
+/**
+ * The "Now:" words on a lead card. The case keeps its old Meeting Date after a later save
+ * (7F leaves the column alone), so the date shows only while the lead stands at a meeting.
+ * Brian, 11/21/2026: "Trying to reach, meeting Nov 24" made no sense.
+ * @param {string} status Partner Status as stored
+ * @param {string} meetingDate YYYY-MM-DD or blank
+ */
+export function nowLine(status, meetingDate) {
+  const shown = stageWords(status);
+  if (!shown) return 'No update yet';
+  const date = MEETING_STATUSES.includes(shown) ? showDate(meetingDate) : '';
+  return date ? `${shown}, meeting ${date}` : shown;
+}
+
+/** The stage in the page's words: 7F stores Reached and Trying to reach. @param {string} status */
+function stageWords(status) {
+  const raw = typeof status === 'string' ? status.trim() : '';
+  if (raw === 'Reached') return 'Reached the customer';
+  if (raw === 'Trying to reach') return 'Not reached yet';
+  return displayStatus(status);
+}
+
+/**
+ * The hint under "No change this week". 7F leaves Partner Status as it is and counts the
+ * save as this week's update, so the hint names the stage the lead keeps.
+ * @param {string} status Partner Status as stored
+ */
+export function noChangeHint(status) {
+  const shown = stageWords(status);
+  return shown ? `Keeps it at ${shown}. Counts as this week's update.` : "Counts as this week's update.";
+}
+
+/**
+ * The "Next update" line on a lead card. A lead with missed updates is overdue; 7G has
+ * already moved its due date on.
+ * @param {number} missed Missed Updates
+ * @param {string} due Next Update Due, YYYY-MM-DD or blank
+ */
+export function dueLine(missed, due) {
+  const date = showDate(due);
+  if (missed > 0) return date ? `Overdue. Now due ${date}` : 'Overdue';
+  return date ? `Due ${date}` : 'Not set yet';
 }

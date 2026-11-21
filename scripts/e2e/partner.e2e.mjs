@@ -65,6 +65,20 @@ const LEADS = [
     missedUpdates: 1,
     doctorEmail: 'doctor@example.com',
   },
+  {
+    // Moved on from a meeting: the case still holds the old Meeting Date.
+    id: 38,
+    ref: 'HSBS-F92',
+    practice: 'TEST West Dental',
+    contact: 'TEST Doctor',
+    company: 'HealthFirst',
+    introducedOn: eastern(-6),
+    status: 'Trying to reach',
+    talkedToDoctor: 'No, still trying',
+    meetingDate: eastern(3),
+    nextUpdateDue: eastern(5),
+    missedUpdates: 0,
+  },
 ];
 
 const bodies = [];
@@ -190,6 +204,13 @@ await check('page lists leads overdue first, no private fields, no analytics, no
   assert.ok(html.indexOf('HSBS-F91') < html.indexOf('HSBS-F90'), 'overdue lead is not first');
   assert.match(html, /Overdue/);
   assert.match(html, /Lead updates for TEST field partner/);
+  // A meeting date shows only while the lead stands at a meeting.
+  const card = (ref) => html.slice(html.indexOf(ref), html.indexOf('</li>', html.indexOf(ref)));
+  assert.match(card('HSBS-F91'), /Stage<\/dt>\s*<dd[^>]*>Meeting set, meeting /);
+  assert.match(card('HSBS-F91'), /Next update<\/dt>\s*<dd[^>]*>Overdue/);
+  assert.match(card('HSBS-F92'), /Stage<\/dt>\s*<dd[^>]*>Not reached yet/);
+  assert.match(card('HSBS-F90'), /Introduced<\/dt>\s*<dd[^>]*>[A-Z][a-z]{2} \d{1,2}, \d{4}/);
+  assert.doesNotMatch(card('HSBS-F92'), /meeting [A-Z][a-z]{2} \d/);
 });
 
 const phone = await browser.newContext({ ...devices['iPhone 13'], viewport: { width: 375, height: 812 } });
@@ -206,7 +227,6 @@ await check('a missing answer names the lead and posts nothing', async () => {
   const page = await phone.newPage();
   await open(page);
   await page.check('input[name="choice-36"][value="signed"]');
-  await page.check('input[name="talked-36"][value="Yes"]');
   await page.click('#pu-save');
   await page.waitForTimeout(300);
   assert.match(await page.textContent('#pu-status'), /Lead HSBS-F90: check Signed date\./);
@@ -219,7 +239,6 @@ await check('save sends only touched leads and shows Saved', async () => {
   await open(page);
   await page.check('input[name="choice-36"][value="meeting"]');
   assert.equal(await page.isVisible('input[name="meetingDate-36"]'), true);
-  await page.check('input[name="talked-36"][value="Yes"]');
   await page.fill('input[name="meetingDate-36"]', TOMORROW);
   await page.fill('input[name="note-36"]', 'TEST call booked');
   await Promise.all([page.waitForURL(/saved=1/), page.click('#pu-save')]);
@@ -234,13 +253,56 @@ await check('save sends only touched leads and shows Saved', async () => {
   await page.close();
 });
 
-await check('No change on a lead with a stored answer sends that answer', async () => {
+await check('the page asks one question, grouped, with no talked-to-doctor question', async () => {
+  const page = await phone.newPage();
+  await open(page);
+  assert.equal(await page.locator('input[name="talked-36"]').count(), 0);
+  assert.equal(await page.locator('input[name="choice-36"][value="handback"]').count(), 0);
+  const values = await page.$$eval('input[name="choice-36"]', (els) => els.map((e) => e.value));
+  assert.deepEqual(values, ['qualified', 'trying', 'dq_noanswer', 'meeting', 'proposal', 'signed', 'lost']);
+  assert.equal(await page.locator('input[name="nochange-36"]').count(), 1);
+  const text = await page.textContent('li[data-id="36"]');
+  assert.match(text, /Qualifying/);
+  assert.match(text, /After qualified/);
+  assert.match(text, /wants a demo/);
+  assert.match(text, /Counts as this week's update\./);
+  // A lead at Meeting set is qualified: the Qualifying group is frozen.
+  const later = await page.$$eval('input[name="choice-37"]', (els) => els.map((e) => e.value));
+  assert.deepEqual(later, ['meeting', 'proposal', 'signed', 'lost']);
+  const text37 = await page.textContent('li[data-id="37"]');
+  assert.match(text37, /Reached the customer \(done\)/);
+  assert.match(text37, /Keeps it at Meeting set\./);
+  // Trying to reach is not qualified yet: every choice is offered.
+  assert.equal(await page.locator('input[name="choice-38"]').count(), 7);
+  await page.close();
+});
+
+await check('Qualified sends Talked To Doctor Yes with no other field', async () => {
   bodies.length = 0;
   const page = await phone.newPage();
   await open(page);
-  await page.check('input[name="choice-37"][value="nochange"]');
+  await page.check('input[name="choice-36"][value="qualified"]');
   await Promise.all([page.waitForURL(/saved=1/), page.click('#pu-save')]);
-  assert.deepEqual(saves()[0].updates.map((u) => [u.id, u.choice, u.talkedToDoctor]), [[37, 'nochange', 'Yes']]);
+  assert.deepEqual(saves()[0].updates, [
+    { id: 36, choice: 'qualified', talkedToDoctor: 'Yes', meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note: '' },
+  ]);
+  await page.close();
+});
+
+await check('No change sends no Talked To Doctor, so the stored answer stays', async () => {
+  bodies.length = 0;
+  const page = await phone.newPage();
+  await open(page);
+  // A stage picked first is cleared and greyed out when No change is ticked.
+  await page.check('input[name="choice-37"][value="proposal"]');
+  await page.check('input[name="nochange-37"]');
+  assert.equal(await page.isChecked('input[name="choice-37"][value="proposal"]'), false);
+  assert.equal(await page.isDisabled('input[name="choice-37"][value="proposal"]'), true);
+  await page.uncheck('input[name="nochange-37"]');
+  assert.equal(await page.isDisabled('input[name="choice-37"][value="proposal"]'), false);
+  await page.check('input[name="nochange-37"]');
+  await Promise.all([page.waitForURL(/saved=1/), page.click('#pu-save')]);
+  assert.deepEqual(saves()[0].updates.map((u) => [u.id, u.choice, u.talkedToDoctor]), [[37, 'nochange', '']]);
   await page.close();
 });
 
@@ -266,8 +328,7 @@ await check('no clear answer: Save again resends the same id and updates', async
   saveReplies.push([503, undefined]);
   const page = await phone.newPage();
   await open(page);
-  await page.check('input[name="choice-36"][value="handback"]');
-  await page.check('input[name="talked-36"][value="Not yet, still trying"]');
+  await page.check('input[name="choice-36"][value="dq_noanswer"]');
   await page.fill('input[name="note-36"]', 'TEST note one');
   await page.click('#pu-save');
   await page.waitForFunction(() => /taking too long/.test(document.getElementById('pu-status')?.textContent ?? ''));

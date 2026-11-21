@@ -364,3 +364,18 @@ describe('a new case with no partner status yet', () => {
     assert.equal(leadViews([r], TODAY)[0].chip, 'Sent to HealthFirst');
   });
 });
+
+describe('the partner page qualify choices on Track (11/20/2026)', () => {
+  test('Qualified, Disqualified and Demo set log lines read in plain words', () => {
+    assert.equal(stepWords('Qualified', 'HealthFirst'), 'HealthFirst qualified the lead');
+    assert.equal(stepWords('Test Field Partner: Qualified', 'HealthFirst'), 'HealthFirst qualified the lead');
+    assert.equal(stepWords('Disqualified, no answer after 4 attempts', 'HealthFirst'), 'Closed: did not qualify');
+    assert.equal(stepWords('HealthFirst: Disqualified, not interested', 'HealthFirst'), 'Closed: did not qualify');
+    assert.equal(stepWords('Demo set', 'HealthFirst'), 'Meeting set');
+    assert.equal(stepWords('Trying to reach', 'HealthFirst'), 'HealthFirst is reaching out');
+  });
+  test('a Qualified line counts as reached; a Disqualified one does not', () => {
+    assert.deepEqual(historyKinds('Test Field Partner: Qualified. TEST wants a demo'), ['reached']);
+    assert.deepEqual(historyKinds('Test Field Partner: Disqualified, not interested'), ['status']);
+  });
+});

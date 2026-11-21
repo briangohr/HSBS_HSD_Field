@@ -276,15 +276,44 @@ dropped. More than 500 leads is a failed read. The page sorts overdue (Missed Up
 ```
 
 1 to 50 updates, each lead once, only the leads the partner touched. `choice` is one of
-`meeting`, `proposal`, `signed`, `lost`, `handback`, `nochange` (`STAND_CHOICES`). The site
-checks every update first (`checkUpdate` in `src/lib/partner-form.mjs`) and sends fields
-that don't belong to the choice blank: `talkedToDoctor` one of the three Talked To Doctor
-choices, required except on `nochange`; `meeting` a `meetingDate` today or later; `signed` a
-`signedDate` not after today, `signedProduct` up to 100; `lost` a `closedReason` of the six;
-`handback` a `note`; `note` one line, up to 300. Today is Eastern time. The two day rules
-(meeting today or later, signed not after today) are checked by the page and by 7F, not by
+`trying`, `qualified`, `dq_noanswer`, `dq_notinterested`, `meeting`, `proposal`, `signed`,
+`lost`, `nochange` (`STAND_CHOICES`, one list since 11/20/2026: qualify first, then the
+deal). Since 11/21/2026 the page no longer offers `dq_notinterested` (one Disqualified
+only); the save still takes it, and 7F still stores it as below. `nochange` is a tick box
+under the stage list on the page, not a stage. The site checks every update first (`checkUpdate` in `src/lib/partner-form.mjs`) and
+sends fields that don't belong to the choice blank. The page no longer asks "Have you talked
+to the doctor?": the site sets `talkedToDoctor` from the choice (`TALKED_FOR`): `Not yet,
+still trying` for `trying` and `dq_noanswer`, blank for `nochange`, `Yes` for the rest. `meeting` (page label "Demo set") needs a `meetingDate` today or
+later; `signed` a `signedDate` not after today, `signedProduct` up to 100; `lost` a
+`closedReason` of the five (`No response` is the `dq_noanswer` choice now); `note` is
+optional, one line, up to 300. Today is Eastern time. The two day rules (meeting today or
+later, signed not after today) are checked by the page and by 7F, not by
 `/api/partner-save`, so a resend after midnight still reaches 7F's tag check. 7F skips the
 day rules on a save whose tag it already holds on any of its cases.
+
+A page loaded before 11/20/2026 still sends its own `talkedToDoctor` answer. An update that
+carries one gets the old rules, so an open tab or a retry of a partly written save still
+reaches 7F: `talkedToDoctor` must be one of the three Talked To Doctor choices and is sent
+as is; `choice` is one of `meeting`, `proposal`, `signed`, `lost`, `handback`, `nochange`;
+`handback` needs a note; `lost` also takes `No response`. 7F accepts all of these. The new
+page never sends `talkedToDoctor` or `handback`.
+
+What 7F stores per choice (the words are placeholders until HealthFirst sends its
+Salesforce picklist; every stored value is an existing column choice):
+
+| choice | Partner Status | Qualified | Closes the lead | Email to Brian |
+|---|---|---|---|---|
+| `qualified` | Reached | Yes | no | no |
+| `trying` | Trying to reach | unchanged | no | no |
+| `dq_noanswer`, `dq_notinterested` | Not moving forward | No, Not Qualified Reason `Other`, Not Qualified Note the label, Closed Reason `Not qualified` | yes | "Field lead disqualified: <ref>" |
+| `meeting`, `proposal`, `signed` | Meeting set, Proposal or agreement sent, Signed | Yes | `signed` only | no |
+| `lost` | Not moving forward | unchanged, Closed Reason as sent | yes | no |
+| `nochange` | unchanged | unchanged | no | no |
+
+The Status Log line uses the page label ("Qualified", "Disqualified, not interested", "Demo
+set"). Track reads those labels (`stepWords` in `src/lib/rep-lead.mjs`): "HealthFirst
+qualified the lead", "Closed: did not qualify", "Meeting set". A closed lead leaves the
+page; Qualified Yes with Reached is what the pay promise reads as reached and qualified.
 
 | 7F answers | Site |
 |---|---|

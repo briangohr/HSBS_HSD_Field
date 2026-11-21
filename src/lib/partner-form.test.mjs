@@ -1,11 +1,13 @@
 // The partner page's answer checks (sheet PU, A and B4). The page and /api/partner-save
 // both use checkUpdate, so these rules hold before any 7F call.
 import assert from 'node:assert/strict';
+import { STAND_CHOICES } from './partner-status-words.mjs';
 import { describe, test } from 'node:test';
-import { CLOSED_REASONS, TALKED_CHOICES, checkUpdate, checkUpdates, easternToday, isDate, isPartnerKey, showDate } from './partner-form.mjs';
+import { CLOSED_REASONS, LEGACY_CLOSED_REASONS, TALKED_CHOICES, TALKED_FOR, checkUpdate, checkUpdates, easternToday, dueLine, isDate, isPartnerKey, noChangeHint, nowLine, showDate } from './partner-form.mjs';
 
 const TODAY = '2026-11-20';
-const base = { id: 36, choice: 'proposal', talkedToDoctor: 'Yes', meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note: '' };
+// The new page sends no Talked To Doctor answer; checkUpdate fills it in from the choice.
+const base = { id: 36, choice: 'proposal', talkedToDoctor: '', meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note: '' };
 const ok = (raw) => {
   const r = checkUpdate(raw, TODAY);
   assert.equal(r.ok, true, JSON.stringify(r));
@@ -47,6 +49,7 @@ describe('checkUpdate', () => {
     assert.deepEqual(ok({ ...base, choice: 'meeting', meetingDate: '2026-11-24', signedDate: '2026-11-01', closedReason: 'Price' }), {
       ...base,
       choice: 'meeting',
+      talkedToDoctor: 'Yes',
       meetingDate: '2026-11-24',
     });
     ok({ ...base, choice: 'meeting', meetingDate: TODAY });
@@ -64,21 +67,46 @@ describe('checkUpdate', () => {
     assert.deepEqual(checkUpdate({ ...base, choice: 'meeting', meetingDate: '' }, null), { ok: false, id: 36, field: 'meetingDate' });
     assert.deepEqual(checkUpdate({ ...base, choice: 'signed', signedDate: '11/20/2026' }, null), { ok: false, id: 36, field: 'signedDate' });
   });
-  test('lost needs one of the six reasons', () => {
+  test('lost needs one of the five reasons; no answer is the disqualified choice now', () => {
     for (const reason of CLOSED_REASONS) assert.equal(ok({ ...base, choice: 'lost', closedReason: reason }).closedReason, reason);
     bad({ ...base, choice: 'lost', closedReason: 'Bored' }, 'closedReason');
     bad({ ...base, choice: 'lost' }, 'closedReason');
+    bad({ ...base, choice: 'lost', closedReason: 'No response' }, 'closedReason');
   });
-  test('hand back needs a note', () => {
-    assert.equal(ok({ ...base, choice: 'handback', note: 'TEST note one' }).note, 'TEST note one');
-    bad({ ...base, choice: 'handback', note: '   ' }, 'note');
+  test('the qualify choices need nothing more, and a note stays optional', () => {
+    for (const choice of ['trying', 'qualified', 'dq_noanswer', 'dq_notinterested']) {
+      assert.deepEqual(ok({ ...base, choice, closedReason: 'Price' }), { ...base, choice, talkedToDoctor: TALKED_FOR[choice] });
+    }
+    // Retired from the page 11/21/2026; the save still takes it from an older open tab.
+    assert.equal(ok({ ...base, choice: 'dq_notinterested', note: 'TEST using another vendor' }).note, 'TEST using another vendor');
   });
-  test('talked to doctor is required except on No change', () => {
-    for (const t of TALKED_CHOICES) ok({ ...base, talkedToDoctor: t });
-    bad({ ...base, talkedToDoctor: '' }, 'talkedToDoctor');
+  test('hand back is no longer a page choice', () => {
+    bad({ ...base, choice: 'handback', note: 'TEST note one' }, 'choice');
+  });
+  test('Talked To Doctor follows the choice when the page sends none', () => {
+    assert.equal(ok({ ...base, choice: 'trying' }).talkedToDoctor, 'Not yet, still trying');
+    assert.equal(ok({ ...base, choice: 'dq_noanswer' }).talkedToDoctor, 'Not yet, still trying');
+    assert.equal(ok({ ...base, choice: 'qualified' }).talkedToDoctor, 'Yes');
+    assert.equal(ok({ ...base, choice: 'nochange' }).talkedToDoctor, '');
+    for (const c of STAND_CHOICES) {
+      const t = TALKED_FOR[c.code];
+      assert.ok(t === '' ? c.code === 'nochange' : TALKED_CHOICES.includes(t), c.code);
+    }
+  });
+  test('a page loaded before the change still saves with the old rules (Codex P1 on #20)', () => {
+    const old = { ...base, talkedToDoctor: "Not yet, haven't tried" };
+    assert.equal(ok({ ...old, choice: 'handback', note: 'TEST wrong number' }).choice, 'handback');
+    assert.equal(ok({ ...old, choice: 'handback', note: 'TEST wrong number' }).talkedToDoctor, "Not yet, haven't tried");
+    bad({ ...old, choice: 'handback' }, 'note');
+    for (const reason of LEGACY_CLOSED_REASONS) assert.equal(ok({ ...old, choice: 'lost', closedReason: reason }).closedReason, reason);
+    assert.equal(ok({ ...old, choice: 'nochange' }).talkedToDoctor, "Not yet, haven't tried");
     bad({ ...base, talkedToDoctor: 'Maybe' }, 'talkedToDoctor');
-    assert.equal(ok({ ...base, choice: 'nochange', talkedToDoctor: '' }).talkedToDoctor, '');
-    bad({ ...base, choice: 'nochange', talkedToDoctor: 'Maybe' }, 'talkedToDoctor');
+    bad({ ...old, choice: 'qualified' }, 'choice');
+  });
+  test('every page choice has a heading group and a label', () => {
+    assert.deepEqual(STAND_CHOICES.map((c) => c.code), ['qualified', 'trying', 'dq_noanswer', 'meeting', 'proposal', 'signed', 'lost', 'nochange']);
+    for (const c of STAND_CHOICES) assert.ok(c.label && ['qualify', 'deal', 'checkin'].includes(c.group), c.code);
+    assert.deepEqual(STAND_CHOICES.filter((c) => c.group === 'qualify').map((c) => c.label), ['Reached the customer', 'Not reached yet', 'Disqualified: no answer after 4 attempts']);
   });
   test('note is one line, up to 300 characters', () => {
     assert.equal(ok({ ...base, note: 'line one\nReferred by: x' }).note, 'line one Referred by: x');
@@ -109,4 +137,31 @@ describe('checkUpdates', () => {
   test('the first bad lead is named', () => {
     assert.deepEqual(checkUpdates([base, { ...base, id: 37, choice: 'lost' }], TODAY), { ok: false, id: 37, field: 'closedReason' });
   });
+});
+
+test('the Now line shows the meeting date only while the lead stands at a meeting', () => {
+  assert.equal(nowLine('Meeting set', '2026-11-24'), 'Meeting set, meeting Nov 24, 2026');
+  assert.equal(nowLine('Scheduled', '2026-11-24'), 'Meeting set, meeting Nov 24, 2026');
+  assert.equal(nowLine('Complete', '2026-11-24'), 'Meeting held, meeting Nov 24, 2026');
+  assert.equal(nowLine('Meeting set', ''), 'Meeting set');
+  // The case keeps an old Meeting Date after a later save (TEST F60, 11/21/2026).
+  assert.equal(nowLine('Trying to reach', '2026-11-24'), 'Not reached yet');
+  assert.equal(nowLine('Proposal or agreement sent', '2026-11-24'), 'Proposal or agreement sent');
+  assert.equal(nowLine('Not moving forward', '2026-11-24'), 'Not moving forward');
+  assert.equal(nowLine('', '2026-11-24'), 'No update yet');
+  // Qualified is stored as Reached (7F).
+  assert.equal(nowLine('Reached', ''), 'Reached the customer');
+});
+
+test('No change names the stage the lead keeps', () => {
+  assert.equal(noChangeHint('Meeting set'), "Keeps it at Meeting set. Counts as this week's update.");
+  assert.equal(noChangeHint('Reached'), "Keeps it at Reached the customer. Counts as this week's update.");
+  assert.equal(noChangeHint(''), "Counts as this week's update.");
+});
+
+test('the Next update line says when the update is due, or that it is overdue', () => {
+  assert.equal(dueLine(0, '2026-11-24'), 'Due Nov 24, 2026');
+  assert.equal(dueLine(2, '2026-11-24'), 'Overdue. Now due Nov 24, 2026');
+  assert.equal(dueLine(1, ''), 'Overdue');
+  assert.equal(dueLine(0, ''), 'Not set yet');
 });
