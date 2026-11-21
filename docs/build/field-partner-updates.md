@@ -233,6 +233,7 @@ Every body carries `key`. Answers are JSON.
 | Answer | Meaning | Site shows |
 |---|---|---|
 | 200 `{"ok":true,"saved":n}` | Every update written, now or by an earlier try with the same `submissionId` | "Saved n updates." |
+| 200 `{"ok":true,"saved":n}`, n below the updates sent (0 included) | 7F skipped a lead that closed or moved between its check and its write | "Saved n of m updates. ..." or "Nothing saved. ..." (contract, 7F answers) |
 | 404 | Unknown key, inactive row, or more than one row with the key | "This link does not work." |
 | 410 | Key Expires is past | "This link has expired. Use the link in your latest email." |
 | 422 `{"error":"reload","id":36}` | The case is not this partner's, not open, or the wrong Test | "Lead HSBS-F90 changed. Reload the page." Nothing in that save was written |

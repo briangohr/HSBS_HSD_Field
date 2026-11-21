@@ -10,6 +10,8 @@
 // - The page lists open leads overdue first, with no phone, email or JDE, sets no-store and
 //   noindex, and loads no analytics. No sideways scroll at 375px.
 // - Save sends only touched leads, in the contract shape, and "Saved N updates." shows.
+//   A save 7F answers with fewer saved than sent says how many did not save, and a zero
+//   save says nothing saved, after the reload. More saved than sent is no clear answer.
 // - A missing answer names the lead and posts nothing. A 422 reload names the lead and keeps
 //   every typed answer. A save with no clear answer is resent with the same submissionId and
 //   the same updates.
@@ -342,6 +344,78 @@ await check('no clear answer: Save again resends the same id and updates', async
   assert.deepEqual(second.updates, first.updates);
   assert.equal(first.updates[0].note, 'TEST note one');
   await page.close();
+});
+
+await check('a partial save says what did not save, after the reload', async () => {
+  bodies.length = 0;
+  saveReplies.push([200, { ok: true, saved: 1 }]);
+  const page = await phone.newPage();
+  await open(page);
+  await page.check('input[name="choice-36"][value="qualified"]');
+  await page.check('input[name="nochange-37"]');
+  await Promise.all([page.waitForURL(/saved=1&of=2/), page.click('#pu-save')]);
+  await page.waitForLoadState('load');
+  assert.equal(saves()[0].updates.length, 2);
+  assert.equal(
+    (await page.textContent('#pu-status'))?.trim(),
+    'Saved 1 of 2 updates. 1 lead closed or changed while you worked and did not save. The list below is current.',
+  );
+  assert.doesNotMatch(await page.textContent('#pu-status'), /Saved 1 update\./);
+  // The words show once: the address drops the counts, so a refresh does not repeat them.
+  assert.equal(new URL(page.url()).search, '');
+  await page.close();
+});
+
+await check('a zero save says nothing saved, after the reload', async () => {
+  bodies.length = 0;
+  saveReplies.push([200, { ok: true, saved: 0 }]);
+  const page = await phone.newPage();
+  await open(page);
+  await page.check('input[name="choice-36"][value="trying"]');
+  await Promise.all([page.waitForURL(/saved=0&of=1/), page.click('#pu-save')]);
+  await page.waitForLoadState('load');
+  assert.equal(
+    (await page.textContent('#pu-status'))?.trim(),
+    'Nothing saved. This lead closed or changed while you worked. The list below is current.',
+  );
+  await page.close();
+});
+
+await check('more saved than sent is no clear answer: no reload, Save resends the same id', async () => {
+  bodies.length = 0;
+  saveReplies.push([200, { ok: true, saved: 2 }]);
+  const page = await phone.newPage();
+  await open(page);
+  await page.check('input[name="choice-36"][value="trying"]');
+  await page.click('#pu-save');
+  await page.waitForFunction(() => /taking too long/.test(document.getElementById('pu-status')?.textContent ?? ''));
+  assert.doesNotMatch(page.url(), /saved=/);
+  assert.equal(await page.isDisabled('input[name="note-36"]'), true, 'answers should lock until resent');
+  await Promise.all([page.waitForURL(/saved=1&of=1/), page.click('#pu-save')]);
+  const [first, second] = saves();
+  assert.equal(second.submissionId, first.submissionId);
+  const api = await postSave({ key: KEY, submissionId: crypto.randomUUID(), updates: [{ id: 36, choice: 'trying' }] });
+  assert.equal(api.status, 200);
+  saveReplies.push([200, { ok: true, saved: 5 }]);
+  const over = await postSave({ key: KEY, submissionId: crypto.randomUUID(), updates: [{ id: 36, choice: 'trying' }] });
+  assert.equal(over.status, 502);
+  assert.equal((await over.json()).ok, undefined);
+  await page.close();
+});
+
+await check('the saved message trusts only counts that add up', async () => {
+  const words = async (search) => {
+    const res = await fetch(`${BASE}/update/${KEY}${search}`);
+    const html = await res.text();
+    return (html.match(/<p id="pu-status"[^>]*>([^<]*)<\/p>/) ?? [])[1] ?? 'missing';
+  };
+  assert.equal(await words('?saved=2'), 'Saved 2 updates.');
+  assert.equal(await words('?saved=2&of=2'), 'Saved 2 updates.');
+  assert.match(await words('?saved=1&of=3'), /^Saved 1 of 3 updates\. 2 leads closed/);
+  assert.match(await words('?saved=0&of=2'), /^Nothing saved\. These 2 leads/);
+  for (const bad of ['?saved=0', '?saved=3&of=2', '?saved=1&of=0', '?saved=1&of=51', '?saved=x&of=2', '?saved=1.5&of=2', '?saved=-1&of=2', '?saved=&of=2']) {
+    assert.equal(await words(bad), '', bad);
+  }
 });
 
 await check('the save API leaves the day rules to 7F, so a resend after midnight reaches it', async () => {

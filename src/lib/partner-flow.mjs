@@ -160,14 +160,15 @@ export async function listLeads(key) {
 
 /**
  * Action "save". The updates are already checked (checkUpdates in partner-form.mjs).
- * Success is only 200 {"ok":true,"saved":n}.
+ * Success is only 200 {"ok":true,"saved":n} with n from 0 to the number sent.
  * @param {string} key
  * @param {string} submissionId
  * @param {Record<string, unknown>[]} updates
  */
 export async function saveUpdates(key, submissionId, updates) {
   const body = await post({ action: 'save', key, submissionId, updates }, SAVE_TIMEOUT_MS);
-  if (body.ok !== true || !Number.isSafeInteger(body.saved) || body.saved < 0) {
+  // More saved than sent breaks the contract: 7F counts only the updates in this post.
+  if (body.ok !== true || !Number.isSafeInteger(body.saved) || body.saved < 0 || body.saved > updates.length) {
     throw new PartnerFlowError('failed', { status: 200 });
   }
   return /** @type {number} */ (body.saved);

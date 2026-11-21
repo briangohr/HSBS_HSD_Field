@@ -378,12 +378,22 @@ page; Qualified Yes with Reached is what the pay promise reads as reached and qu
 
 | 7F answers | Site |
 |---|---|
-| 200 `{"ok":true,"saved":n}` | Success, "Saved n updates." Nothing else is success: a 202, a 200 without `ok` true and a whole `saved`, or non-JSON is no clear answer |
+| 200 `{"ok":true,"saved":n}`, n equal to the updates sent | Success, "Saved n updates." Nothing else is success: a 202, a 200 without `ok` true and a whole `saved`, or non-JSON is no clear answer |
+| 200 `{"ok":true,"saved":n}`, n from 1 to one below the updates sent | Partial: 7F skipped a lead that closed or moved between its check and its write. "Saved n of m updates. k leads closed or changed while you worked and did not save. The list below is current." |
+| 200 `{"ok":true,"saved":0}` | Nothing saved: "Nothing saved. This lead (These m leads) closed or changed while you worked. The list below is current." |
+| 200 with `saved` above the updates sent | Breaks the contract. The site answers 502 and treats it as no clear answer, so Save resends the same `submissionId` |
 | 404 | "This link does not work." |
 | 410 (Key Expires past or blank) | "This link has expired. Use the link in your latest email." |
 | 422 `{"error":"reload","id":n}` | "Lead HSBS-F<n> changed. Reload the page." Nothing was written |
 | 422 `{"error":"bad_value","id":n}` | Names the lead. Nothing was written |
 | 3xx, 408, 429, 5xx, timeout | "This is taking too long. It may already have gone through. Press Save again; it will not save twice." |
+
+`/api/partner-save` answers the page 200 `{"ok":true,"saved":n,"sent":m,"partial":bool,"message":"..."}`;
+`sent` and `partial` are the site's own fields, so 7F is unchanged. After a save the page
+reloads with `?saved=<n>&of=<m>`, so partial and zero words survive the reload, then drops
+the counts from the address so a refresh does not repeat them. A count pair that does not
+add up (`saved` above `of`, `of` outside 1 to 50, not whole numbers) shows no words. A page
+opened before this change reloads with `?saved=<n>` alone, read as a full save.
 
 A save with no clear answer keeps its `submissionId` and the exact updates; the answers
 lock and Save resends them. 7F tags each Status Log line `[s:<submissionId>]` and skips a
