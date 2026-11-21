@@ -151,7 +151,7 @@ const saved = state === 'ready' && Number.isSafeInteger(savedParam) && savedPara
                     <fieldset class="pu-q" data-q="choice">
                       <legend>Where does it stand?</legend>
                       {choiceGroupsFor(lead.status).map((g) => (
-                        <div class={g.group === 'other' ? 'pu-group pu-group--apart' : 'pu-group'}>
+                        <div class="pu-group">
                           {g.heading && <p class="pu-group-h">{g.heading}</p>}
                           {g.done && <p class="pu-done" data-done={g.group}>{g.done} (done)</p>}
                           {g.choices.map((c) => (
@@ -159,17 +159,21 @@ const saved = state === 'ready' && Number.isSafeInteger(savedParam) && savedPara
                               <input type="radio" name={`choice-${lead.id}`} value={c.code} />
                               <span>
                                 {c.label}
-                                {c.code === 'nochange' ? (
-                                  <span class="pu-hint">{noChangeHint(lead.status)}</span>
-                                ) : (
-                                  c.hint && <span class="pu-hint">{c.hint}</span>
-                                )}
+                                {c.hint && <span class="pu-hint">{c.hint}</span>}
                               </span>
                             </label>
                           ))}
                         </div>
                       ))}
                     </fieldset>
+
+                    <label class="pu-opt pu-checkin">
+                      <input type="checkbox" name={`nochange-${lead.id}`} value="nochange" data-nochange />
+                      <span>
+                        No change this week
+                        <span class="pu-hint">{noChangeHint(lead.status)}</span>
+                      </span>
+                    </label>
 
                     <div class="pu-more" data-for="meeting" hidden>
                       <label class="pu-field">
@@ -242,7 +246,8 @@ const saved = state === 'ready' && Number.isSafeInteger(savedParam) && savedPara
       .pu-opt input { width: 1.2rem; height: 1.2rem; flex: 0 0 auto; margin: 0; }
       .pu-group { margin: 0.2rem 0 0.4rem; }
       .pu-group-h { margin: 0.5rem 0 0; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
-      .pu-group--apart { border-top: 1px solid var(--line); margin-top: 0.6rem; padding-top: 0.3rem; }
+      .pu-checkin { margin-top: 0.4rem; padding: 0.3rem 0.6rem; border: 1px dashed var(--line); border-radius: 8px; }
+      .pu-opt input:disabled + span { color: var(--muted); }
       .pu-done { margin: 0.2rem 0 0; min-height: 44px; display: flex; align-items: center; font-weight: 600; color: var(--muted); }
       .pu-hint { display: block; font-size: 0.9rem; color: var(--muted); }
       .pu-field { display: flex; flex-direction: column; gap: 0.25rem; margin: 0.6rem 0 0; font-weight: 600; }
@@ -277,7 +282,11 @@ const saved = state === 'ready' && Number.isSafeInteger(savedParam) && savedPara
         let pending: { submissionId: string; updates: Record<string, unknown>[] } | null = null;
         let busy = false;
 
+        const noChange = (li: HTMLLIElement) => li.querySelector<HTMLInputElement>('input[data-nochange]');
+        const stageInputs = (li: HTMLLIElement) => [...li.querySelectorAll<HTMLInputElement>(`input[name="choice-${li.dataset.id}"]`)];
         const field = (li: HTMLLIElement, name: string) => {
+          // No change is a check-in, not a stage: ticked, it is the answer and the stage stays.
+          if (name === 'choice' && noChange(li)?.checked) return 'nochange';
           const item = form.elements.namedItem(`${name}-${li.dataset.id}`);
           if (!item) return '';
           if (item instanceof RadioNodeList) return item.value;
@@ -295,7 +304,17 @@ const saved = state === 'ready' && Number.isSafeInteger(savedParam) && savedPara
         };
         leads.forEach((li) => {
           showMore(li);
-          li.addEventListener('change', () => showMore(li));
+          li.addEventListener('change', (event) => {
+            const box = noChange(li);
+            if (box && event.target === box) {
+              // Ticked: the stage list clears and greys out, so the saved stage stays as it is.
+              for (const input of stageInputs(li)) {
+                if (box.checked) input.checked = false;
+                input.disabled = box.checked;
+              }
+            }
+            showMore(li);
+          });
         });
 
         const clearErrors = () =>

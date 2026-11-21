@@ -278,7 +278,9 @@ dropped. More than 500 leads is a failed read. The page sorts overdue (Missed Up
 1 to 50 updates, each lead once, only the leads the partner touched. `choice` is one of
 `trying`, `qualified`, `dq_noanswer`, `dq_notinterested`, `meeting`, `proposal`, `signed`,
 `lost`, `nochange` (`STAND_CHOICES`, one list since 11/20/2026: qualify first, then the
-deal). The site checks every update first (`checkUpdate` in `src/lib/partner-form.mjs`) and
+deal). Since 11/21/2026 the page no longer offers `dq_notinterested` (one Disqualified
+only); the save still takes it, and 7F still stores it as below. `nochange` is a tick box
+under the stage list on the page, not a stage. The site checks every update first (`checkUpdate` in `src/lib/partner-form.mjs`) and
 sends fields that don't belong to the choice blank. The page no longer asks "Have you talked
 to the doctor?": the site sets `talkedToDoctor` from the choice (`TALKED_FOR`): `Not yet,
 still trying` for `trying` and `dq_noanswer`, blank for `nochange`, `Yes` for the rest. `meeting` (page label "Demo set") needs a `meetingDate` today or

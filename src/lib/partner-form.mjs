@@ -3,7 +3,7 @@
 // key, no flow URL and no lead data. Contract: docs/field-flow-contract.md, "HSBS 7F".
 
 import { oneLine } from './one-line.mjs';
-import { STAND_CHOICES, displayStatus } from './partner-status-words.mjs';
+import { RETIRED_CHOICE_CODES, STAND_CHOICES, displayStatus } from './partner-status-words.mjs';
 
 /** A Partner Links Link Key: 40 hex characters. Anything else is 404 before any flow call. */
 export const isPartnerKey = (key) => typeof key === 'string' && /^[0-9a-fA-F]{40}$/.test(key);
@@ -28,13 +28,13 @@ export const TALKED_FOR = {
   nochange: '',
 };
 
-/** The two disqualified choices. Each closes the lead and emails Brian, as a hand back did. */
+/** The disqualified codes (the page offers only dq_noanswer). Each closes the lead and emails Brian. */
 export const DISQUALIFIED = ['dq_noanswer', 'dq_notinterested'];
 
 /** "Not moving forward" reasons. No answer is its own choice now (Disqualified). */
 export const CLOSED_REASONS = ['Chose another provider', 'Price', 'Timing', 'Not a fit', 'Other'];
 
-export const CHOICE_CODES = STAND_CHOICES.map((c) => c.code);
+export const CHOICE_CODES = [...STAND_CHOICES.map((c) => c.code), ...RETIRED_CHOICE_CODES];
 
 /**
  * A page loaded before 11/20/2026 still asks "Have you talked to the doctor?" and sends its
@@ -192,9 +192,9 @@ export function nowLine(status, meetingDate) {
   return date ? `${shown}, meeting ${date}` : shown;
 }
 
-/** The stage in the page's words. Qualified is stored as Reached (7F). @param {string} status */
+/** The stage in the page's words. Reached the customer is stored as Reached (7F). @param {string} status */
 function stageWords(status) {
-  return (typeof status === 'string' ? status.trim() : '') === 'Reached' ? 'Qualified' : displayStatus(status);
+  return (typeof status === 'string' ? status.trim() : '') === 'Reached' ? 'Reached the customer' : displayStatus(status);
 }
 
 /**

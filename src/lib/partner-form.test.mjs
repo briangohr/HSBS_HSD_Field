@@ -77,6 +77,7 @@ describe('checkUpdate', () => {
     for (const choice of ['trying', 'qualified', 'dq_noanswer', 'dq_notinterested']) {
       assert.deepEqual(ok({ ...base, choice, closedReason: 'Price' }), { ...base, choice, talkedToDoctor: TALKED_FOR[choice] });
     }
+    // Retired from the page 11/21/2026; the save still takes it from an older open tab.
     assert.equal(ok({ ...base, choice: 'dq_notinterested', note: 'TEST using another vendor' }).note, 'TEST using another vendor');
   });
   test('hand back is no longer a page choice', () => {
@@ -103,8 +104,9 @@ describe('checkUpdate', () => {
     bad({ ...old, choice: 'qualified' }, 'choice');
   });
   test('every page choice has a heading group and a label', () => {
-    assert.deepEqual(STAND_CHOICES.map((c) => c.code), ['qualified', 'trying', 'dq_noanswer', 'dq_notinterested', 'meeting', 'proposal', 'signed', 'lost', 'nochange']);
-    for (const c of STAND_CHOICES) assert.ok(c.label && ['qualify', 'deal', 'other'].includes(c.group), c.code);
+    assert.deepEqual(STAND_CHOICES.map((c) => c.code), ['qualified', 'trying', 'dq_noanswer', 'meeting', 'proposal', 'signed', 'lost', 'nochange']);
+    for (const c of STAND_CHOICES) assert.ok(c.label && ['qualify', 'deal', 'checkin'].includes(c.group), c.code);
+    assert.deepEqual(STAND_CHOICES.filter((c) => c.group === 'qualify').map((c) => c.label), ['Reached the customer', 'Not reached yet', 'Disqualified: no answer after 4 attempts']);
   });
   test('note is one line, up to 300 characters', () => {
     assert.equal(ok({ ...base, note: 'line one\nReferred by: x' }).note, 'line one Referred by: x');
@@ -148,11 +150,11 @@ test('the Now line shows the meeting date only while the lead stands at a meetin
   assert.equal(nowLine('Not moving forward', '2026-11-24'), 'Not moving forward');
   assert.equal(nowLine('', '2026-11-24'), 'No update yet');
   // Qualified is stored as Reached (7F).
-  assert.equal(nowLine('Reached', ''), 'Qualified');
+  assert.equal(nowLine('Reached', ''), 'Reached the customer');
 });
 
 test('No change names the stage the lead keeps', () => {
   assert.equal(noChangeHint('Meeting set'), "Keeps it at Meeting set. Counts as this week's update.");
-  assert.equal(noChangeHint('Reached'), "Keeps it at Qualified. Counts as this week's update.");
+  assert.equal(noChangeHint('Reached'), "Keeps it at Reached the customer. Counts as this week's update.");
   assert.equal(noChangeHint(''), "Counts as this week's update.");
 });

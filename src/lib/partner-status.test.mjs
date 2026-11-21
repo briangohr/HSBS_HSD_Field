@@ -57,7 +57,8 @@ test('status words are the same stored values everywhere, and old values still d
 
 test('once qualified, the Qualifying group is frozen and only the later steps are offered', () => {
   const codes = (status) => choiceGroupsFor(status).flatMap((g) => g.choices.map((c) => c.code));
-  const all = ['qualified', 'trying', 'dq_noanswer', 'dq_notinterested', 'meeting', 'proposal', 'signed', 'lost', 'nochange'];
+  // No change is not in either group: the page shows it as its own check-in box.
+  const all = ['qualified', 'trying', 'dq_noanswer', 'meeting', 'proposal', 'signed', 'lost'];
   for (const open of ['', 'Trying to reach', 'Sent']) {
     assert.equal(isQualifiedStatus(open), false, open);
     assert.deepEqual(codes(open), all, open);
@@ -65,7 +66,7 @@ test('once qualified, the Qualifying group is frozen and only the later steps ar
   }
   for (const qualified of ['Reached', 'Meeting set', 'Scheduled', 'Complete', 'Proposal or agreement sent', 'Signed']) {
     assert.equal(isQualifiedStatus(qualified), true, qualified);
-    assert.deepEqual(codes(qualified), ['meeting', 'proposal', 'signed', 'lost', 'nochange'], qualified);
-    assert.deepEqual(choiceGroupsFor(qualified).map((g) => g.done), ['Qualified', '', ''], qualified);
+    assert.deepEqual(codes(qualified), ['meeting', 'proposal', 'signed', 'lost'], qualified);
+    assert.deepEqual(choiceGroupsFor(qualified).map((g) => g.done), ['Reached the customer', ''], qualified);
   }
 });

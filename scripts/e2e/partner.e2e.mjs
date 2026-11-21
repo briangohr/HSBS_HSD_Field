@@ -257,7 +257,8 @@ await check('the page asks one question, grouped, with no talked-to-doctor quest
   assert.equal(await page.locator('input[name="talked-36"]').count(), 0);
   assert.equal(await page.locator('input[name="choice-36"][value="handback"]').count(), 0);
   const values = await page.$$eval('input[name="choice-36"]', (els) => els.map((e) => e.value));
-  assert.deepEqual(values, ['qualified', 'trying', 'dq_noanswer', 'dq_notinterested', 'meeting', 'proposal', 'signed', 'lost', 'nochange']);
+  assert.deepEqual(values, ['qualified', 'trying', 'dq_noanswer', 'meeting', 'proposal', 'signed', 'lost']);
+  assert.equal(await page.locator('input[name="nochange-36"]').count(), 1);
   const text = await page.textContent('li[data-id="36"]');
   assert.match(text, /Qualifying/);
   assert.match(text, /After qualified/);
@@ -265,12 +266,12 @@ await check('the page asks one question, grouped, with no talked-to-doctor quest
   assert.match(text, /Counts as this week's update\./);
   // A lead at Meeting set is qualified: the Qualifying group is frozen.
   const later = await page.$$eval('input[name="choice-37"]', (els) => els.map((e) => e.value));
-  assert.deepEqual(later, ['meeting', 'proposal', 'signed', 'lost', 'nochange']);
+  assert.deepEqual(later, ['meeting', 'proposal', 'signed', 'lost']);
   const text37 = await page.textContent('li[data-id="37"]');
-  assert.match(text37, /Qualified \(done\)/);
+  assert.match(text37, /Reached the customer \(done\)/);
   assert.match(text37, /Keeps it at Meeting set\./);
   // Trying to reach is not qualified yet: every choice is offered.
-  assert.equal(await page.locator('input[name="choice-38"]').count(), 9);
+  assert.equal(await page.locator('input[name="choice-38"]').count(), 7);
   await page.close();
 });
 
@@ -290,7 +291,14 @@ await check('No change sends no Talked To Doctor, so the stored answer stays', a
   bodies.length = 0;
   const page = await phone.newPage();
   await open(page);
-  await page.check('input[name="choice-37"][value="nochange"]');
+  // A stage picked first is cleared and greyed out when No change is ticked.
+  await page.check('input[name="choice-37"][value="proposal"]');
+  await page.check('input[name="nochange-37"]');
+  assert.equal(await page.isChecked('input[name="choice-37"][value="proposal"]'), false);
+  assert.equal(await page.isDisabled('input[name="choice-37"][value="proposal"]'), true);
+  await page.uncheck('input[name="nochange-37"]');
+  assert.equal(await page.isDisabled('input[name="choice-37"][value="proposal"]'), false);
+  await page.check('input[name="nochange-37"]');
   await Promise.all([page.waitForURL(/saved=1/), page.click('#pu-save')]);
   assert.deepEqual(saves()[0].updates.map((u) => [u.id, u.choice, u.talkedToDoctor]), [[37, 'nochange', '']]);
   await page.close();

@@ -137,14 +137,18 @@ in the same PR (a new flow, HSBS 7F, and `PARTNER_FLOW_URL`).
   Changed 11/20/2026 (Brian, after the HealthFirst process call: qualified means reached
   within up to 4 attempts, knows the partner will follow up, and wants a demo). The page asks
   one question, no longer "Have you talked to the doctor?":
-  1. "Where does it stand?" in two groups. Qualifying: Qualified (listed first, Brian
-     11/21), Trying to reach (attempts 1 to 3 so far), Disqualified (no answer after 4 attempts), Disqualified (not
-     interested). After qualified: Demo set, Proposal or agreement sent, Signed (Closed won),
-     Not moving forward (Closed lost) (labels Brian 11/21; stored values unchanged). Then No change this week, set apart, with a hint naming the stage it keeps (7F leaves
-     Partner Status as it is). Once a lead is qualified (Partner Status Reached or any later
-     step), the Qualifying group is frozen: it shows "Qualified (done)" and offers only the
-     After qualified steps and No change (Brian 11/21). Hand back to HSBS is folded into the two
-     disqualified choices.
+  1. "Where does it stand?" in two groups (Brian, 11/21 morning). Qualifying: Reached the
+     customer (code `qualified`, hint "Knows you will follow up and wants a demo"), Not
+     reached yet (`trying`, attempts 1 to 3 so far), Disqualified: no answer after 4 attempts
+     (`dq_noanswer`). One Disqualified only: "Disqualified, not interested" is gone from the
+     page (the save still takes `dq_notinterested` from an older tab). After qualified: Demo
+     set, Proposal or agreement sent, Signed (Closed won), Not moving forward (Closed lost).
+     Stored values unchanged. Once a lead is qualified (Partner Status Reached or any later
+     step) the Qualifying group is frozen: "Reached the customer (done)", no buttons.
+     No change this week is not a stage and not a section: a tick box under the list, for
+     the weeks between steps (a demo set 2 weeks out). Ticked, it clears and greys the stage
+     list and sends `nochange`; 7F leaves Partner Status as it is. Its hint names the stage
+     the lead keeps. Hand back to HSBS is folded into Disqualified.
   2. Demo set: demo date, required, today or later. Signed: signed date, required, not in
      the future; product, optional, up to 100 characters. Not moving forward: reason,
      required, one of `Chose another provider`, `Price`, `Timing`, `Not a fit`, `Other`.
