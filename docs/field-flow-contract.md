@@ -4,7 +4,7 @@ The site side of the contract between this site and its three Power Automate flo
 flow side (how 1F, 1J and 7F are built, step by step) lives in the build sheets in `docs/build/`
 and on the Field Build Desk. When the two disagree, stop and ask Brian.
 
-Rules for both flows: one HTTP trigger per flow, method POST, JSON in and JSON out. The
+Rules for all three flows: one HTTP trigger per flow, method POST, JSON in and JSON out. The
 trigger URLs are secrets in Vercel env and never reach the browser, a log or this repo.
 The site follows no redirect (`redirect: manual`) and treats any 3xx as a failed call.
 A loopback `http://127.0.0.1` or `http://localhost` URL is allowed only so local tests
@@ -29,10 +29,10 @@ route answers 404 and no flow is called.
 | `REP_PAY_PLAN` | HealthFirst pay plan words (`src/lib/rep-pay-plan.mjs`) | No |
 | `REP_PAY_PLAN_STAFFING` | Staffing pay plan words | No |
 | `REP_ASK_STATE` | The HealthFirst form asks for the practice's state and sends `practiceState`, exactly `true`. Off: no State field and no `practiceState` in the body | No |
-| `REP_CONFIRM_ENABLED` | `/confirm/<token>`, exactly `true`. Off: not used at launch | No |
-| `FLOW_CACHE_SECONDS` | Track and Earnings cache, 0 to 300, default 45. 0 turns it off | No |
-| `REGISTER_IP_LIMIT` | Sign-ups per IP per window, default 200 | No |
-| `JOIN_RGMS` | The RGM pick list for `/join` (roster match, below), a JSON list of `{"region","name","email"}` built from the field roster. Unset, empty or any bad entry: the free-text form | No, but it holds staff emails, so it lives only in Vercel env |
+| `REP_CONFIRM_ENABLED` | `/confirm/<token>`, exactly `true`. Off: 404 and no confirm call to 1J. Not used at launch. On: the 1J confirm actions below | No |
+| `FLOW_CACHE_SECONDS` | Track and Earnings cache in seconds, default 45. 0 turns it off. Over 300 is read as 300; unset, empty, negative or not a number is 45. Unlike the other names, read with exact case only | No |
+| `REGISTER_IP_LIMIT` | Sign-ups per IP per 10 minutes, per server instance, default 200 | No |
+| `JOIN_RGMS` | The RGM pick list for `/join` (roster match, below), a JSON list of `{"region","name","email"}` built from the field roster. Unset, empty, any bad entry, more than 100 entries or the same region twice: the free-text form. One bad entry turns the whole list off | No, but it holds staff emails, so it lives only in Vercel env |
 
 ## HSBS 1J: register (`/join`)
 
@@ -92,14 +92,40 @@ What 1J does with it (Brian's live edit, written out on the Field Build Desk):
 The Team Roster still alone decides managers and pay (D18). The pick is a hint, as the
 typed manager was.
 
+Before any 1J call the site has two limits of its own, per server instance, over 10
+minutes: `REGISTER_IP_LIMIT` sign-ups per IP, and 5 sends per email from one IP. Either
+one answers 429 "Too many tries. Please wait a few minutes." and calls nothing. Only a
+send 1J may have acted on counts toward the email limit: a missing flow URL, a refused
+connection, a 4xx refusal, a 429 or a 5xx other than 504 gives its count back.
+
 Answers the site reads:
 
 | Answer | Site does |
 |---|---|
-| 200 `{"ok":true}` | Shows "Check your Henry Schein email." The same words for a new email, a repeat and one over its limit |
-| 200 with any other body, or non-JSON | Not sent; the person may try again |
-| 4xx other than 408 and 429 | Refused fields; shows the error |
-| 408, 429, 5xx, timeout (45s) | Not available right now; try again |
+| 200 `{"ok":true}` | Shows "Check your Henry Schein email." The same words for a new email, a repeat and one over 1J's Link Resends limit |
+| 200 with any other body, or non-JSON | 502 "Sign-up is not available right now." The person may try again |
+| 4xx other than 408 and 429 | 422, refused fields: "Check your Henry Schein email, then try again." (roster match) or "Check your Henry Schein email and your manager's, then try again." (free-text form) |
+| 3xx, 408, 429, 5xx, dropped connection | 502 "Sign-up is not available right now." |
+| No answer in 45 s | 504 "This may have gone through. Check your email in a few minutes before you try again." |
+| `REGISTER_FLOW_URL` not set | 503 "Sign-up is not available right now." Nothing reached 1J |
+
+### confirm-peek and confirm (`/confirm/<token>`, off)
+
+Sent only with `REP_CONFIRM_ENABLED` on (off today, not used at launch, D18). The token is
+64 lowercase hex characters; any other token is unknown before any call. Both wait 15 s.
+
+```json
+{ "action": "confirm-peek", "token": "<64 hex>" }
+{ "action": "confirm", "token": "<64 hex>", "answer": "yes" }
+```
+
+- `confirm-peek` is read only, so a mail scanner opening the link confirms nothing.
+  Success is 200 with `repName` set (`managerName` optional).
+- `confirm` sends `answer` `yes` or `no`. Success is 200 with `{"ok":true}`.
+- 404: "This link does not work." 410: "This link was already used or has expired."
+  Anything else that is not 200 is a failed call: "This is not available right now."
+- Under D18 neither answer grants or changes anything a screen or pay reads. Only the Team
+  Roster decides managers.
 
 ## HSBS 1F: the app (`/refer/<key>`)
 
@@ -122,6 +148,8 @@ Success is 200 with:
 { "role": "Rep", "repName": "Test Rep", "repEmail": "test.rep@henryschein.com", "services": ["HealthFirst"], "isManager": false }
 ```
 
+- The site reads only the first 4,000 characters of the answer. A longer answer is cut
+  there, does not parse, and reads as "This form is not available right now."
 - Only `role: "Rep"` opens the app. A missing role or any other value is an unknown key.
 - `repName` must be set, `repEmail` must look like an email and `services` must include
   `HealthFirst`, or the key is unknown.
@@ -181,7 +209,11 @@ Two shapes, one per company (`src/lib/rep-referral-form.mjs`,
 - Success is 200 with `{"ok":true}`, read in full. Anything else is not success.
 - A retry reuses the same `submissionId`. The site also remembers a good send by key and
   id for 30 minutes and does not post it again.
-- 504 or no answer in 55 seconds: "This is taking too long. It may already have gone
+- The wait is 55 seconds from the page (JavaScript on). With JavaScript off the form
+  posts to `/refer/<key>`, which looks the key up first, so the submit waits 55 seconds
+  minus the time the lookup took, never less than 5 seconds. Both stay under the 60 s
+  function limit.
+- 504 or no answer within that wait: "This is taking too long. It may already have gone
   through. Do not send it again. Email Brian at Brian.Gohr@henryschein.com."
   (`TIMEOUT_MESSAGE` in `src/lib/field-form.mjs`).
 - 408, 429, 5xx, a 200 without `ok`, or a dropped connection: the site answers 502, "We
@@ -197,6 +229,9 @@ Two shapes, one per company (`src/lib/rep-referral-form.mjs`,
 ```json
 { "action": "list", "referralKey": "<key>" }
 ```
+
+The site waits 20 s. Its answers for `list` and `earnings` are in "list and earnings
+answers" below.
 
 200 `{ "referrals": [ ... ] }`. The site keeps only display fields
 (`sanitizeReferral` in `src/lib/track.mjs`): `title` or `id`, `doctorName` (or
@@ -235,7 +270,21 @@ before.
 reads `referralId`, `practiceName`, `company`, `practiceType`, `event` (`Reached` or
 `Signed`), `amount`, `status` (`Waiting`, `Paid`, `Pending review`, `Void`), `earnedOn`,
 `paidOn`, `voidReason`, `disputed`, `payeeRole`. `/api/earnings` answers 404 while
-`REP_PAY_ENABLED` is off.
+`REP_PAY_ENABLED` is off. The site waits 20 s.
+
+### list and earnings answers
+
+Both also need the lookup to confirm a Rep key (What must stay true, below). The words
+are "Your referrals did not load." for Track and "Your earnings did not load." for
+earnings.
+
+| 1F answers | Site |
+|---|---|
+| 200 with `referrals` (list) or `rows` (earnings) as a list | Shows them |
+| 4xx other than 408 and 429 | 404 "This link does not work." |
+| 3xx, 408, 429, 5xx, a 200 without the list, or non-JSON | 502, did not load |
+| No answer in 20 s | 504, did not load |
+| `FIELD_FLOW_URL` not set | 503, did not load. Nothing reached 1F |
 
 ### team
 
@@ -246,10 +295,11 @@ reads `referralId`, `practiceName`, `company`, `practiceType`, `event` (`Reached
 200 `{ "team": [ ... ], "managerRows": [ ... ] }`: every Active Team Roster row whose
 Manager Email is this person. Each member has `name`, `role`, `signedUp`, and when signed
 up `email`, `registeredOn`, `referrals` and `rows`. `managerRows` are this person's own
-ledger rows with Payee Role `Manager`. Only 404 means "no team"; every other failure is
-"Your team did not load." More than 200 members, or a body over 2 MB, is a failed call,
-never a team cut short. The raw answer stays on the server; `src/lib/rep-team.mjs` shapes
-what the browser gets (no rep email, no key).
+ledger rows with Payee Role `Manager` and event `Signed`. The site drops a Manager row with
+any other event, `Reached` included. Only 404 means "no team"; every other failure is
+"Your team did not load." The site waits 25 s. More than 200 members, or a body over
+2,000,000 characters, is a failed call, never a team cut short. The raw answer stays on
+the server; `src/lib/rep-team.mjs` shapes what the browser gets (no rep email, no key).
 
 ## HSBS 7F Field partner (`/update/<key>`)
 
@@ -345,12 +395,19 @@ case that already holds the tag, so a resend writes nothing twice.
 ## What must stay true
 
 - The key (Referral Key or Partner Links Link Key) is a secret in the URL. Pages that carry it set `Cache-Control: no-store`,
-  `X-Robots-Tag: noindex, nofollow` and load no analytics.
+  `X-Robots-Tag: noindex, nofollow` and load no analytics. The `/confirm/<token>` token is a
+  secret in the URL too. Two known gaps, both fixed in code by a later PR: `/confirm/<token>`
+  sets only a robots meta tag, not the two headers (it is off today), and the 404 that
+  `/refer/<key>` answers with `REP_APP_ENABLED` off sets neither header.
 - Track and Earnings return rows only for a key the lookup confirms as a Rep. A key the
   lookup refuses gets 404 and a failed lookup gets 502, even when `list` or `earnings`
   answered (`confirmRep` in `src/lib/rep-reads.mjs`).
 - The Track and Earnings cache holds an answer only after the lookup confirms a Rep key;
-  errors are never held, and a send clears that key's entries.
+  errors are never held. A send clears that key's entries only after 1F answers 200
+  `{"ok":true}`, and only on the server instance that handled it. A send that timed out
+  but was written, or a read on another instance, can show the older list for up to
+  `FLOW_CACHE_SECONDS` (45 s by default). Track right after a send and the Refresh button
+  read fresh.
 - A send with no clear answer (a timeout, a dropped connection, a 5xx) keeps its
   `submissionId` and the exact fields first posted, so a retry resends the same referral.
 - Rate limits are per key with a per-IP backstop, so many people behind one office IP are

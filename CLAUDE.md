@@ -14,8 +14,11 @@ repo on 11/17/2026 because Brian wants the field build entirely separate (Brian,
   read and send posts to HSBS 1F (`FIELD_FLOW_URL`), the field app's own flow.
 - `/update/<key>`: a field partner's lead update page (sheet PU). Reads and saves post to
   HSBS 7F Field partner (`PARTNER_FLOW_URL`). Off (404) unless `PARTNER_PAGE_ENABLED=true`.
+- `/refer/manifest/<key>`: the install manifest for that person's link.
+- `/j`: the sign-up QR short link, a 302 to `/join?src=qr`. It answers even with the app
+  off; `/join` itself is then 404.
 - `/confirm/<token>`: kept in code, off (404) unless `REP_CONFIRM_ENABLED=true`.
-- Everything answers 404 unless `REP_APP_ENABLED=true`.
+- Everything except `/j` answers 404 unless `REP_APP_ENABLED=true`.
 
 The field build talks to no flow but 1J, 1F and 7F, and to no other team's lists. Field
 work, desk files, status updates and questions to Brian stay on the field side only. A
