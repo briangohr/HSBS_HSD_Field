@@ -1785,6 +1785,9 @@ try {
       const res = await fetch(`${BASE}/refer/${key}`);
       assert.equal(res.status, 404, key);
       assert.match(res.headers.get('content-type') ?? '', /^text\/plain/, key);
+      // G2 finding 12: the key is in the URL, so the 404 is never cached or indexed.
+      assert.equal(res.headers.get('cache-control'), 'no-store', key);
+      assert.equal(res.headers.get('x-robots-tag'), 'noindex, nofollow', key);
       const text = await res.text();
       assert.equal(text, 'Not found', key);
       assert.equal(/team-panel|data-tab="team"|My Team|TEST Rep|TEST Lead Rep/.test(text), false, key);

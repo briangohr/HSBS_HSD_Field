@@ -394,11 +394,10 @@ case that already holds the tag, so a resend writes nothing twice.
 
 ## What must stay true
 
-- The key (Referral Key or Partner Links Link Key) is a secret in the URL. Pages that carry it set `Cache-Control: no-store`,
-  `X-Robots-Tag: noindex, nofollow` and load no analytics. The `/confirm/<token>` token is a
-  secret in the URL too. Two known gaps, both fixed in code by a later PR: `/confirm/<token>`
-  sets only a robots meta tag, not the two headers (it is off today), and the 404 that
-  `/refer/<key>` answers with `REP_APP_ENABLED` off sets neither header.
+- The key (Referral Key or Partner Links Link Key) is a secret in the URL, and so is the
+  `/confirm/<token>` token. Pages that carry one (`/refer/<key>`, `/update/<key>`,
+  `/confirm/<token>`) set `Cache-Control: no-store` and `X-Robots-Tag: noindex, nofollow` on
+  every answer, the 404 they give with their switch off included, and load no analytics.
 - Track and Earnings return rows only for a key the lookup confirms as a Rep. A key the
   lookup refuses gets 404 and a failed lookup gets 502, even when `list` or `earnings`
   answered (`confirmRep` in `src/lib/rep-reads.mjs`).

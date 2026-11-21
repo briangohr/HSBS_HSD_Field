@@ -5,7 +5,7 @@
 // the browser. Off (404) unless PARTNER_PAGE_ENABLED and REP_APP_ENABLED are both exactly
 // true. No analytics. Contract: docs/field-flow-contract.md, "HSBS 7F".
 import '../../styles/global.css';
-import { clientIp, journeyLimited } from '../../lib/http';
+import { clientIp, journeyLimited, secretUrlNotFound } from '../../lib/http';
 import { PartnerFlowError, listLeads, partnerPageEnabled } from '../../lib/partner-flow.mjs';
 import {
   CLOSED_REASONS,
@@ -26,7 +26,7 @@ import { choiceGroupsFor } from '../../lib/partner-status-words.mjs';
 export const prerender = false;
 
 if (!partnerPageEnabled()) {
-  return new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+  return secretUrlNotFound();
 }
 
 const key = String(Astro.params.key ?? '').trim();
