@@ -26,8 +26,8 @@ export const STAND_CHOICES = [
   { code: 'dq_notinterested', label: 'Disqualified, not interested', hint: '', group: 'qualify' },
   { code: 'meeting', label: 'Demo set', hint: '', group: 'deal' },
   { code: 'proposal', label: 'Proposal or agreement sent', hint: '', group: 'deal' },
-  { code: 'signed', label: 'Signed', hint: '', group: 'deal' },
-  { code: 'lost', label: 'Not moving forward', hint: '', group: 'deal' },
+  { code: 'signed', label: 'Signed (Closed won)', hint: '', group: 'deal' },
+  { code: 'lost', label: 'Not moving forward (Closed lost)', hint: '', group: 'deal' },
   { code: 'nochange', label: 'No change this week', hint: '', group: 'other' },
 ];
 
