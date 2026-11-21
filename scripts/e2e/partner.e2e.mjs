@@ -238,7 +238,7 @@ await check('the page asks one question, grouped, with no talked-to-doctor quest
   assert.equal(await page.locator('input[name="talked-36"]').count(), 0);
   assert.equal(await page.locator('input[name="choice-36"][value="handback"]').count(), 0);
   const values = await page.$$eval('input[name="choice-36"]', (els) => els.map((e) => e.value));
-  assert.deepEqual(values, ['trying', 'qualified', 'dq_noanswer', 'dq_notinterested', 'meeting', 'proposal', 'signed', 'lost', 'nochange']);
+  assert.deepEqual(values, ['qualified', 'trying', 'dq_noanswer', 'dq_notinterested', 'meeting', 'proposal', 'signed', 'lost', 'nochange']);
   const text = await page.textContent('li[data-id="36"]');
   assert.match(text, /Qualifying/);
   assert.match(text, /After qualified/);

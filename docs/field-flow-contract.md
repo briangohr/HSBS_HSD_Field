@@ -301,8 +301,8 @@ Salesforce picklist; every stored value is an existing column choice):
 
 | choice | Partner Status | Qualified | Closes the lead | Email to Brian |
 |---|---|---|---|---|
-| `trying` | Trying to reach | unchanged | no | no |
 | `qualified` | Reached | Yes | no | no |
+| `trying` | Trying to reach | unchanged | no | no |
 | `dq_noanswer`, `dq_notinterested` | Not moving forward | No, Not Qualified Reason `Other`, Not Qualified Note the label, Closed Reason `Not qualified` | yes | "Field lead disqualified: <ref>" |
 | `meeting`, `proposal`, `signed` | Meeting set, Proposal or agreement sent, Signed | Yes | `signed` only | no |
 | `lost` | Not moving forward | unchanged, Closed Reason as sent | yes | no |

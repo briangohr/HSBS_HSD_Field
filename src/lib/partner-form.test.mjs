@@ -103,7 +103,7 @@ describe('checkUpdate', () => {
     bad({ ...old, choice: 'qualified' }, 'choice');
   });
   test('every page choice has a heading group and a label', () => {
-    assert.deepEqual(STAND_CHOICES.map((c) => c.code), ['trying', 'qualified', 'dq_noanswer', 'dq_notinterested', 'meeting', 'proposal', 'signed', 'lost', 'nochange']);
+    assert.deepEqual(STAND_CHOICES.map((c) => c.code), ['qualified', 'trying', 'dq_noanswer', 'dq_notinterested', 'meeting', 'proposal', 'signed', 'lost', 'nochange']);
     for (const c of STAND_CHOICES) assert.ok(c.label && ['qualify', 'deal', 'other'].includes(c.group), c.code);
   });
   test('note is one line, up to 300 characters', () => {

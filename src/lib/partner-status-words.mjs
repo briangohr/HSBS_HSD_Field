@@ -20,8 +20,8 @@ export const STAND_WORDS = [
  * Salesforce picklist; 7F stores its own value per code (docs/field-flow-contract.md, 7F).
  */
 export const STAND_CHOICES = [
-  { code: 'trying', label: 'Trying to reach', hint: 'Attempts 1 to 3 so far', group: 'qualify' },
   { code: 'qualified', label: 'Qualified', hint: 'Reached, knows you will follow up, and wants a demo', group: 'qualify' },
+  { code: 'trying', label: 'Trying to reach', hint: 'Attempts 1 to 3 so far', group: 'qualify' },
   { code: 'dq_noanswer', label: 'Disqualified, no answer after 4 attempts', hint: '', group: 'qualify' },
   { code: 'dq_notinterested', label: 'Disqualified, not interested', hint: '', group: 'qualify' },
   { code: 'meeting', label: 'Demo set', hint: '', group: 'deal' },
