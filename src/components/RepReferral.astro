@@ -75,8 +75,10 @@ const staffingSend = values.company === 'Staffing';
 const postedPanel = staffingSend ? 'Staffing' : 'HealthFirst';
 const ownPanel = Boolean(result) && postedPanel === open;
 const refusedHere = Boolean(result?.error) && !ownPanel;
-// Names the company whose referral was refused when it is not the one on screen.
-const refusedName = refusedHere && typeof values.company === 'string' && values.company !== open ? companyName(values.company) : '';
+// Names the company whose referral was refused when it is not the one on screen. A 502
+// or 504 may have been saved, so it never gets the "did not send" lead.
+const unclear = result?.status === 502 || result?.status === 504;
+const refusedName = refusedHere && !unclear && typeof values.company === 'string' && values.company !== open ? companyName(values.company) : '';
 // The HealthFirst form keeps only its own answer and values: never a staffing post's
 // errors, consent or fields.
 const hfResult = ownPanel && !staffingSend ? result : undefined;
@@ -329,7 +331,7 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
 </div>
 
 <script>
-  import { CLIENT_WAIT_MS, SENDING_MESSAGE, TIMEOUT_MESSAGE } from '../lib/field-form.mjs';
+  import { CLIENT_WAIT_MS, SENDING_MESSAGE, TIMEOUT_MESSAGE, UNCLEAR_MESSAGE } from '../lib/field-form.mjs';
   import { matchStates, repReceipt, repSendLabel, stateFromText, stateName, validateRepReferral } from '../lib/rep-referral-form.mjs';
   import { PAY_TERMS_EVENT, TERMS_CHANGED, healthFirstTerms, parsePayPlan } from '../lib/rep-pay-plan.mjs';
   import { staffingReceipt, staffingSendLabel, validateStaffingReferral } from '../lib/rep-staffing-form.mjs';
@@ -714,9 +716,9 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
             return;
           }
           if (Array.isArray(body.errors)) sErrors(body.errors);
-          sSay(body.error ?? (body.timeout ? TIMEOUT_MESSAGE : 'This referral did not send.'));
+          sSay(body.error ?? (body.timeout ? TIMEOUT_MESSAGE : res.status >= 500 ? UNCLEAR_MESSAGE : 'This referral did not send.'));
         } catch {
-          sSay(controller.signal.aborted ? TIMEOUT_MESSAGE : 'This referral did not send. Check your connection and try again.');
+          sSay(controller.signal.aborted ? TIMEOUT_MESSAGE : UNCLEAR_MESSAGE);
         } finally {
           clearTimeout(timer);
           sSending = false;
@@ -783,9 +785,9 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
           return;
         }
         if (Array.isArray(body.errors)) showErrors(body.errors);
-        say(body.error ?? (body.timeout ? TIMEOUT_MESSAGE : 'This referral did not send.'));
+        say(body.error ?? (body.timeout ? TIMEOUT_MESSAGE : res.status >= 500 ? UNCLEAR_MESSAGE : 'This referral did not send.'));
       } catch {
-        say(controller.signal.aborted ? TIMEOUT_MESSAGE : 'This referral did not send. Check your connection and try again.');
+        say(controller.signal.aborted ? TIMEOUT_MESSAGE : UNCLEAR_MESSAGE);
       } finally {
         clearTimeout(timer);
         sending = false;

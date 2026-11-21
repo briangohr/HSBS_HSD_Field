@@ -33,6 +33,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { chromium, devices } from 'playwright';
+import { UNCLEAR_MESSAGE } from '../../src/lib/field-form.mjs';
 
 const SITE_PORT = 4402;
 const FLOW_PORT = 4403;
@@ -2645,6 +2646,37 @@ try {
       assert.equal(posted[1].practiceState, 'CO');
       assert.equal(await box.inputValue(), 'Colorado', 'the box shows the state that was sent');
       assert.equal(await page.inputValue('#rep-form select[name=practiceState]'), 'CO');
+    } finally {
+      await ctx.close();
+    }
+  });
+  // G2 drift audit: a 5xx with no body or a dropped connection may have saved the row,
+  // so the page never says "did not send" for it.
+  await check('a 502 with no body or a dropped connection says it may already have gone through', async () => {
+    const ctx = await browser.newContext({ ...devices['iPhone 13'], reducedMotion: 'reduce' });
+    try {
+      const page = await ctx.newPage();
+      let n = 0;
+      await page.route('**/api/referral', async (route) => {
+        n += 1;
+        if (n === 1) return route.fulfill({ status: 502, contentType: 'text/html', body: '<html>Bad gateway</html>' });
+        return route.abort('connectionreset');
+      });
+      await page.goto(`${BASE}/refer/${REP_KEY}`);
+      await page.fill('[name=contactName]', 'TEST Office Manager');
+      await page.fill('[name=practiceName]', 'TEST North Side Dental');
+      await page.fill('[name=jde]', '001234');
+      await page.fill('[name=officePhone]', '303-555-0100');
+      await page.check('[name=preferredContact][value=Text]');
+      await page.check('[name=permission]');
+      const box = page.locator('#rep-form [data-state-input]');
+      if (await box.count()) await box.fill('Colorado');
+      await page.click('#rep-send-button');
+      await page.waitForFunction((words) => document.getElementById('rep-alert').textContent === words, UNCLEAR_MESSAGE);
+      await page.click('#rep-send-button');
+      await page.waitForFunction(() => !document.getElementById('rep-send-button').disabled);
+      assert.equal(n, 2);
+      assert.equal((await page.textContent('#rep-alert')).trim(), UNCLEAR_MESSAGE);
     } finally {
       await ctx.close();
     }
