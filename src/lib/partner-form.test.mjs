@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { STAND_CHOICES } from './partner-status-words.mjs';
 import { describe, test } from 'node:test';
-import { CLOSED_REASONS, LEGACY_CLOSED_REASONS, TALKED_CHOICES, TALKED_FOR, checkUpdate, checkUpdates, easternToday, isDate, isPartnerKey, nowLine, showDate } from './partner-form.mjs';
+import { CLOSED_REASONS, LEGACY_CLOSED_REASONS, TALKED_CHOICES, TALKED_FOR, checkUpdate, checkUpdates, easternToday, isDate, isPartnerKey, noChangeHint, nowLine, showDate } from './partner-form.mjs';
 
 const TODAY = '2026-11-20';
 // The new page sends no Talked To Doctor answer; checkUpdate fills it in from the choice.
@@ -147,4 +147,12 @@ test('the Now line shows the meeting date only while the lead stands at a meetin
   assert.equal(nowLine('Proposal or agreement sent', '2026-11-24'), 'Proposal or agreement sent');
   assert.equal(nowLine('Not moving forward', '2026-11-24'), 'Not moving forward');
   assert.equal(nowLine('', '2026-11-24'), 'No update yet');
+  // Qualified is stored as Reached (7F).
+  assert.equal(nowLine('Reached', ''), 'Qualified');
+});
+
+test('No change names the stage the lead keeps', () => {
+  assert.equal(noChangeHint('Meeting set'), "Keeps it at Meeting set. Counts as this week's update.");
+  assert.equal(noChangeHint('Reached'), "Keeps it at Qualified. Counts as this week's update.");
+  assert.equal(noChangeHint(''), "Counts as this week's update.");
 });

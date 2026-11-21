@@ -186,8 +186,23 @@ const MEETING_STATUSES = ['Meeting set', 'Meeting held'];
  * @param {string} meetingDate YYYY-MM-DD or blank
  */
 export function nowLine(status, meetingDate) {
-  const shown = displayStatus(status);
+  const shown = stageWords(status);
   if (!shown) return 'No update yet';
   const date = MEETING_STATUSES.includes(shown) ? showDate(meetingDate) : '';
   return date ? `${shown}, meeting ${date}` : shown;
+}
+
+/** The stage in the page's words. Qualified is stored as Reached (7F). @param {string} status */
+function stageWords(status) {
+  return (typeof status === 'string' ? status.trim() : '') === 'Reached' ? 'Qualified' : displayStatus(status);
+}
+
+/**
+ * The hint under "No change this week". 7F leaves Partner Status as it is and counts the
+ * save as this week's update, so the hint names the stage the lead keeps.
+ * @param {string} status Partner Status as stored
+ */
+export function noChangeHint(status) {
+  const shown = stageWords(status);
+  return shown ? `Keeps it at ${shown}. Counts as this week's update.` : "Counts as this week's update.";
 }

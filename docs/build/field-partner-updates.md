@@ -140,7 +140,10 @@ in the same PR (a new flow, HSBS 7F, and `PARTNER_FLOW_URL`).
   1. "Where does it stand?" in two groups. Qualifying: Qualified (listed first, Brian
      11/21), Trying to reach (attempts 1 to 3 so far), Disqualified (no answer after 4 attempts), Disqualified (not
      interested). After qualified: Demo set, Proposal or agreement sent, Signed (Closed won),
-     Not moving forward (Closed lost) (labels Brian 11/21; stored values unchanged). Then No change this week. Hand back to HSBS is folded into the two
+     Not moving forward (Closed lost) (labels Brian 11/21; stored values unchanged). Then No change this week, set apart, with a hint naming the stage it keeps (7F leaves
+     Partner Status as it is). Once a lead is qualified (Partner Status Reached or any later
+     step), the Qualifying group is frozen: it shows "Qualified (done)" and offers only the
+     After qualified steps and No change (Brian 11/21). Hand back to HSBS is folded into the two
      disqualified choices.
   2. Demo set: demo date, required, today or later. Signed: signed date, required, not in
      the future; product, optional, up to 100 characters. Not moving forward: reason,

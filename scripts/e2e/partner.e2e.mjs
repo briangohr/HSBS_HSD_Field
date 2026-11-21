@@ -262,6 +262,15 @@ await check('the page asks one question, grouped, with no talked-to-doctor quest
   assert.match(text, /Qualifying/);
   assert.match(text, /After qualified/);
   assert.match(text, /wants a demo/);
+  assert.match(text, /Counts as this week's update\./);
+  // A lead at Meeting set is qualified: the Qualifying group is frozen.
+  const later = await page.$$eval('input[name="choice-37"]', (els) => els.map((e) => e.value));
+  assert.deepEqual(later, ['meeting', 'proposal', 'signed', 'lost', 'nochange']);
+  const text37 = await page.textContent('li[data-id="37"]');
+  assert.match(text37, /Qualified \(done\)/);
+  assert.match(text37, /Keeps it at Meeting set\./);
+  // Trying to reach is not qualified yet: every choice is offered.
+  assert.equal(await page.locator('input[name="choice-38"]').count(), 9);
   await page.close();
 });
 

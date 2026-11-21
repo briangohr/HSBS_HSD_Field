@@ -39,6 +39,31 @@ export const STAND_GROUPS = [
 ];
 
 /**
+ * Stages that mean the lead is qualified: Qualified itself (stored as Reached) and every
+ * step after it. 7F sets Qualified Yes for each of these.
+ */
+const QUALIFIED_SHOWN = ['Reached the doctor', 'Meeting set', 'Meeting held', 'Proposal or agreement sent', 'Signed', 'Won'];
+
+/** @param {unknown} raw Partner Status as stored */
+export function isQualifiedStatus(raw) {
+  return QUALIFIED_SHOWN.includes(displayStatus(raw));
+}
+
+/**
+ * The groups the page offers one lead. Once a lead is qualified the Qualifying group is
+ * frozen (Brian, 11/21/2026): it shows Qualified as done and offers no choice, so the
+ * partner moves on through the After qualified steps.
+ * @param {unknown} status Partner Status as stored
+ */
+export function choiceGroupsFor(status) {
+  const frozen = isQualifiedStatus(status);
+  return STAND_GROUPS.map((g) => {
+    const done = frozen && g.group === 'qualify';
+    return { ...g, done: done ? 'Qualified' : '', choices: done ? [] : STAND_CHOICES.filter((c) => c.group === g.group) };
+  });
+}
+
+/**
  * Old stored values, and the words to show. Keys are exact strings a flow
  * might still send. "Handed back to HSBS" is not a stored value anymore.
  */

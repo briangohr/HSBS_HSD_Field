@@ -15,11 +15,12 @@ import {
   SAVE_WORDS,
   easternToday,
   isPartnerKey,
+  noChangeHint,
   nowLine,
   savedWords,
   showDate,
 } from '../../lib/partner-form.mjs';
-import { STAND_CHOICES, STAND_GROUPS } from '../../lib/partner-status-words.mjs';
+import { choiceGroupsFor } from '../../lib/partner-status-words.mjs';
 
 export const prerender = false;
 
@@ -149,15 +150,20 @@ const saved = state === 'ready' && Number.isSafeInteger(savedParam) && savedPara
 
                     <fieldset class="pu-q" data-q="choice">
                       <legend>Where does it stand?</legend>
-                      {STAND_GROUPS.map((g) => (
-                        <div class="pu-group">
+                      {choiceGroupsFor(lead.status).map((g) => (
+                        <div class={g.group === 'other' ? 'pu-group pu-group--apart' : 'pu-group'}>
                           {g.heading && <p class="pu-group-h">{g.heading}</p>}
-                          {STAND_CHOICES.filter((c) => c.group === g.group).map((c) => (
+                          {g.done && <p class="pu-done" data-done={g.group}>{g.done} (done)</p>}
+                          {g.choices.map((c) => (
                             <label class="pu-opt">
                               <input type="radio" name={`choice-${lead.id}`} value={c.code} />
                               <span>
                                 {c.label}
-                                {c.hint && <span class="pu-hint">{c.hint}</span>}
+                                {c.code === 'nochange' ? (
+                                  <span class="pu-hint">{noChangeHint(lead.status)}</span>
+                                ) : (
+                                  c.hint && <span class="pu-hint">{c.hint}</span>
+                                )}
                               </span>
                             </label>
                           ))}
@@ -236,6 +242,8 @@ const saved = state === 'ready' && Number.isSafeInteger(savedParam) && savedPara
       .pu-opt input { width: 1.2rem; height: 1.2rem; flex: 0 0 auto; margin: 0; }
       .pu-group { margin: 0.2rem 0 0.4rem; }
       .pu-group-h { margin: 0.5rem 0 0; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+      .pu-group--apart { border-top: 1px solid var(--line); margin-top: 0.6rem; padding-top: 0.3rem; }
+      .pu-done { margin: 0.2rem 0 0; min-height: 44px; display: flex; align-items: center; font-weight: 600; color: var(--muted); }
       .pu-hint { display: block; font-size: 0.9rem; color: var(--muted); }
       .pu-field { display: flex; flex-direction: column; gap: 0.25rem; margin: 0.6rem 0 0; font-weight: 600; }
       .pu-field input, .pu-field select {
