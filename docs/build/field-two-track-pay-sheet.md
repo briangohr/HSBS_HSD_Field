@@ -26,6 +26,56 @@ and DD, it's 100 of qualified lead and $50 to the manager".
 | R10 | Signed | Status `Closed - Won` with Signed Date and Signed Product | Partner Status `Signed` or `Close won`, with Signed Date set. 7F's `signed` choice writes both |
 | R11 | Site plan words | `REP_PAY_PLAN_STAFFING` `reached_private:100,reached_group:200,manager:50` | `reached_private:100,reached_group:100,manager:50`. The site's parser takes it as it is today and shows $100 for either type. HealthFirst stays `reached:100,manager:50` |
 
+## P2 build record: HSBS 10 and 10S (11/21/2026)
+
+Built by Claude in the thread "Build pay ledger writer" as importable packages, on Brian's
+"ok, go" (11/21). Brian imports and turns on every flow. The packages and their generator
+live in the project files (`pay-ledger/`), not in this repo, because they carry list ids and
+Brian's work address. Where this record and an older line in this sheet differ, this record
+wins for HSBS 10 and 10S.
+
+| # | What | Built |
+|---|---|---|
+| B1 | Lists and columns (F4.1) | A one-time flow, HSBS 10 setup (new site), run once by Brian. It creates Ledger Settings (with the `Live` row at the build values), Sign Log, Ledger Run Errors and, if missing, the SPIFF Ledger. It adds only missing columns, never changes a column that exists, and adds the F4.1 indexes. It emails Brian what it made and every name or type that does not match. Payout Batches waits for P6 (10B) |
+| B2 | Column names HSBS 10 reads and writes | SPIFF Ledger: `Award_x0020_Key` (unique), `Referral_x0020_ID`, `Service_x0020_Case_x0020_ID` (number), `Practice_x0020_Name`, `Rep_x0020_Email`, `Payee_x0020_Email`, `Payee_x0020_Role`, `Event`, `Amount`, `Earned_x0020_On`, `Status`, `Void_x0020_Reason`, `Disputed`, `Dispute_x0020_Note`, `Payout_x0020_Batch`, `Paid_x0020_On`, `Payer`, `Test`, `Company`, `Sent_x0020_On`, `Office_x0020_Check`. Ledger Settings: the names in "Shared switches" and "Amount settings". Sign Log: `Case_x0020_ID` (unique), `Started_x0020_On`, `Plan_x0020_Manager`, `Plan_x0020_Rep_x0020_Sign`, `Handled_x0020_On`. Ledger Run Errors: `Case_x0020_ID`, `Step`, `Failed_x0020_At`, `Resolved`. Service Cases and Referrals: the names in field-site memory and 7F (`Qualified`, `Not_x0020_Qualified_x0020_Reason`, `Closed_x0020_Reason`, `Partner_x0020_Status`, `Signed_x0020_Date`, `Service`, `Test`, `Referral`; `Source`, `Referring_x0020_Rep_x0020_Email`, `JDEAccount`, `PracticeName`, `CustomerName`, `Solutions`, `Test`, `Created`). Team Roster: `Title` is the rep email, `field_3` the manager email, `field_5` Active, as 1F reads them |
+| B3 | Payer column | Text, not choice. 1F (new site) reads `Payer` as text and sends it to the site as `company`. A choice column would reach the site as an object |
+| B4 | HSBS 10 answer | **202, not 200.** Power Automate refuses a Response action on a request trigger with concurrency control, and the one-writer rule needs concurrency 1. So HSBS 10 has no Response step and the caller gets 202 at once. HSBS 10 records its own failures in Ledger Run Errors (Step starts `HSBS 10:`). 10S counts any 2xx as sent and records a failed post itself (Step starts `HSBS 10S:`). Waiting runs: up to 100 |
+| B5 | Forced failures | A failed settings check or a missing Referrals row fails the run on purpose (steps `Check_settings`, `Check_ref`), so it is recorded in Ledger Run Errors before any write |
+| B6 | Trigger | 10S: "When an item is created or modified" on Service Cases, with a trigger condition so only `HealthFirst` and the staffing value start a run. It posts `{"caseId": <ID>}`. The HSBS 10 address is pasted into 10S's HTTP step by Brian, with Secure inputs on |
+| B7 | Run record | Each HSBS 10 run ends with a `Result` step (company, TEST, no-pay reason, sign handled, roster conflict, manager) so a check reads one step |
+| B8 | Not built in P2 | 10D (P3), 10B and 10P (P6), Payout Batches (P6). Rule G and the X lists are not in HSBS 10 |
+
+**Known follow-up for staffing (before `StaffingAwardsOn`).** 1F (new site) sends `Payer` as
+the row's `company`. A staffing row's Payer is `Direct Dental`, which the site reads as an
+unknown company, so the line shows no company name. Staffing awards stay off in P2. Fix 1F to
+send `Company` before group S.
+
+**Offline model.** The generator's test file runs HSBS 10's definition against a fake
+SharePoint: 60 checks covering A3, A4, A7, H1 to H4, H6 to H15, H17, H26, H29, H33, H34, the
+staffing switch and the M27 manager TEST rule. All pass, with `if`, `and` and `or` evaluated
+either lazily or eagerly. It is a model, not Power Automate; the live checks below still rule.
+
+**Live checks in P2** (TEST rows only; partner saves through the TEST partner page):
+
+| # | Sheet check | What | Pass |
+|---|---|---|---|
+| P2-1 | A1, A3 | The setup email | No problems; every list and column named in B2 exists |
+| P2-2 | A3 | First HSBS 10 run | `Settings read` shows LedgerTestOnly Yes, StaffingAwardsOn No, RealPayoutsOn No, 100 / 0 / 50 / 100 / 50; trigger concurrency 1 |
+| P2-3 | A4, A5 | Any non-TEST case save | Run ends at `End_not_test`; no write anywhere |
+| P2-4 | H1 | TEST HealthFirst lead: `trying`, then `qualified` | No row, then one K_R Waiting $100, Company and Payer `HealthFirst`, Test Yes |
+| P2-5 | H8, H9 or H10 | Same lead: `signed` | One K_M at $50 (Waiting to the TEST manager, or Void with the no-manager reason), Sign Log Handled On set, no second K_R |
+| P2-6 | H3 | Second TEST lead: `dq_noanswer` | One K_R Void, reason `HealthFirst marked this lead as not qualified (...)` |
+| P2-7 | H7 | Brian sets Qualified No on the P2-4 case | K_R and K_M Void with the same reason |
+| P2-8 | H12 | Third TEST lead, same JDE as P2-4: `qualified` | K_R Void, reason `this office was referred to HealthFirst in the last 12 months` |
+| P2-9 | A3, A7 | Brian blanks `HF_Manager`, then a TEST case is saved | Run fails before any write, one Ledger Run Errors row; restore 50, mark it resolved |
+| P2-10 | A8 | Run history | HSBS 10 and 10S have no email step |
+
+**Moved out of P2.** To P3 (10D): A3 for 10D, A6 (a save and the catch-up posting the same
+case at once), H16, H18, H28, H35, and every "listed X.." part of a check. To P6 (10B, 10P):
+A3 for 10B and 10P, H5 and H6 live (they need a TEST batch made Paid), H19 to H25, H27, H30
+to H32, H36. The rest of group H runs live in P5 with the reconcile, against the offline model's
+results.
+
 Builder: BB2 (decision 91).
 
 Checked against BB2 step 1 facts v2 (11/13): R2, R8, F3-0.5, F3-0.6, and the v2 decision 97
