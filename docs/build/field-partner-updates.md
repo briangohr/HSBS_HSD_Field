@@ -381,8 +381,9 @@ show one.
 
 ## E. Field Notify Outbox and HSBS 7N Field notify retry (new site, FT-2a)
 
-Built 11/21 to 11/22/2026 by Claude (fix thread FT-2). Field only. TEST only until Brian
-gives written OK for real retries.
+Built 11/21 to 11/22/2026 by Claude (fix thread FT-2). Field only. Since 7N v5 (11/22/2026
+2:58 PM ET) 7N retries real rows too, but a real row may mail only the addresses on its
+`Real_to` list (Brian only today). See "7N v5" below.
 
 **Why.** A hand back email (7F) or a partner ask (7G) that fails to send was lost. The
 Outbox holds each notification so one flow can retry it.
@@ -406,10 +407,10 @@ Expired, Cleared), Tries (default 0), NextTry (indexed), LastError, SentOn, Expi
 5. Brian gets one digest email listing each row parked or expired in the run, titled
    `Field notify retry: <n> parked or expired` (`[TEST] ` first while `Test_only` is true).
 
-**TEST guard.** Compose `Test_only` is `true`. While it is, 7N reads only Test Yes rows. A
-Test Yes row may mail only Brian (To is Brian, or a value with no `@` as the TEST fault
-switch; CC blank or Brian). Any other address parks the row with no send, whatever
-`Test_only` says.
+**TEST guard.** Compose `Test_only` was `true` through v4. While it was, 7N read only Test
+Yes rows. A Test Yes row may mail only Brian (To is Brian, or a value with no `@` as the TEST
+fault switch; CC blank or Brian). Any other address parks the row with no send, whatever
+`Test_only` says. v5 sets `Test_only` to `false` and adds the real recipient guard below.
 
 **7F hand backs (FT-2b, live 11/22/2026).** A disqualify save (`dq_noanswer`,
 `dq_notinterested`, or an old page's `handback`) now goes through the Outbox:
@@ -469,8 +470,48 @@ Built by `partner-updates/build/patch_7f_outbox.py` on the live 7F export, check
   Sent (Tries 2 and 1). TEST Partner Links row 1 PartnerEmail ends as Brian.
 - E5 (5 tries parks, Cleared never sends) was proven on 7N in FT-2a and is unchanged.
 
+**7N v5: real retries (fix F4, live 11/22/2026 2:58 PM ET).**
+
+Why: the config check (F4) found that a real (Test No) Outbox row that failed to send was
+never retried, because v4 read only Test Yes rows.
+
+1. `Test_only` is `false`, so 7N reads Pending rows of both kinds.
+2. New compose `Real_to`: the only addresses a real (Test No) row may mail. Today it holds
+   Brian only. A real row's To must be on the list, and its CC blank or on the list. Any
+   other address parks the row with no send (LastError "not on the 7N real recipient list")
+   and adds a digest line. TEST rows keep the TEST guard above.
+3. 7N still writes no mail content. It resends the stored To, CC, Subject and Body.
+4. The digest subject has `[TEST] ` only when every line in it is a TEST row.
+
+Why this is safe without a new OK from Brian: every real row 7F writes today mails Brian only
+(To is Brian unless a TEST partner fault value is set). FT-2c (7G partner asks) will need the
+partner addresses added to `Real_to`. That is a new real recipient and needs Brian's written
+OK first.
+
+Built by `partner-updates/build/gen_7n.py`, model `test_7n.py` 55/55, `lint_flow.py` 0
+problems. Package `partner-updates/ft2/HSBS-7N-Field-notify-retry-NEW-SITE.zip` (v5, also in
+`partner-updates/ft2/7N-v5/`).
+
+Live change record (Sun 11/22/2026, ET):
+
+- Before the import: exported live 7N. Its actions matched the v4 package
+  (`partner-updates/ft2/rollback/HSBS-7N-v4-package.definition.json`; the trigger only adds
+  `evaluatedRecurrence`), so that package is the rollback.
+- 2:57 PM: v5 imported (Update) onto HSBS 7N Field notify retry (new site). 2:58 PM: turned
+  On.
+- 2:58 PM, TEST proof (manual run): Outbox 24 `test:f4:P1` (Test No, To Brian) Sent once,
+  Tries 1. Outbox 25 `test:f4:P2` (Test No, To `nobody@example.invalid`) Parked "not on the
+  7N real recipient list", no send, then set Cleared by hand. Outbox 26 `test:f4:P4` (Test
+  Yes) Sent once. Mail search: one P1, one P4, and one digest `Field notify retry: 1 parked
+  or expired` with no `[TEST] ` (its line is a real-flag row).
+- 3:20 PM: export inventory hash of live 7N equals the saved v5 package.
+
+Undo for v5: turn 7N Off, or import the v4 package as Update (it brings back `Test_only`
+`true`) and turn it On. The generator and tests for v4 are `gen_7n_v4.py` and
+`test_7n_v4.py` in `partner-updates/ft2/rollback/`.
+
 **Undo.** 7N: turn it Off. Earlier definitions are in the project files under
-`partner-updates/ft2/rollback/` (v1, v2 and v3 as imported). 7F: re-import
+`partner-updates/ft2/rollback/` (v1, v2 and v3 as imported, v4 as packaged). 7F: re-import
 `partner-updates/ft2/rollback/HSBS-7F-before-outbox.zip` as Update onto HSBS 7F Field partner
 (new site), turn it On (imports arrive Off), then do one TEST save to confirm the trigger URL.
 That brings back the old direct hand back email.
