@@ -106,7 +106,7 @@ the build report.
 
 ## P3 build record: HSBS 10D (11/21/2026)
 
-Built by Claude in the thread "Build daily pay pass" as one importable package,
+Built by Claude in the thread "Build daily pay pass" as one importable package that Brian imports,
 "HSBS 10D Daily pass (new site)", from the same generator as P2 (`pay-ledger/` in the
 project files). Where this record and an older line in F4.6 differ, this record wins for 10D.
 
@@ -124,7 +124,7 @@ project files). Where this record and an older line in F4.6 differ, this record 
 | D10 | X19 | Payout Batches does not exist yet (P6). X19 reads `None (the Payout Batches list is made with HSBS 10B)` until 10B adds the list and 10D reads it |
 | D11 | Lines | List, Referral ID, case ID, company in words, practice name, rep email, then the list's extra. Ledger lines add the Award Key. No amounts; no customer name, phone or email; the X10 note word for word. `TEST ` prefix; while `LedgerTestOnly` the email opens with one line saying only TEST lines are listed |
 | D12 | Failure | Every step sits in one scope. If it fails: a Ledger Run Errors row (Step `HSBS 10D: <steps>`) and a short email to Brian, then the run ends Failed |
-| D13 | HSBS 10 address | Pasted by Claude into `Post_case` after import (copy button on HSBS 10's trigger), with Secure inputs on. Never printed or stored |
+| D13 | Import and HSBS 10 address | Brian imports the package, pastes HSBS 10's address into `Post_case` (copy button on HSBS 10's trigger), saves and turns 10D On, as he did for 10S. Secure inputs are on in the package. The address is never printed or stored |
 
 **Offline model.** `test_10d.py` runs 10D with HSBS 10 behind its HTTP step: 47 checks
 covering A3 and A6 for 10D, H16, H18 (X8 part), H28 (freeze line, open catch-up row), H35,
