@@ -2229,7 +2229,7 @@ for (const [plan, label] of [['reached_private:100,reached_group:200,manager:50'
             await page.goto(`${BASE}/refer/${REP_KEY}?company=Staffing`);
             const pay = page.locator('[data-staffing-pay]');
             if (label === 'plan set') {
-              assert.equal((await pay.textContent()).trim(), 'You earn $100 for a private practice, or $200 for a group with 3 or more locations, when Direct Dental reaches the customer and confirms the lead qualifies.');
+              assert.equal((await pay.textContent()).trim(), 'You earn $100 for a private practice, or $200 for a group that Direct Dental confirms has 3 or more locations, when Direct Dental reaches the customer and confirms the lead qualifies.');
             } else {
               assert.equal(await pay.count(), 0);
             }

@@ -715,3 +715,65 @@ Undo: 7F, import `rollback/HSBS-7F-before-cadence.zip` as Update onto 7F, turn O
 leads. 7H, import `rollback/HSBS-7H-before-cadence.zip` as Update onto 7H, turn On. Site:
 revert the hint line in `src/lib/partner-status-words.mjs`.
 
+
+## Office count check for Direct Dental Group leads (11/22/2026)
+
+Brian, 11/22 12:10 PM ET: before a Direct Dental Group lead pays the rep $200, the partner
+confirms the office count. Matt Penny (Direct Dental) owns that confirm. Groups are rare.
+Thread "Add Matt's office count check". Times ET.
+
+Design (the smallest safe change):
+
+- 7F `leads`: each lead gains `askOffices`, true only for a Direct Dental lead whose Referrals
+  row says `RepPracticeType` `Group` and that is not qualified yet.
+- Partner page (behind `PARTNER_OFFICE_CHECK`): on such a lead, picking Reached the customer,
+  Demo set, Proposal or Signed shows "The rep marked this practice as a group. Does it have 3
+  or more locations?" Yes or No. The page will not save without an answer.
+- 7F `save`: `offices` `yes`, `no` or blank (else 422). On the save that first qualifies a
+  Direct Dental Group lead, 7F writes Service Cases `OfficeCountConfirmed` `Yes` or `No` in
+  the same MERGE as Qualified Yes. Ignored on any other lead or save.
+- HSBS 10: `Multi_office` also needs `OfficeCountConfirmed` `Yes`. No, or no answer, pays $100.
+- Why no answer pays $100 and not a "Pending extra $100": HSBS 10 writes the qualified award
+  once and never changes its amount (D3). A pending extra needs a new ledger row type and a
+  1F Earnings change. $100 never overpays, and groups are rare, so a later fix by hand is
+  cheap. The amount still comes only from trusted fields: the rep's pick on the Referrals row
+  (1F) and the case column (7F), never a browser body.
+
+Files (project files `partner-updates/offices/`): `patch_offices_inpage.js` (node:
+`build_offices.mjs <live def> <out def>`), `test_7f_offices.py` 32/32 (live 86b2c0fa vs
+patched). The cadence suite and the FT-5 suite on the patched def differ only by the new
+`askOffices` field (and FT-5's known "reads cut" check). Lint: only the known Write_until note.
+HSBS 10: `pay-ledger/build/gen_10.py` (Get_case, Multi_office), `test_10.py` 86/86 (new
+office count cases fail on the old def), `test_10d.py` 49/49, lint 0. Generator diff vs the
+live package: only Get_case and Multi_office.
+
+### Live change record (Sun 11/22/2026, ET)
+
+- About 2:15 PM: Service Cases column `OfficeCountConfirmed` (Text, 10) added on the field site.
+- 2:19 PM: live 7F exported in Browser 1 (378c6cd4), hash 86b2c0fa67a77dc7 (the cadence
+  build). Undo package `partner-updates/offices/rollback/HSBS-7F-before-offices.zip`.
+- 2:21 PM: patched in page, hash 68e75b34c51600dc (same as the tested build), imported as
+  Update onto HSBS 7F Field partner (new site), top SharePoint and Outlook connections. On
+  2:22 PM. Flow checker 0 errors, 0 warnings. TEST partner page read 200 on production.
+- 2:24 PM: live HSBS 10 Ledger writer exported, canonical hash (metadata left out) 8f0b4c47ed13649d,
+  the same as `pay-ledger/rollback/offices-before/HSBS-10-Ledger-writer-NEW-SITE.zip` (the
+  multi-office package), which is the undo. Patched in page (Get_case selects
+  `OfficeCountConfirmed`; Multi_office needs it `Yes`), hash 6e8a1c4c20343cad, the same as the
+  tested generator output. Imported as Update 2:26 PM, On 2:27 PM, flow checker 0 and 0.
+- 2:28 PM: Vercel `PARTNER_OFFICE_CHECK=true` (production and preview). Production code
+  reads it only after this PR merges.
+- TEST proof, PASS (2:29 to 2:31 PM): two TEST Direct Dental sends from Test Fieldsite through
+  production `/api/referral`, both `Group` (F697, F698; 3F sent each `[TEST]` intro to Brian
+  only). On the TEST partner page (PR 49 preview, switch on), both leads came back with
+  `askOffices` true and no other lead did. Picking Reached the customer showed the question;
+  Save with no answer said "Lead HSBS-F697: check Office count." and posted nothing. F697 Yes
+  and F698 No saved ("Saved 2 updates."); after the reload neither asks again. Cases 280 and
+  281: Qualified Yes, Reached, `OfficeCountConfirmed` Yes and No. SPIFF Ledger 47
+  `280|Reached|Rep` $200 and 48 `281|Reached|Rep` $100, both Waiting, Staffing, Direct
+  Dental, Test Yes. No new Ledger Run Errors.
+- 2:32 PM: recycled ledger 47 and 48, cases 280 and 281, referrals 697 and 698 (site recycle
+  bin).
+- Undo 7F: import `rollback/HSBS-7F-before-offices.zip` as Update, turn On. The column can stay.
+- Undo HSBS 10: import `pay-ledger/rollback/offices-before/HSBS-10-Ledger-writer-NEW-SITE.zip`
+  as Update, turn On. Quick undo of the question alone: `PARTNER_OFFICE_CHECK` off (then no
+  Group lead earns $200 until it is back on, or HSBS 10 is rolled back).

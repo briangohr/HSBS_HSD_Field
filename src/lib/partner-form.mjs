@@ -49,7 +49,16 @@ export const NOTE_MAX = 300;
 export const PRODUCT_MAX = 100;
 
 /** The fields a save sends for each lead, in contract order. */
-export const UPDATE_FIELDS = ['talkedToDoctor', 'meetingDate', 'signedDate', 'signedProduct', 'closedReason', 'note'];
+export const UPDATE_FIELDS = ['talkedToDoctor', 'meetingDate', 'signedDate', 'signedProduct', 'closedReason', 'note', 'offices'];
+
+/**
+ * The choices that make a lead qualified (7F sets Qualified Yes). On the save that first
+ * qualifies a Direct Dental lead the rep marked Group, the page asks the office count.
+ */
+export const QUALIFYING_CHOICES = ['qualified', 'meeting', 'proposal', 'signed'];
+
+/** The office count answers: yes, 3 or more locations; no, fewer. */
+export const OFFICE_ANSWERS = ['yes', 'no'];
 
 /** What the page names when a field is missing or wrong. */
 export const FIELD_WORDS = {
@@ -60,6 +69,7 @@ export const FIELD_WORDS = {
   signedProduct: 'Product',
   closedReason: 'Reason',
   note: 'Note',
+  offices: 'Office count',
 };
 
 export const SAVE_WORDS = {
@@ -134,6 +144,9 @@ const text = (v) => (typeof v === 'string' ? v : '');
  * after today). The page passes it. The save route passes null: a resend after midnight
  * must still reach 7F, whose submission tag check finds what an earlier try wrote (Codex P1
  * on #14). 7F checks the day rules itself, except on a save it has already partly written.
+ * `offices` is kept only on a qualifying choice and must be yes, no or blank. The page also
+ * passes `askOffices` (never sent): then a qualifying choice needs an answer. The route
+ * cannot tell which leads ask, so it takes a blank one; 7F writes it only on a Group lead.
  * @param {unknown} raw
  * @param {string | null} today yyyy-MM-dd, Eastern, or null to skip the day rules
  * @returns {{ ok: true, update: Record<string, unknown> } | { ok: false, id: number | null, field: string }}
@@ -153,7 +166,21 @@ export function checkUpdate(raw, today) {
   const note = oneLine(rawNote, NOTE_MAX + 1);
   if (note.length > NOTE_MAX) return bad('note');
   if (choice === 'handback' && !note) return bad('note');
-  const update = { id, choice, talkedToDoctor: talked, meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note };
+  const offices = u.offices === undefined || u.offices === null ? '' : u.offices;
+  if (offices !== '' && !OFFICE_ANSWERS.includes(/** @type {string} */ (offices))) return bad('offices');
+  const qualifying = QUALIFYING_CHOICES.includes(choice);
+  if (qualifying && u.askOffices === true && today !== null && offices === '') return bad('offices');
+  const update = {
+    id,
+    choice,
+    talkedToDoctor: talked,
+    meetingDate: '',
+    signedDate: '',
+    signedProduct: '',
+    closedReason: '',
+    note,
+    offices: qualifying ? /** @type {string} */ (offices) : '',
+  };
   if (choice === 'meeting') {
     const date = text(u.meetingDate);
     if (!isDate(date) || (today !== null && date < today)) return bad('meetingDate');

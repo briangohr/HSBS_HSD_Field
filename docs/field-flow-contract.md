@@ -25,6 +25,7 @@ route answers 404 and no flow is called.
 | `REGISTER_FLOW_URL` | HSBS 1J trigger URL, `https` only | Yes |
 | `PARTNER_PAGE_ENABLED` | `/update/<key>` and `/api/partner-save`, exactly `true` (and `REP_APP_ENABLED`). Off: 404 and no 7F call | No |
 | `PARTNER_FLOW_URL` | HSBS 7F Field partner (new site) trigger URL, `https` only | Yes |
+| `PARTNER_OFFICE_CHECK` | The partner page asks the office count on a Direct Dental Group lead (7F, below), exactly `true` (and `PARTNER_PAGE_ENABLED`). Off: no question, and `/api/partner-save` sends every `offices` blank, so no lead earns the group amount | No |
 | `REP_APP_COMPANIES` | Which companies Send offers: `HealthFirst`, `Staffing`, comma separated. Unset is HealthFirst only | No |
 | `REP_PAY_ENABLED` | Dollar amounts on screens, exactly `true`. Off until Brian approves pay | No |
 | `REP_PAY_PLAN` | HealthFirst pay plan words (`src/lib/rep-pay-plan.mjs`). Set to `reached:100,manager:50` (promo file) | No |
@@ -407,10 +408,16 @@ to 7F. Waits: 20 s for `leads`, 55 s for `save`.
 Cases item id), `ref` (the Referrals Title: `HSBS-F<n>`, or `HSBS-A<n>` for the 12 moved
 from the old site), `practice`, `contact`, `company`, `introducedOn`,
 `status` (Partner Status), `talkedToDoctor`, `meetingDate`, `nextUpdateDue`,
-`missedUpdates`. Dates are `yyyy-MM-dd`. The site keeps only these (`readLead`); anything
+`missedUpdates`, `askOffices`. Dates are `yyyy-MM-dd`. The site keeps only these (`readLead`); anything
 else, a phone, email or JDE included, is dropped. A lead with a bad `id` or `ref` is
 dropped. More than 500 leads is a failed read. The page sorts overdue (Missed Updates above
 0) first, then by due date.
+
+`askOffices` (since 11/22/2026) is `true` only for a Direct Dental lead (Service
+`HS Staffing / Recruiting Services (including GoTu)`) whose Referrals row has
+`RepPracticeType` `Group` and that is not qualified yet (Qualified not Yes, Partner Status
+not Reached, Meeting set, Meeting held or Proposal or agreement sent). The site reads only an
+exact `true`, and only with `PARTNER_OFFICE_CHECK` on; anything else is `false`.
 
 ### save
 
@@ -421,7 +428,7 @@ dropped. More than 500 leads is a failed read. The page sorts overdue (Missed Up
   "submissionId": "<uuid>",
   "updates": [
     { "id": 36, "choice": "meeting", "talkedToDoctor": "Yes", "meetingDate": "2026-11-24",
-      "signedDate": "", "signedProduct": "", "closedReason": "", "note": "" }
+      "signedDate": "", "signedProduct": "", "closedReason": "", "note": "", "offices": "" }
   ]
 }
 ```
@@ -441,6 +448,21 @@ optional, one line, up to 300. Today is Eastern time. The two day rules (meeting
 later, signed not after today) are checked by the page and by 7F, not by
 `/api/partner-save`, so a resend after midnight still reaches 7F's tag check. 7F skips the
 day rules on a save whose tag it already holds on any of its cases.
+
+Office count (Brian, 11/22/2026 12:10 PM ET: before a Direct Dental Group lead pays the
+rep $200, the partner confirms the office count). `offices` is `yes` (3 or more locations),
+`no` or blank; anything else is 422 `bad_value` from the site and from 7F, nothing written.
+The site sends it only on `qualified`, `meeting`, `proposal` and `signed` (blank on the
+rest). On a lead with `askOffices` the page asks "The rep marked this practice as a group.
+Does it have 3 or more locations?" when one of those four is picked, and will not save
+without an answer. 7F writes Service Cases `OfficeCountConfirmed` (text) `Yes` or `No` in
+the same write as Qualified Yes, only when the case is Direct Dental, its Referrals row says
+`Group`, and the case was not qualified before this save. Any other `offices` is ignored. A
+blank answer (an older tab, the switch off) writes nothing. HSBS 10 pays the group amount
+only when `RepPracticeType` is `Group` and `OfficeCountConfirmed` is `Yes`; otherwise the
+private practice amount. HSBS 10 writes the qualified award once, so an answer must come
+on the save that qualifies the lead; a later one changes nothing. A page or 7F older than
+this change never sends or writes `offices`.
 
 A page loaded before 11/20/2026 still sends its own `talkedToDoctor` answer. An update that
 carries one gets the old rules, so an open tab or a retry of a partly written save still

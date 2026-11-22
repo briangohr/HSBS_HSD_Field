@@ -81,6 +81,21 @@ const LEADS = [
     nextUpdateDue: eastern(5),
     missedUpdates: 0,
   },
+  {
+    // A Direct Dental lead the rep marked Group: 7F asks the office count.
+    id: 39,
+    ref: 'HSBS-F93',
+    practice: 'TEST Group Dental',
+    contact: 'TEST Office Manager',
+    company: 'HS Staffing / Recruiting Services (including GoTu)',
+    introducedOn: eastern(-2),
+    status: '',
+    talkedToDoctor: '',
+    meetingDate: '',
+    nextUpdateDue: eastern(2),
+    missedUpdates: 0,
+    askOffices: true,
+  },
 ];
 
 const bodies = [];
@@ -178,7 +193,7 @@ await check('off: page and save are 404, nothing posted', async () => {
 killDev(dev);
 
 // 2. Page on.
-dev = await startDev({ REP_APP_ENABLED: 'true', PARTNER_PAGE_ENABLED: 'true', PARTNER_FLOW_URL: FLOW_URL });
+dev = await startDev({ REP_APP_ENABLED: 'true', PARTNER_PAGE_ENABLED: 'true', PARTNER_OFFICE_CHECK: 'true', PARTNER_FLOW_URL: FLOW_URL });
 
 await check('bad, unknown and expired keys', async () => {
   const short = await fetch(`${BASE}/update/RepTest_${'r'.repeat(32)}`);
@@ -252,7 +267,7 @@ await check('save sends only touched leads and shows Saved', async () => {
   assert.equal(save.key, KEY);
   assert.match(save.submissionId, /^[0-9a-f-]{36}$/);
   assert.deepEqual(save.updates, [
-    { id: 36, choice: 'meeting', talkedToDoctor: 'Yes', meetingDate: TOMORROW, signedDate: '', signedProduct: '', closedReason: '', note: 'TEST call booked' },
+    { id: 36, choice: 'meeting', talkedToDoctor: 'Yes', meetingDate: TOMORROW, signedDate: '', signedProduct: '', closedReason: '', note: 'TEST call booked', offices: '' },
   ]);
   await page.close();
 });
@@ -288,7 +303,30 @@ await check('Qualified sends Talked To Doctor Yes with no other field', async ()
   await page.check('input[name="choice-36"][value="qualified"]');
   await Promise.all([page.waitForURL(/saved=1/), page.click('#pu-save')]);
   assert.deepEqual(saves()[0].updates, [
-    { id: 36, choice: 'qualified', talkedToDoctor: 'Yes', meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note: '' },
+    { id: 36, choice: 'qualified', talkedToDoctor: 'Yes', meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note: '', offices: '' },
+  ]);
+  await page.close();
+});
+
+await check('a Group lead asks the office count on a qualifying choice; the answer is sent', async () => {
+  bodies.length = 0;
+  const page = await phone.newPage();
+  await open(page);
+  assert.equal(await page.locator('input[name="offices-36"]').count(), 0, 'a lead 7F did not flag asks nothing');
+  assert.equal(await page.isVisible('input[name="offices-39"][value="yes"]'), false);
+  await page.check('input[name="choice-39"][value="trying"]');
+  assert.equal(await page.isVisible('input[name="offices-39"][value="yes"]'), false, 'trying does not ask');
+  await page.check('input[name="choice-39"][value="qualified"]');
+  assert.equal(await page.isVisible('input[name="offices-39"][value="yes"]'), true);
+  assert.match(await page.textContent('li[data-id="39"]'), /Does it have 3 or more locations\?/);
+  await page.click('#pu-save');
+  await page.waitForTimeout(300);
+  assert.match(await page.textContent('#pu-status'), /Lead HSBS-F93: check Office count\./);
+  assert.equal(saves().length, 0, 'saved with no office count');
+  await page.check('input[name="offices-39"][value="no"]');
+  await Promise.all([page.waitForURL(/saved=1/), page.click('#pu-save')]);
+  assert.deepEqual(saves()[0].updates, [
+    { id: 39, choice: 'qualified', talkedToDoctor: 'Yes', meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note: '', offices: 'no' },
   ]);
   await page.close();
 });

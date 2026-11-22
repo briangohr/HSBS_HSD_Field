@@ -66,7 +66,7 @@ export function staffingPayLine(plan) {
   if (plan.reachedPrivate === plan.reachedGroup) {
     return `You earn ${usd(plan.reachedPrivate)} when ${STAFFING_NAME} reaches the customer and confirms the lead qualifies.`;
   }
-  return `You earn ${usd(plan.reachedPrivate)} for a private practice, or ${usd(plan.reachedGroup)} for a group with 3 or more locations, when ${STAFFING_NAME} reaches the customer and confirms the lead qualifies.`;
+  return `You earn ${usd(plan.reachedPrivate)} for a private practice, or ${usd(plan.reachedGroup)} for a group that ${STAFFING_NAME} confirms has 3 or more locations, when ${STAFFING_NAME} reaches the customer and confirms the lead qualifies.`;
 }
 
 /**
