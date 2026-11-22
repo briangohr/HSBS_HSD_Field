@@ -53,6 +53,12 @@ const TEAM_MAX_CHARS = 2_000_000;
  * plan). More is a failed read, never a list cut short: a short list would show a wrong total.
  */
 export const REFERRAL_READ_MAX = 5000;
+/**
+ * The most SPIFF Ledger rows one read may hold: a rep's own rows (earnings), one team
+ * member's rows, or a manager's own rows (team). The same SharePoint limit as
+ * REFERRAL_READ_MAX. More is a failed read, never a short list: a cut would drop money.
+ */
+export const LEDGER_READ_MAX = 5000;
 /** The most text a list or earnings answer may hold. Over it is a failed read. */
 const READ_MAX_CHARS = 4_000_000;
 /** Same cap as TEAM_MAX in rep-team.mjs. */
@@ -266,6 +272,8 @@ export async function listEarnings(key) {
     throw new ReferralAppWriteError(200);
   }
   if (!body || typeof body !== 'object' || !Array.isArray(body.rows)) throw new ReferralAppWriteError(200);
+  // More rows than 1F reads is a failed read, never earnings cut short (FT-1b).
+  if (body.rows.length > LEDGER_READ_MAX) throw new ReferralAppWriteError(200);
   return body.rows;
 }
 
@@ -303,6 +311,8 @@ export async function listTeam(key) {
   if (!Array.isArray(body.team) || !Array.isArray(body.managerRows)) throw new ReferralAppWriteError(200);
   // More members than the site shows is a failed call too, never a team cut short.
   if (body.team.length > TEAM_MAX_MEMBERS) throw new ReferralAppWriteError(200);
+  // The same for the manager's own ledger rows: a cut would drop the manager's pay (FT-1b).
+  if (body.managerRows.length > LEDGER_READ_MAX) throw new ReferralAppWriteError(200);
   return body;
 }
 

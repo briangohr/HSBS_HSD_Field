@@ -15,7 +15,7 @@
 
 import { daysBetween, decorateReferrals, sanitizeReferral, shortDate, todayInNewYork } from './track.mjs';
 import { ROLES, normalizeName } from './register-form.mjs';
-import { REFERRAL_READ_MAX, ReferralAppWriteError, TEAM_MAX_MEMBERS } from './field-flow.mjs';
+import { LEDGER_READ_MAX, REFERRAL_READ_MAX, ReferralAppWriteError, TEAM_MAX_MEMBERS } from './field-flow.mjs';
 import { companyText, dollars, managerPay, moneyForReferrals, referralFacts, sanitizeLedger, summarizeEarnings } from './rep-earnings.mjs';
 import { usableStaffingPlan } from './rep-pay-plan.mjs';
 import { leadViews } from './rep-lead.mjs';
@@ -127,6 +127,8 @@ export function shapeTeam(raw, plan, today = todayInNewYork(), opts = {}) {
   // a $0 or "0 referrals" that only means the data did not come back.
   for (const m of signedUp) {
     if (!Array.isArray(m.referrals) || (pay && !Array.isArray(m.rows))) throw new ReferralAppWriteError(200);
+    // The same bound as a rep's own earnings read (FT-1b): more is a failed load.
+    if (Array.isArray(m.rows) && m.rows.length > LEDGER_READ_MAX) throw new ReferralAppWriteError(200);
   }
   /** @type {Map<string, string>} */
   const nameByEmail = new Map();
@@ -241,6 +243,8 @@ export function shapeTeam(raw, plan, today = todayInNewYork(), opts = {}) {
 
   if (pay) {
     const rawManager = isObject(raw) ? /** @type {any} */ (raw).managerRows : [];
+    // listTeam already refuses this; kept here like the member cap (FT-1b).
+    if (Array.isArray(rawManager) && rawManager.length > LEDGER_READ_MAX) throw new ReferralAppWriteError(200);
     // D4: a row that adds nothing (Void or Pending review) shows only while its rep is a
     // signed-up rep on this manager's team now (an Active Team Roster row naming this
     // manager), so a rep who is gone never shows an office here.
