@@ -155,7 +155,11 @@ Success is 200 with:
 - `repName` must be set, `repEmail` must look like an email and `services` must include
   `HealthFirst`, or the key is unknown.
 - `isManager` counts only as the JSON boolean `true`. It shows the My Team tab; `team`
-  is the real gate.
+  is the real gate. 1F sets it from `Get_manager_rows` (Active Team Roster rows naming this
+  person as manager, TEST rows dropped for a real caller), which needs Top Count 5,000 and
+  Pagination on with a threshold of 5,001 (FT-1b, 11/22/2026). It was Top 500 with
+  Pagination off. That cap could only matter if every row it read was dropped as TEST,
+  but no read in 1F is left capped.
 - Any manager name, email or status 1F sends is ignored (D18).
 - 404, 410 and any other 4xx except 408 and 429: "This link does not work." 408, 429,
   5xx and a timeout (20s): "This form is not available right now."
@@ -316,7 +320,10 @@ the same office sends it.
 reads `referralId`, `practiceName`, `company`, `practiceType`, `event` (`Reached` or
 `Signed`), `amount`, `status` (`Waiting`, `Paid`, `Pending review`, `Void`), `earnedOn`,
 `paidOn`, `voidReason`, `disputed`, `payeeRole`. `/api/earnings` answers 404 while
-`REP_PAY_ENABLED` is off. The site waits 20 s.
+`REP_PAY_ENABLED` is off. The site waits 20 s. More than 5,000 rows is a failed read
+("Your earnings did not load."), never earnings cut short. 1F's `Get_ledger_rep` needs Top
+Count 5,000 and Pagination on with a threshold of 5,001, for the reason given under list
+(FT-1b, 11/22/2026).
 
 ### list and earnings answers
 
@@ -343,8 +350,13 @@ Manager Email is this person. Each member has `name`, `role`, `signedUp`, and wh
 up `email`, `registeredOn`, `referrals` and `rows`. `managerRows` are this person's own
 ledger rows with Payee Role `Manager` and event `Signed`. The site drops a Manager row with
 any other event, `Reached` included. Only 404 means "no team"; every other failure is
-"Your team did not load." The site waits 25 s. More than 200 members, or a body over
-2,000,000 characters, is a failed call, never a team cut short. The raw answer stays on
+"Your team did not load." The site waits 25 s. More than 200 members, more than 5,000
+`managerRows`, more than 5,000 `rows` for one member, or a body over 2,000,000 characters,
+is a failed call, never a team cut short. 1F's `Get_team_rows` (Team Roster),
+`Get_manager_ledger` and `Get_rep_ledger` (SPIFF Ledger) need Top Count 5,000 and
+Pagination on with a threshold of 5,001, for the reason given under list (FT-1b,
+11/22/2026). `Get_team_rows` was Top 200 with Pagination off, so a 201st member was dropped
+with no error and the 200-member check could never fire. The raw answer stays on
 the server; `src/lib/rep-team.mjs` shapes what the browser gets (no rep email, no key).
 
 ## HSBS 7F Field partner (`/update/<key>`)
