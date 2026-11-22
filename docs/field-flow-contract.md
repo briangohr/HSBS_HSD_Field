@@ -484,6 +484,13 @@ A save with no clear answer keeps its `submissionId` and the exact updates; the 
 lock and Save resends them. 7F tags each Status Log line `[s:<submissionId>]` and skips a
 case that already holds the tag, so a resend writes nothing twice.
 
+Since 11/22/2026 (FT-5) 7F takes at most 50 updates per save (more is 422 `bad_value`, as
+before) and works them 50 at a time. After writing it reads the posted cases again and answers
+200 only when every posted case that is still open and the partner's carries this save's tag;
+otherwise 503, which the site already treats as no clear answer, so the page resends the same
+`submissionId` and 7F writes only the cases still missing the tag. A 50-lead save answered in
+25 s on TEST (the site waits 55 s). No request or answer shape changed.
+
 ### Field Notify Outbox and HSBS 7N (no site change)
 
 The site never reads or writes the Field Notify Outbox list and never calls HSBS 7N. 7N is a
