@@ -262,10 +262,31 @@ referral reads (`Get_referrals_list_rep`, `Get_team_refs`) need Top Count 5,000 
 Pagination on with a threshold of 5,001, because with Pagination off SharePoint stops at the
 Top Count (200 until FT-1) with no error. The threshold is one over the limit on purpose: a
 rep with 5,001 referrals then reaches the site as 5,001 rows and fails the read, where a
-threshold of 5,000 would hand the site a full-looking list of exactly 5,000. The two case reads (`Get_cases_rep`,
-`Get_cases_team`) run once per referral inside the referral loop (live 1F, read 11/22/2026),
-so their Top Count of 100 caps one referral's cases, not the total; they take the same
-settings (Top Count 5,000, threshold 5,001) so no cap is left. Past 5,000 items in a list,
+threshold of 5,000 would hand the site a full-looking list of exactly 5,000. The case reads (`Get_cases_all_rep`,
+`Get_cases_all_team`) take the same settings (Top Count 5,000, threshold 5,001), and the
+site fails an answer with more than 5,000 case lines (`CASE_READ_MAX`).
+
+**One case read, not one per referral (FT-4, 11/22/2026).** 1F used to read Service Cases
+once per referral, one referral after another, at about 0.6 s each: 22 referrals took 15 to
+20 s and 207 took about two minutes, so every Track, Earnings and My Team read at that size
+timed out. 1F now reads a rep's cases once (`Get_cases_all_rep`, and `Get_cases_all_team`
+once per team member) with the filter `Referral/Id ge <lowest referral id> and Referral/Id
+le <highest>` on the indexed `Referral` column, keeps only lines whose referral is the
+rep's own (`Mine_cases_rep` / `Mine_cases_team`), and sends them beside the referrals:
+
+```json
+{ "referrals": [ { "id": 12, "title": "HSBS-F12", "...": "..." } ],
+  "cases": [ { "referralId": 12, "company": "HealthFirst", "...": "..." } ] }
+```
+
+Each line carries `referralId` (the Referrals item id) and the same fields as before. The
+site puts each line back on its referral (`attachCases` in `src/lib/field-flow.mjs`), so
+everything after the read sees the old shape. A line whose `referralId` matches no
+referral in the answer, `cases` that is not a list, or more than 5,000 lines is a failed
+read, never a line dropped. An answer with no top-level `cases` (lines already on each
+referral) still reads as before. In `team`, each signed-up member carries its own `cases`
+beside its `referrals`, and the site works out each referral's `reached` from its lines
+(a line with `talkedToDoctor` "Yes") when 1F does not send it. Past 5,000 items in a list,
 a filtered read needs its filter column indexed: Referrals `Referring_x0020_Rep_x0020_Email` and Service Cases `Referral`.
 More than 5,000 referrals, or an answer over 4 MB, is a failed read ("Your referrals did not
 load."), never a short list. The same holds for each member's referrals in `team` (inside
@@ -356,7 +377,10 @@ is a failed call, never a team cut short. 1F's `Get_team_rows` (Team Roster),
 `Get_manager_ledger` and `Get_rep_ledger` (SPIFF Ledger) need Top Count 5,000 and
 Pagination on with a threshold of 5,001, for the reason given under list (FT-1b,
 11/22/2026). `Get_team_rows` was Top 200 with Pagination off, so a 201st member was dropped
-with no error and the 200-member check could never fire. The raw answer stays on
+with no error and the 200-member check could never fire. Since FT-4 (11/22/2026) 1F reads
+the members 20 at a time (`Each_team_row` concurrency 20). Every Team Roster row adds
+exactly one item to the answer (a Disabled rep adds a marker that 1F drops), and 1F answers
+500 unless the count matches, so a member is never missing from a team that loaded. The raw answer stays on
 the server; `src/lib/rep-team.mjs` shapes what the browser gets (no rep email, no key).
 
 ## HSBS 7F Field partner (`/update/<key>`)
