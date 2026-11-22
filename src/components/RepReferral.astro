@@ -274,7 +274,7 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
         <p><strong data-count="inProgress">0</strong> In progress</p>
         <p><strong data-count="signed">0</strong> Signed</p>
         {payEnabled && (
-          <p><strong data-money="earned">--</strong> Total earned<span class="rep-sub" data-money-paid>Paid --</span></p>
+          <p><strong data-money="earned">--</strong> <span data-money-label>Total earned</span><span class="rep-sub" data-money-paid>Paid --</span></p>
         )}
       </div>
       {payEnabled && <p class="rep-status" id="rep-money-status" role="status" hidden>Your earnings did not load. Try again in a minute.</p>}
@@ -298,11 +298,12 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
     payEnabled && (
       <section id="rep-earnings" hidden>
         <div class="rep-tiles">
-          <p><strong data-money="earned">--</strong> Total earned</p>
+          <p><strong data-money="earned">--</strong> <span data-money-label>Total earned</span></p>
           <p><strong data-money="waiting">--</strong> Awaiting payment</p>
           <p><strong data-money="paid">--</strong> Paid</p>
         </div>
         <p class="rep-status" id="rep-pending" hidden></p>
+        <p class="rep-status" id="rep-review" hidden></p>
         <p class="rep-status" id="rep-upto" hidden></p>
         <p class="rep-status" id="rep-earnings-status" role="status">Open this tab to load your earnings.</p>
         <ul class="rep-feed" id="rep-earnings-lines"></ul>
@@ -905,6 +906,9 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
         waiting: number;
         paid: number;
         pendingReview: number;
+        /** Only when a row is held (TSM pay plan v3.3): false, with "N amounts need review." */
+        complete?: boolean;
+        reviewText?: string;
         upTo: number;
         upToText?: string;
         emptyText?: string;
@@ -982,6 +986,8 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
         el.textContent = m ? usd(m.summary[k] ?? 0) : '--';
       });
       root.querySelectorAll<HTMLElement>('[data-money-paid]').forEach((el) => (el.textContent = m ? `Paid ${usd(m.summary.paid)}` : 'Paid --'));
+      // A held amount means the total is not whole yet: say so on the tile.
+      root.querySelectorAll<HTMLElement>('[data-money-label]').forEach((el) => (el.textContent = m && m.summary.complete === false ? 'Earned so far (incomplete)' : 'Total earned'));
       if (moneyStatus) moneyStatus.hidden = Boolean(m);
     };
 
@@ -1256,12 +1262,16 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
       showMoney();
       if (!money) {
         pending.hidden = true;
+        (document.getElementById('rep-review') as HTMLElement).hidden = true;
         upTo.hidden = true;
         status.hidden = false;
         status.textContent = 'Your earnings did not load. Try again in a minute.';
         return;
       }
       const sm = money.summary;
+      const review = document.getElementById('rep-review') as HTMLElement;
+      review.hidden = !sm.reviewText;
+      review.textContent = sm.reviewText ?? '';
       pending.hidden = !sm.pendingReview;
       pending.textContent = `${usd(sm.pendingReview)} pending review.`;
       // Worded by the server from the plan that counted the amount, never from this page's plan.

@@ -7,7 +7,7 @@
 // whether the key is a Rep's). A warm open is zero.
 import { cacheTtlMs, readThrough } from './flow-cache.mjs';
 import { ReferralKeyUnknownError, listEarnings, listReferrals, lookupReferral } from './field-flow.mjs';
-import { moneyForReferrals, sanitizeLedger, summarizeEarnings } from './rep-earnings.mjs';
+import { moneyForReferrals, refusedRows, sanitizeLedger, summarizeEarnings } from './rep-earnings.mjs';
 import { DEFAULT_PAY_PLAN, parsePayPlan, payTerms, usableStaffingPlan } from './rep-pay-plan.mjs';
 
 /**
@@ -195,7 +195,7 @@ export function moneyView(referrals, ledger, plan, staffing = null) {
   const st = usableStaffingPlan(staffing) ? staffing : null;
   const plans = { healthFirst: used, staffing: st };
   return {
-    summary: summarizeEarnings(rows, referrals, plans),
+    summary: summarizeEarnings(rows, referrals, plans, refusedRows(ledger)),
     money: moneyForReferrals(referrals, rows, undefined, plans),
     terms: payTerms(true, used, st),
   };

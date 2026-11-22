@@ -307,7 +307,8 @@ describe('slice 5: manager rows (My Team)', () => {
     assert.deepEqual(sanitizeLedger([mrow({}), mrow({ status: 'Paid', paidOn: '2026-11-30' })]), []);
     // The Rep path's output is unchanged: no repEmail key on a rep's own row.
     assert.deepEqual(Object.keys(sanitizeLedgerRow(row({ repEmail: 'x@henryschein.com' }))).sort(), [
-      'amount', 'company', 'disputed', 'earnedOn', 'event', 'paidOn', 'practiceName', 'practiceType', 'referralId', 'status', 'voidReason',
+      'adjustmentId', 'adjustmentReason', 'amount', 'awardKey', 'company', 'disputed', 'earnedOn', 'eligibility', 'event', 'paidOn',
+      'parentAwardKey', 'practiceName', 'practiceType', 'recordType', 'referralId', 'schemaVersion', 'status', 'voidReason',
     ]);
     const s = summarizeEarnings(sanitizeLedger([row({}), mrow({ amount: 50 })]), []);
     assert.equal(s.earned, 50);

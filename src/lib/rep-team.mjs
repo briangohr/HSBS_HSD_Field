@@ -16,7 +16,8 @@
 import { daysBetween, decorateReferrals, sanitizeReferral, shortDate, todayInNewYork } from './track.mjs';
 import { ROLES, normalizeName } from './register-form.mjs';
 import { LEDGER_READ_MAX, REFERRAL_READ_MAX, ReferralAppWriteError, TEAM_MAX_MEMBERS } from './field-flow.mjs';
-import { companyText, dollars, managerPay, moneyForReferrals, referralFacts, sanitizeLedger, summarizeEarnings } from './rep-earnings.mjs';
+import { companyText, dollars, managerPay, moneyForReferrals, referralFacts, refusedRows, sanitizeLedger, summarizeEarnings } from './rep-earnings.mjs';
+import { checkLedger, counts, signedDollars } from './pay-ledger.mjs';
 import { usableStaffingPlan } from './rep-pay-plan.mjs';
 import { leadViews } from './rep-lead.mjs';
 
@@ -172,15 +173,21 @@ export function shapeTeam(raw, plan, today = todayInNewYork(), opts = {}) {
       // The rep's own Payee Role Rep rows only. A manager row can't count here.
       const repRows = sanitizeLedger(m.rows);
       if (repRows.some((r) => r.company === 'Staffing')) teamHasStaffing = true;
-      const sum = summarizeEarnings(repRows, rawReferrals, plans);
+      const sum = summarizeEarnings(repRows, rawReferrals, plans, refusedRows(m.rows));
       lines = moneyForReferrals(rawReferrals, repRows, today, plans).lines;
       money = `Total earned ${dollars(sum.earned)}. Paid ${dollars(sum.paid)}.`;
+      // Schema 2 (plan v3.3): a held amount is named, never folded into the total.
+      if ('reviewText' in sum) money += ` ${sum.reviewText}`;
       // One line per row that counts in Earned (Waiting or Paid), each naming its company
-      // (board 5b). They add up to this rep's Earned, to the dollar.
-      awards = repRows
-        .filter((r) => r.status === 'Waiting' || r.status === 'Paid')
+      // (board 5b), an adjustment with its sign. They add up to this rep's Earned, to the dollar.
+      awards = checkLedger(repRows)
+        .rows.filter((r) => counts(r) && (r.status === 'Waiting' || r.status === 'Paid'))
         .sort((a, b) => (a.earnedOn < b.earnedOn ? 1 : a.earnedOn > b.earnedOn ? -1 : 0))
-        .map((r) => ({ office: r.practiceName || 'Office', company: companyText(r), amount: dollars(r.amount) }));
+        .map((r) => ({
+          office: r.practiceName || 'Office',
+          company: r.recordType === 'Adjustment' ? `Adjustment: ${r.adjustmentReason}` : companyText(r),
+          amount: r.recordType === 'Adjustment' ? signedDollars(r.amount) : dollars(r.amount),
+        }));
       tileEarned += sum.earned;
       tilePaid += sum.paid;
     }
@@ -255,10 +262,11 @@ export function shapeTeam(raw, plan, today = todayInNewYork(), opts = {}) {
     if (managerRows.some((r) => r.company === 'Staffing')) teamHasStaffing = true;
     const promise = managerPromise(plan?.manager ?? 0, teamHasStaffing && staffing ? staffing.manager : 0);
     if (promise || managerRows.length > 0) {
-      const mp = managerPay(managerRows, nameByEmail);
+      const mp = managerPay(managerRows, nameByEmail, refusedRows(rawManager, 'Manager'));
       let sentence;
       if (mp.lines.length) {
         sentence = `You've earned ${dollars(mp.earned)} from your team's signed offices. Paid ${dollars(mp.paid)}. Awaiting payment ${dollars(mp.waiting)}.`;
+        if ('reviewText' in mp) sentence += ` ${mp.reviewText}`;
       } else {
         sentence = "You've earned $0 from your team's signed offices so far.";
         if (promise) sentence += ` ${promise}`;

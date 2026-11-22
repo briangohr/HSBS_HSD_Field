@@ -308,6 +308,69 @@ Run by Claude in the thread "Turn on real pay in production", TEST people only.
 - Undo: set `REP_PAY_ENABLED` to `false` (the app reads only exactly `true`), then redeploy
   production.
 
+## P7: schema 2 award records (TSM pay plan v3.3, Tasks 2 and 3)
+
+Plan: project files `tsm-pay-plan/2026-11-21_TSM_Pay_Plan.md` v3.3, "The award record,
+schema 2". **Status 11/22: the site reads both schemas (this PR). Nothing live has
+changed:** no column added, no row backfilled, HSBS 10, 10D and 1F unchanged. Each live
+step below is recorded here with its ET time and undo when it runs.
+
+**Columns (Task 2 Step 1).** Added to SPIFF Ledger, all optional at first so schema 1
+writes keep working. Back up first: export the list template.
+
+| Column | Type | Value |
+|---|---|---|
+| Schema Version | Number | `2`; blank means 1 |
+| Record Type | Choice | `Award` or `Adjustment` |
+| Adjustment ID | Text, indexed | Adjustment only: `<Parent Award Key>\|Adj\|<guid()>`, written once |
+| Parent Award Key | Text, indexed | Adjustment only: the Award Key it changes |
+| Adjustment Reason | Text | Adjustment only: one line, shown on the money line |
+| Plan Version | Text | `<Promotion>\|<Company>\|<Approved on>` from the promo file |
+| Currency | Text | `USD` |
+| Eligibility | Choice | `Eligible`, `Ineligible` or `Held` |
+| Eligibility Reason, Eligibility Checked On, Ruleset Version | Text, Date, Text | Set by HSBS 10 on every run that touches the row. Ruleset today `F4-2026-11-21` |
+| Source | Choice | `HSBS 10` or `Approved proposal` |
+
+An adjustment's Amount is signed and never 0. An award stays 1 to 1000.
+
+**Backfill (Task 2 Step 2).** Once, every existing row: Schema Version 1, Record Type
+`Award`, Currency `USD`, Plan Version `Field launch|<Company>|2026-11-21` (a staffing row
+written after the multi-office build of 11/22 reads `2026-11-22`), Source `HSBS 10`,
+Eligibility `Ineligible` with the Void Reason on a Void row, else `Eligible`, Ruleset Version
+`F4-2026-11-21`. Record the row count before and after; they must be equal.
+
+**Writer (Task 2 Step 3).** HSBS 10 writes schema 2 on every new row and sets Eligibility
+on every run that touches a row. Adjustments come only from HSBS 10 (an approved proposal,
+Task 5) or Brian's correction request (Task 8), never typed into the list. Order is fixed:
+the site reading both schemas deploys first, then 1F sends the new fields, then HSBS 10
+writes schema 2.
+
+**Ledger rules (Task 2 Step 4, and the site in `src/lib/pay-ledger.mjs`).** A row can
+pass alone and still fail here. 10D runs them over the whole ledger every morning, lists
+each failure as a new X line with the Award Key or Adjustment ID, and sets the row `Held`.
+
+| Rule | Fails when |
+|---|---|
+| L1 | Two awards share an Award Key, or two adjustments share an Adjustment ID |
+| L2 | An adjustment's Parent Award Key names no award, or one with another Payee Email, Payee Role, Payer or Test |
+| L3 | An award plus its adjustments is below 0 |
+| L4 | An adjustment sits on a Void award |
+| L5 | One Case ID, Event and Payee Role has two schema 2 awards (a hand-made key) |
+
+**What the site shows (Task 3).** Only an `Eligible` row that passes every rule counts as
+money. A schema 1 row reads exactly as before: an Award, `Eligible` unless Void, never
+flagged for the missing columns, and L5 skips it. A `Held` row, a rule break, a schema 2 row
+with a blank or unknown Eligibility, or `Ineligible` on a row that is not Void, is held out:
+its line reads "Needs review", the screen says "N amounts need review." and the Earned tile
+reads "Earned so far (incomplete)". A row with a Payee Role other than Rep or Manager, or a
+schema 2 row that fails its own checks, is dropped and counted the same way. An adjustment
+line reads `<date>. <office>. Adjustment: <reason>. <+$n or -$n>.` With every row whole, the
+screens answer exactly as on main.
+
+**Offline model (Task 2 Step 5).** Waits on the `pay-ledger/` generator (`test_10.py`,
+`test_10d.py`), which is not in the project files this thread can reach. The site's own
+rules are tested in `src/lib/pay-ledger.test.mjs`.
+
 ## Brian's decisions this sheet rests on (11/13)
 
 **Gate G0: this sheet is not built until PR #121 is merged to `main`.** Decisions 75, 76,

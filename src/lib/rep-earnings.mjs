@@ -38,6 +38,7 @@ import {
   usableStaffingPlan,
 } from './rep-pay-plan.mjs';
 import { FEED_MAX, repFeed } from './rep-track.mjs';
+import { balance, checkLedger, needsReview, reviewText, signedDollars } from './pay-ledger.mjs';
 
 /** The approved v3 plan, for callers (and tests) that don't pass one. */
 const V3_PLAN = /** @type {import('./rep-pay-plan.mjs').PayPlan} */ (parsePayPlan(DEFAULT_PAY_PLAN));
@@ -170,16 +171,42 @@ export const dollars = (n) => `$${Math.round(n).toLocaleString('en-US')}`;
 export function sanitizeLedgerRow(raw, payeeRole = 'Rep') {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const r = /** @type {Record<string, unknown>} */ (raw);
+  // Schema 2 (TSM pay plan v3.3): a row says so. Anything else is schema 1, today's row,
+  // and reads exactly as before: an Award, Eligible unless Void.
+  const schemaVersion = r.schemaVersion === 2 || s(r.schemaVersion, 4) === '2' ? 2 : 1;
+  const recordType = schemaVersion === 2 ? s(r.recordType, 20) : 'Award';
+  if (recordType !== 'Award' && recordType !== 'Adjustment') return null;
+  const adjustment = recordType === 'Adjustment';
   const referralId = s(r.referralId, 80);
-  const event = s(r.event, 20);
+  // An adjustment changes its parent award's amount; it has no event of its own.
+  const event = adjustment ? '' : s(r.event, 20);
   const status = s(r.status, 20);
   const amount = typeof r.amount === 'number' ? r.amount : Number(s(r.amount, 12));
   const earnedOn = day(r.earnedOn);
-  if (!referralId || !EVENTS.includes(event) || !STATUSES.includes(status)) return null;
-  if (!Number.isInteger(amount) || amount <= 0 || amount > MAX_AMOUNT || !earnedOn) return null;
+  if (!referralId || (!adjustment && !EVENTS.includes(event)) || !STATUSES.includes(status)) return null;
+  if (!Number.isInteger(amount) || Math.abs(amount) > MAX_AMOUNT || !earnedOn) return null;
+  // An award is 1 to 1000. An adjustment is signed and never 0.
+  if (adjustment ? amount === 0 : amount <= 0) return null;
   if (payeeRole === 'Manager') {
-    if (s(r.payeeRole, 20) !== 'Manager' || event !== 'Signed') return null;
+    if (s(r.payeeRole, 20) !== 'Manager' || (!adjustment && event !== 'Signed')) return null;
   } else if (r.payeeRole != null && s(r.payeeRole, 20) !== 'Rep') return null;
+  const awardKey = s(r.awardKey, 200);
+  const adjustmentId = adjustment ? s(r.adjustmentId, 240) : '';
+  const parentAwardKey = adjustment ? s(r.parentAwardKey, 200) : '';
+  // Schema 2 needs its own keys; a row without them can't be checked, so it is refused.
+  if (schemaVersion === 2 && (adjustment ? !adjustmentId || !parentAwardKey : !awardKey)) return null;
+  const elig = s(r.eligibility, 20);
+  // Schema 1 has no Eligibility: Void is Ineligible, the rest Eligible. Schema 2 with a
+  // blank or unknown value, or Ineligible on a row that is not Void, is Held, never
+  // counted (fail closed).
+  const eligibility =
+    schemaVersion === 1
+      ? status === 'Void'
+        ? 'Ineligible'
+        : 'Eligible'
+      : elig === 'Eligible' || elig === 'Held' || (elig === 'Ineligible' && status === 'Void')
+        ? elig
+        : 'Held';
   const paidOn = day(r.paidOn);
   if (status === 'Paid' && !paidOn) return null;
   // One period, added where the sentence is built: strip any the flow sent.
@@ -200,6 +227,14 @@ export function sanitizeLedgerRow(raw, payeeRole = 'Rep') {
     paidOn: status === 'Paid' ? paidOn : '',
     voidReason: status === 'Void' ? voidReason || 'This award did not qualify' : '',
     disputed: status === 'Paid' && r.disputed === true,
+    schemaVersion,
+    recordType: /** @type {'Award' | 'Adjustment'} */ (recordType),
+    awardKey,
+    adjustmentId,
+    parentAwardKey,
+    // One period, added where the line is built.
+    adjustmentReason: adjustment ? s(r.adjustmentReason, 200).replace(/[.\s]+$/, '') || 'Correction' : '',
+    eligibility: /** @type {'Eligible' | 'Ineligible' | 'Held'} */ (eligibility),
   };
   if (payeeRole !== 'Manager') return row;
   return { ...row, repEmail: s(r.repEmail, 320).toLowerCase() };
@@ -214,6 +249,27 @@ export function sanitizeLedger(list, payeeRole = 'Rep') {
   // (listEarnings refuses a body over 500 KB), so every row it sends is counted.
   // Pass the role explicitly: map's index must never land in the payeeRole slot.
   return (Array.isArray(list) ? list : []).map((r) => sanitizeLedgerRow(r, payeeRole)).filter(Boolean);
+}
+
+/**
+ * How many rows of a flow answer were refused for a reason the screen must not hide:
+ * a Payee Role that is neither Rep nor Manager (plan v3.3: "Any other role is dropped and
+ * counted"), or a schema 2 row that fails its checks. Each is money the screen can't
+ * show, so it counts in "needs review". A schema 1 row refused as today (a Manager row in
+ * a rep's list, a bad date) stays silent, so today's rows read exactly as on main.
+ * @param {unknown} list the raw rows
+ * @param {'Rep' | 'Manager'} [payeeRole]
+ */
+export function refusedRows(list, payeeRole = 'Rep') {
+  let n = 0;
+  for (const raw of Array.isArray(list) ? list : []) {
+    if (sanitizeLedgerRow(raw, payeeRole)) continue;
+    const r = raw && typeof raw === 'object' ? /** @type {Record<string, unknown>} */ (raw) : {};
+    const role = r.payeeRole == null ? '' : s(r.payeeRole, 20);
+    const v2 = r.schemaVersion === 2 || s(r.schemaVersion, 4) === '2';
+    if (v2 || (role && role !== 'Rep' && role !== 'Manager')) n += 1;
+  }
+  return n;
 }
 
 /**
@@ -234,6 +290,7 @@ function whatOf(row) {
 const DISPUTED = 'Disputed';
 
 function statusWords(row) {
+  if (needsReview(row)) return 'Needs review';
   if (row.status === 'Paid') return row.disputed ? `Paid on ${shortDate(row.paidOn)}. ${DISPUTED}` : `Paid on ${shortDate(row.paidOn)}`;
   if (row.status === 'Waiting') return 'Earned, awaiting payment';
   if (row.status === 'Pending review') return 'Pending review';
@@ -284,13 +341,29 @@ export function earningsFooter(keys) {
  */
 function earningsLine(r) {
   const office = r.practiceName || 'Office';
+  if (r.recordType === 'Adjustment') {
+    // Plan v3.3 Task 3: "<date>. <office>. Adjustment: <reason>. <+$n or -$n>."
+    const company = companyName(r.company);
+    const amt = signedDollars(r.amount);
+    const words = r.status === 'Waiting' && !needsReview(r) ? 'Awaiting payment' : statusWords(r);
+    return {
+      referralId: r.referralId,
+      on: r.earnedOn,
+      label: `${shortDate(r.earnedOn)}. ${office}. Adjustment: ${r.adjustmentReason}. ${amt}. ${words}.`,
+      office,
+      amount: amt,
+      company,
+      what: `Adjustment: ${r.adjustmentReason}`,
+      status: words,
+    };
+  }
   const isVoid = r.status === 'Void';
   // A Void line names the company alone, as board 5a draws it: it pays nothing, so no type.
   const company = isVoid ? companyName(r.company) : companyText(r);
   const what = whatOf(r);
   // My Earnings says a counted row is Confirmed: the partner marked the lead, so the ledger
   // has the award (Brian 11/22). My Team keeps its own words.
-  const words = r.status === 'Waiting' ? CONFIRMED_WAITING : statusWords(r);
+  const words = r.status === 'Waiting' && !needsReview(r) ? CONFIRMED_WAITING : statusWords(r);
   return {
     referralId: r.referralId,
     on: r.earnedOn,
@@ -348,18 +421,14 @@ function pendingLine(ref, facts, plans) {
  *   with no plan to promise from (REP_PAY_PLAN bad). The totals and lines still come from
  *   the rows; "Up to" is 0 and no line promises anything.
  */
-export function summarizeEarnings(rows, referrals, plan = V3_PLAN) {
+export function summarizeEarnings(rawRows, referrals, plan = V3_PLAN, dropped = 0) {
   const plans = plansOf(plan);
   const hfPlan = plans.healthFirst;
-  let waiting = 0;
-  let paid = 0;
-  let pendingReview = 0;
-  for (const r of rows) {
-    if (r.status === 'Waiting') waiting += r.amount;
-    else if (r.status === 'Paid') paid += r.amount;
-    else if (r.status === 'Pending review') pendingReview += r.amount;
-  }
-  const byRef = groupByReferral(rows);
+  // Ledger rules L1 to L5 (pay-ledger.mjs). Only Eligible rows that pass count.
+  const { rows, problems } = checkLedger(rawRows);
+  const bal = balance(rows, problems, dropped);
+  // Awards settle what a lead can still pay; an adjustment changes money, not the lead.
+  const byRef = groupByReferral(rows.filter((r) => r.recordType !== 'Adjustment'));
   /** Company keys on the rep's rows and referrals, for the footer and the empty line. */
   const keys = new Set(rows.map((r) => r.company));
   const reachedPays = hfPlan?.reached ?? 0;
@@ -418,7 +487,10 @@ export function summarizeEarnings(rows, referrals, plan = V3_PLAN) {
   const emptyText = emptyEarnings(hfPlan, keys.has(STAFFING) ? plans.staffing : null);
   const footer = earningsFooter(keys);
   const pendingLines = pending.sort((a, b) => (a.on < b.on ? 1 : a.on > b.on ? -1 : 0));
-  return { earned: waiting + paid, waiting, paid, pendingReview, upTo, upToText, emptyText, footer, lines, pendingLines };
+  const out = { earned: bal.earned, waiting: bal.waiting, paid: bal.paid, pendingReview: bal.pendingReview, upTo, upToText, emptyText, footer, lines, pendingLines };
+  // Only when something is held, so a ledger with nothing to review answers as on main.
+  if (!bal.complete) Object.assign(out, { needsReview: bal.needsReview, needsReviewCount: bal.needsReviewCount, complete: false, reviewText: reviewText(bal.needsReviewCount) });
+  return out;
 }
 
 /**
@@ -429,26 +501,26 @@ export function summarizeEarnings(rows, referrals, plan = V3_PLAN) {
  * @param {ReturnType<typeof sanitizeLedger>} rows
  * @param {Map<string, string>} nameByEmail signed-up team member email (lowercase) to name, from the caller's Active Team Roster rows (D18)
  */
-export function managerPay(rows, nameByEmail) {
-  let waiting = 0;
-  let paid = 0;
-  let pendingReview = 0;
-  for (const r of rows) {
-    if (r.status === 'Waiting') waiting += r.amount;
-    else if (r.status === 'Paid') paid += r.amount;
-    else if (r.status === 'Pending review') pendingReview += r.amount;
-  }
+export function managerPay(rawRows, nameByEmail, dropped = 0) {
+  const { rows, problems } = checkLedger(rawRows);
+  const bal = balance(rows, problems, dropped);
+  const { waiting, paid, pendingReview } = bal;
   const nameOf = (email) => (nameByEmail instanceof Map && email ? nameByEmail.get(email) : '') || 'A former team member';
   const lines = [...rows]
     .sort((a, b) => (a.earnedOn < b.earnedOn ? 1 : a.earnedOn > b.earnedOn ? -1 : 0))
     .map((r) => {
       const co = companyName(r.company);
+      const who = nameOf(/** @type {any} */ (r).repEmail);
+      if (r.recordType === 'Adjustment')
+        return { on: r.earnedOn, label: `${shortDate(r.earnedOn)}. ${r.practiceName || 'Office'}. Adjustment: ${r.adjustmentReason}. ${who}. ${signedDollars(r.amount)}. ${statusWords(r)}.` };
       return {
         on: r.earnedOn,
-        label: `${shortDate(r.earnedOn)}. ${r.practiceName || 'Office'}. ${co ? `${co}, signed` : 'Signed'}. ${nameOf(/** @type {any} */ (r).repEmail)}. ${dollars(r.amount)}. ${statusWords(r)}.`,
+        label: `${shortDate(r.earnedOn)}. ${r.practiceName || 'Office'}. ${co ? `${co}, signed` : 'Signed'}. ${who}. ${dollars(r.amount)}. ${statusWords(r)}.`,
       };
     });
-  return { earned: waiting + paid, waiting, paid, pendingReview, lines };
+  const out = { earned: bal.earned, waiting, paid, pendingReview, lines };
+  if (!bal.complete) Object.assign(out, { needsReviewCount: bal.needsReviewCount, complete: false, reviewText: reviewText(bal.needsReviewCount) });
+  return out;
 }
 
 /** @param {ReturnType<typeof sanitizeLedger>} rows */
@@ -474,7 +546,15 @@ function groupByReferral(rows) {
  * @param {PayPlan | Plans | null} [plan] null: no promise, earned lines only
  * @param {ReturnType<typeof referralFacts>} [facts] from the raw list row (referralFacts)
  */
-export function moneyLine(referral, rows, plan = V3_PLAN, facts = referralFacts(referral)) {
+export function moneyLine(referral, allRows, plan = V3_PLAN, facts = referralFacts(referral)) {
+  // A row held for review (Held, or a ledger rule break) is never in this card's money;
+  // the card says how much is held instead.
+  const heldAmt = allRows.filter(needsReview).reduce((n, r) => n + Math.abs(r.amount), 0);
+  const rows = allRows.filter((r) => !needsReview(r));
+  if (heldAmt) {
+    const rest = moneyLine(referral, rows, plan, facts);
+    return `${rest ? `${rest} ` : ''}${dollars(heldAmt)} needs review.`;
+  }
   const plans = plansOf(plan);
   const state = stateOf(referral);
   const partner = companyName(facts.company) || HEALTHFIRST;
@@ -540,6 +620,8 @@ export function mergeMoneyFeed(feed, rows) {
   const extra = [];
   for (const r of ordered) {
     if (r.status !== 'Waiting' && r.status !== 'Paid') continue;
+    // An adjustment is not a partner event, and a held row is not money yet.
+    if (r.recordType === 'Adjustment' || needsReview(r)) continue;
     const wants = r.event === 'Signed' ? ['signed'] : ['reached', 'status'];
     let at = -1;
     let took = '';
@@ -566,7 +648,7 @@ export function mergeMoneyFeed(feed, rows) {
     item.label = `${item.label}${/[.!?]$/.test(item.label) ? '' : '.'} You earned ${dollars(item.earned)}.`;
   }
   const paidByDay = new Map();
-  for (const r of rows) if (r.status === 'Paid') paidByDay.set(r.paidOn, (paidByDay.get(r.paidOn) ?? 0) + r.amount);
+  for (const r of rows) if (r.status === 'Paid' && !needsReview(r)) paidByDay.set(r.paidOn, (paidByDay.get(r.paidOn) ?? 0) + r.amount);
   for (const [on, amt] of paidByDay) items.push({ on, label: `${shortDate(on)}. Paid ${dollars(amt)}.`, referralId: '', kinds: ['money'], earned: 0 });
   items.sort((a, b) => (a.on < b.on ? 1 : a.on > b.on ? -1 : 0));
   return items.slice(0, FEED_MAX).map(({ earned, ...item }) => item);
@@ -579,7 +661,8 @@ export function mergeMoneyFeed(feed, rows) {
  * @param {string} [today] YYYY-MM-DD, Eastern
  * @param {PayPlan | Plans | null} [plan] null: no promise, earned lines only
  */
-export function moneyForReferrals(referrals, rows, today = todayInNewYork(), plan = V3_PLAN) {
+export function moneyForReferrals(referrals, rawRows, today = todayInNewYork(), plan = V3_PLAN) {
+  const { rows } = checkLedger(rawRows);
   const byRef = groupByReferral(rows);
   /** @type {Record<string, string>} */
   const lines = {};

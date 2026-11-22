@@ -340,7 +340,15 @@ the same office sends it.
 200 `{ "rows": [ ... ] }`: the person's own SPIFF Ledger rows, Payee Role `Rep`. The site
 reads `referralId`, `practiceName`, `company`, `practiceType`, `event` (`Reached` or
 `Signed`), `amount`, `status` (`Waiting`, `Paid`, `Pending review`, `Void`), `earnedOn`,
-`paidOn`, `voidReason`, `disputed`, `payeeRole`. `/api/earnings` answers 404 while
+`paidOn`, `voidReason`, `disputed`, `payeeRole`, and the schema 2 fields once 1F sends
+them (TSM pay plan v3.3, pay sheet P7): `schemaVersion` (`2`; absent or anything else is
+schema 1, read exactly as before), `recordType` (`Award` or `Adjustment`), `awardKey`,
+`adjustmentId`, `parentAwardKey`, `adjustmentReason`, `eligibility` (`Eligible`,
+`Ineligible`, `Held`). A schema 2 adjustment has no `event` and a signed, non-zero `amount`.
+Only an `Eligible` row that passes the ledger rules L1 to L5 counts; any other is held and
+named ("N amounts need review."), never counted. A row whose `payeeRole` is not `Rep` or
+`Manager`, or a schema 2 row that fails its checks, is held the same way. The `team`
+answer's `rows` and `managerRows` take the same fields. `/api/earnings` answers 404 while
 `REP_PAY_ENABLED` is off. The site waits 20 s. More than 5,000 rows is a failed read
 ("Your earnings did not load."), never earnings cut short. 1F's `Get_ledger_rep` needs Top
 Count 5,000 and Pagination on with a threshold of 5,001, for the reason given under list
