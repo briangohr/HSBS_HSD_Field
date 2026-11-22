@@ -5,7 +5,7 @@
 // Contract: docs/field-flow-contract.md.
 //
 // Money words (D11): Earned = Waiting + Paid. On screen (Brian 11/21) the tiles read
-// Total earned, Awaiting payment and Paid, and a Waiting row reads "awaiting payment". Pending review (an auto-reached award
+// Total earned, Awaiting payment and Paid, and a Waiting row reads "Confirmed, awaiting payment" (Brian 11/22; an open lead with no row reads "Pending."). Pending review (an auto-reached award
 // Brian hasn't cleared, D10) and Void are never counted. A Void row always shows its
 // reason. A Paid row stays paid (D3).
 //
@@ -288,7 +288,9 @@ function earningsLine(r) {
   // A Void line names the company alone, as board 5a draws it: it pays nothing, so no type.
   const company = isVoid ? companyName(r.company) : companyText(r);
   const what = whatOf(r);
-  const words = statusWords(r);
+  // My Earnings says a counted row is Confirmed: the partner marked the lead, so the ledger
+  // has the award (Brian 11/22). My Team keeps its own words.
+  const words = r.status === 'Waiting' ? CONFIRMED_WAITING : statusWords(r);
   return {
     referralId: r.referralId,
     on: r.earnedOn,
@@ -305,8 +307,41 @@ function earningsLine(r) {
   };
 }
 
+/** A rep's Waiting row on My Earnings: the partner confirmed the lead, payment to come. */
+export const CONFIRMED_WAITING = 'Confirmed, awaiting payment';
+
+/**
+ * One Pending line on My Earnings (Brian 11/22): an open lead the rep sent that has no
+ * ledger row yet, so the partner has not confirmed it. It reads the same referral list
+ * Track draws from (no new read), shows no amount, since nothing is earned, and its status
+ * is the promise Track's card already words ("$100 when HealthFirst confirms the lead
+ * qualifies."), after "Pending.". With no plan to word it, it says who it waits on.
+ * @param {NonNullable<ReturnType<typeof sanitizeReferral>>} ref
+ * @param {ReturnType<typeof referralFacts>} facts
+ * @param {Plans} plans
+ */
+function pendingLine(ref, facts, plans) {
+  const office = ref.practiceName || ref.doctorName || 'Office';
+  const company = companyName(facts.company);
+  const promise = facts.company === STAFFING ? staffingNotYetLine(plans.staffing, facts) : notYetLine(plans.healthFirst, facts);
+  const status = `Pending. ${promise || `Waiting on ${company} to confirm the lead qualifies.`}`;
+  const sent = shortDate(ref.sentOn);
+  return {
+    referralId: ref.id,
+    on: ref.sentOn,
+    label: `${sent ? `Sent ${sent}. ` : ''}${office}. ${company}. ${status}`,
+    office,
+    amount: '',
+    company,
+    what: '',
+    status,
+  };
+}
+
 /**
  * Totals and lines for My Earnings, plus the Earned tile.
+ * `pendingLines` are the rep's open HealthFirst and Direct Dental leads with no ledger row
+ * yet, newest sent first (pendingLine). They never change a total.
  * @param {ReturnType<typeof sanitizeLedger>} rows
  * @param {unknown} referrals raw 1F list rows, for "Up to $X more"
  * @param {PayPlan | Plans | null} [plan] the HealthFirst plan, or both plans. null: pay on
@@ -331,6 +366,7 @@ export function summarizeEarnings(rows, referrals, plan = V3_PLAN) {
   const signedPays = hfPlan?.signed ?? 0;
   let upHealthFirst = 0;
   let upStaffing = 0;
+  const pending = [];
   for (const raw of Array.isArray(referrals) ? referrals : []) {
     const ref = sanitizeReferral(raw);
     if (!ref) continue;
@@ -341,6 +377,10 @@ export function summarizeEarnings(rows, referrals, plan = V3_PLAN) {
     // status text says, and can't add to "Up to".
     if (state.closed || state.signed || facts.qualified === 'No') continue;
     const mine = byRef.get(ref.id) ?? [];
+    // Pending: an open HealthFirst or Direct Dental lead with no ledger row of any status.
+    // A row of any status already has its own line (Confirmed, Paid, Pending review or Not
+    // paid), so a lead never shows twice.
+    if (!mine.length && (facts.company === HEALTHFIRST || facts.company === STAFFING)) pending.push(pendingLine(ref, facts, plans));
     // Any Signed row, void or not, settles the sign award: it was earned or ruled out.
     if (mine.some((r) => r.event === 'Signed')) continue;
     // Rows, all Void: a no-pay office (D12, D7). Its card says only "Not paid", so it
@@ -377,7 +417,8 @@ export function summarizeEarnings(rows, referrals, plan = V3_PLAN) {
   const upToText = upHealthFirst && upStaffing ? mixedUpToLine(upTo) : upHealthFirst ? upToLine(hfPlan, upTo) : upStaffing ? staffingUpToLine(upTo) : '';
   const emptyText = emptyEarnings(hfPlan, keys.has(STAFFING) ? plans.staffing : null);
   const footer = earningsFooter(keys);
-  return { earned: waiting + paid, waiting, paid, pendingReview, upTo, upToText, emptyText, footer, lines };
+  const pendingLines = pending.sort((a, b) => (a.on < b.on ? 1 : a.on > b.on ? -1 : 0));
+  return { earned: waiting + paid, waiting, paid, pendingReview, upTo, upToText, emptyText, footer, lines, pendingLines };
 }
 
 /**

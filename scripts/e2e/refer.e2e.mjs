@@ -1652,16 +1652,19 @@ try {
       const waiting = dollarsOf(await page.textContent('#rep-earnings [data-money=waiting]'));
       const paid = dollarsOf(await page.textContent('#rep-earnings [data-money=paid]'));
       const shown = await cards();
-      // The lines that count in Earned: Waiting ("Earned, awaiting payment") and Paid.
-      const lineSum = shown.filter((c) => c.status === 'Earned, awaiting payment' || /^Paid on /.test(c.status)).reduce((n, c) => n + dollarsOf(c.amount), 0);
+      // The lines that count in Earned: Waiting ("Confirmed, awaiting payment") and Paid.
+      const lineSum = shown.filter((c) => c.status === 'Confirmed, awaiting payment' || /^Paid on /.test(c.status)).reduce((n, c) => n + dollarsOf(c.amount), 0);
       const total = ledger(S5_ROWS);
       assert.equal(total, 500);
       assert.deepEqual([track, earned, waiting + paid, lineSum], [total, total, total, total], 'Track tile, My Earnings tile, Waiting plus Paid, the lines');
-      assert.equal(shown.length, S5_ROWS.length, 'one line per ledger row');
+      // One line per ledger row, then one Pending line per open lead with no row (Brian 11/22).
+      const pendingShown = shown.filter((c) => /^Pending\. /.test(c.status));
+      assert.equal(shown.length - pendingShown.length, S5_ROWS.length, 'one line per ledger row');
+      for (const c of pendingShown) assert.equal(c.amount, '', `a Pending line shows no amount: ${c.office}`);
       assert.equal(await page.textContent('#rep-earnings-foot'), "Earnings follow HealthFirst's and Direct Dental's updates.");
       // Board 5a words for the two not-qualified rows: no amount, the reason in the partner's name.
       assert.deepEqual(
-        shown.filter((c) => !c.amount).map((c) => [c.office, c.company, c.status]),
+        shown.filter((c) => !c.amount && !/^Pending\. /.test(c.status)).map((c) => [c.office, c.company, c.status]),
         [
           ['TEST Dental Seven', 'HealthFirst', 'Not paid: HealthFirst marked this lead as not qualified (no permission to contact).'],
           ['TEST Practice Four', 'Direct Dental', 'Not paid: Direct Dental marked this lead as not qualified (no permission to contact).'],
@@ -1679,7 +1682,7 @@ try {
       assert.deepEqual(shown.find((c) => c.office === 'TEST Dental Six'), { office: 'TEST Dental Six', amount: '$100', company: 'HealthFirst', what: 'HealthFirst reached the office', status: 'Paid on Nov 12. Disputed' });
       assert.equal(paid, 100);
       // A row with no Company reads as HealthFirst, the same as one that says so.
-      assert.deepEqual(shown.find((c) => c.office === 'TEST Dental One'), { office: 'TEST Dental One', amount: '$100', company: 'HealthFirst', what: 'HealthFirst reached the office', status: 'Earned, awaiting payment' });
+      assert.deepEqual(shown.find((c) => c.office === 'TEST Dental One'), { office: 'TEST Dental One', amount: '$100', company: 'HealthFirst', what: 'HealthFirst reached the office', status: 'Confirmed, awaiting payment' });
       const widths = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
       assert.ok(widths[0] <= widths[1], `no sideways scroll: ${widths}`);
     });
@@ -1690,7 +1693,7 @@ try {
         amount: '$100',
         company: 'Direct Dental, Private practice',
         what: 'Direct Dental reached the customer',
-        status: 'Earned, awaiting payment',
+        status: 'Confirmed, awaiting payment',
       });
     });
     await check('S5 done-when 3: a TEST group reached and qualified shows $200, on My Earnings and its lead screen', async () => {
@@ -1700,7 +1703,7 @@ try {
         amount: '$200',
         company: 'Direct Dental, Group',
         what: 'Direct Dental reached the customer',
-        status: 'Earned, awaiting payment',
+        status: 'Confirmed, awaiting payment',
       });
       await page.click('#rep-earnings-lines button >> text=TEST Group Two');
       await page.waitForSelector('#rep-lead:not([hidden])', { timeout: 10000 });
@@ -1719,7 +1722,12 @@ try {
       await page.click('#rep-lead-back');
       await page.click('[data-tab=earnings]');
       await page.waitForSelector('#rep-earnings-lines li', { timeout: 10000 });
-      assert.equal((await cards()).some((c) => c.office === 'TEST Dental Five'), false, 'no My Earnings line for it');
+      // Its My Earnings line is Pending, worded as Track's card, with no amount (Brian 11/22).
+      assert.deepEqual(
+        (await cards()).filter((c) => c.office === 'TEST Dental Five'),
+        [{ office: 'TEST Dental Five', amount: '', company: 'HealthFirst', what: '', status: 'Pending. $100 when HealthFirst confirms the lead qualifies.' }],
+        'one Pending line for it, no earned amount',
+      );
       // A meeting set proves contact: the same promise, never "earned" (Codex P1 on #132).
       await page.click('[data-tab=track]');
       await page.waitForSelector('.lead-row', { timeout: 10000 });

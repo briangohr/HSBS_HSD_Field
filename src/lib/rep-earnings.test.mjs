@@ -64,7 +64,7 @@ describe('totals (D11: Earned = Waiting + Paid)', () => {
   test('one line per row, newest first, status in words with the void reason', () => {
     const s = summarizeEarnings(rows, []);
     assert.deepEqual(s.lines.map((l) => l.referralId), ['R1', 'R2', 'R3', 'R1']);
-    assert.match(s.lines[0].label, /^Nov 14\. North Side Dental\. HealthFirst\. Office signed\. \$100\. Earned, awaiting payment\.$/);
+    assert.match(s.lines[0].label, /^Nov 14\. North Side Dental\. HealthFirst\. Office signed\. \$100\. Confirmed, awaiting payment\.$/);
     assert.match(s.lines[1].label, /Pending review\.$/);
     assert.match(s.lines[2].label, /Not paid: This office was referred to HealthFirst in the last 12 months\.$/);
     for (const l of s.lines) assert.equal(l.label.includes('..'), false, l.label);
