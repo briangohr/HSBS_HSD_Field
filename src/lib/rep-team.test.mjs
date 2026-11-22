@@ -156,7 +156,7 @@ describe('My Team shaping (slice 5, D4, D16, D18)', () => {
     const rep = shapeTeam(fixture(), V3, TODAY).team.find((m) => m.name === 'Test Rep');
     assert.equal(rep.counts, '3 referrals. 1 reached. 1 signed.');
     assert.equal(rep.head, 'Test Rep. AE. Joined Nov 2.');
-    assert.equal(rep.money, 'Earned $150. Paid $100.');
+    assert.equal(rep.money, 'Total earned $150. Paid $100.');
     assert.equal(rep.last, 'Last referral Nov 9.');
     assert.equal(rep.nudge, false);
   });
@@ -256,7 +256,7 @@ describe('My Team shaping (slice 5, D4, D16, D18)', () => {
       const sum = summarizeEarnings(sanitizeLedger(m.rows), m.referrals, plan);
       const rep = shapeTeam(raw, plan, TODAY).team[0];
       assert.deepEqual(rep.cards.map((c) => c.money), ['R2', 'R3', 'R1'].map((id) => own[id]));
-      assert.equal(rep.money, `Earned $${sum.earned}. Paid $${sum.paid}.`);
+      assert.equal(rep.money, `Total earned $${sum.earned}. Paid $${sum.paid}.`);
       const more = fixture({ managerRows: [...fixture().managerRows, mgrRow({ amount: 500 })] });
       assert.equal(shapeTeam(more, plan, TODAY).team[0].money, rep.money);
       assert.equal(shapeTeam(more, plan, TODAY).tiles.earned, shapeTeam(raw, plan, TODAY).tiles.earned);
@@ -266,10 +266,10 @@ describe('My Team shaping (slice 5, D4, D16, D18)', () => {
   test('own pay: sentence and lines with the rep name or a former member, and no note', () => {
     const { own } = shapeTeam(fixture(), V3, TODAY);
     assert.deepEqual(own, {
-      sentence: "You've earned $100 from your team's signed offices. Paid $50. Waiting $50.",
+      sentence: "You've earned $100 from your team's signed offices. Paid $50. Awaiting payment $50.",
       lines: [
         'Nov 15. North Side Dental. HealthFirst, signed. A former team member. $50. Paid on Nov 30.',
-        'Nov 14. North Side Dental. HealthFirst, signed. Test Rep. $50. Earned, waiting to be paid.',
+        'Nov 14. North Side Dental. HealthFirst, signed. Test Rep. $50. Earned, awaiting payment.',
       ],
     });
   });
@@ -286,7 +286,7 @@ describe('My Team shaping (slice 5, D4, D16, D18)', () => {
       ],
     });
     const { own } = shapeTeam(raw, V3, TODAY);
-    assert.equal(own.sentence, "You've earned $50 from your team's signed offices. Paid $50. Waiting $0.");
+    assert.equal(own.sentence, "You've earned $50 from your team's signed offices. Paid $50. Awaiting payment $0.");
     assert.deepEqual(own.lines, [
       'Nov 17. North Side Dental. HealthFirst, signed. Test Rep. $50. Not paid: this office was referred to HealthFirst in the last 12 months.',
       'Nov 16. North Side Dental. HealthFirst, signed. Test Rep. $50. Pending review.',
@@ -309,7 +309,7 @@ describe('My Team shaping (slice 5, D4, D16, D18)', () => {
     const { own } = shapeTeam(raw, V3, TODAY);
     assert.deepEqual(own.lines, ['Nov 12. North Side Dental. HealthFirst, signed. A former team member. $50. Paid on Nov 19.']);
     assert.equal(JSON.stringify(own).includes('Hidden Dental'), false);
-    assert.equal(own.sentence, "You've earned $50 from your team's signed offices. Paid $50. Waiting $0.");
+    assert.equal(own.sentence, "You've earned $50 from your team's signed offices. Paid $50. Awaiting payment $0.");
     // Only $0 rows for that rep: no lines, and the none-yet sentence.
     const onlyVoid = fixture({ managerRows: [raw.managerRows[0]] });
     assert.deepEqual(shapeTeam(onlyVoid, V3, TODAY).own.lines, []);
@@ -352,7 +352,7 @@ describe('My Team shaping (slice 5, D4, D16, D18)', () => {
       managerRows: [mgrRow({ referralId: 'R8', earnedOn: '2026-11-18', status: 'Void', voidReason: 'no manager on the team roster when the office signed' })],
     });
     const { own } = shapeTeam(raw, DRAFT, TODAY);
-    assert.equal(own.sentence, "You've earned $0 from your team's signed offices. Paid $0. Waiting $0.");
+    assert.equal(own.sentence, "You've earned $0 from your team's signed offices. Paid $0. Awaiting payment $0.");
     assert.deepEqual(own.lines, ['Nov 18. North Side Dental. HealthFirst, signed. Test Rep. $50. Not paid: no manager on the team roster when the office signed.']);
   });
 

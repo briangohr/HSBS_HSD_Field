@@ -18,6 +18,8 @@ import {
   payPlanText,
   receiptMoney,
   signTail,
+  staffingNotYetLine,
+  staffingUpTo,
   upToLine,
   NO_PLAN_TERMS,
   TERMS_CHANGED,
@@ -152,6 +154,39 @@ describe('Staffing plan, REP_PAY_PLAN_STAFFING', () => {
     ]) {
       assert.equal(parseStaffingPayPlan(bad), null, String(bad));
     }
+  });
+});
+
+describe('the Dec 4 plans: HealthFirst and Direct Dental each pay $100 per qualified lead (Brian 11/21, pay sheet R11)', () => {
+  const HF = parsePayPlan('reached:100,manager:50');
+  const FLAT = parseStaffingPayPlan('reached_private:100,reached_group:100,manager:50');
+
+  test('both values parse as set in Vercel', () => {
+    assert.deepEqual(HF, { reached: 100, signed: 0, manager: 50 });
+    assert.deepEqual(FLAT, { reachedPrivate: 100, reachedGroup: 100, manager: 50 });
+  });
+
+  test('a flat staffing plan names one amount and no practice type, whatever the case says', () => {
+    const line = '$100 when Direct Dental reaches the customer and confirms the lead qualifies.';
+    for (const practiceType of ['', 'Group', 'Private practice']) assert.equal(staffingNotYetLine(FLAT, { practiceType }), line, practiceType);
+    assert.equal(staffingNotYetLine(FLAT, { reached: true, practiceType: 'Group' }), '$100 when Direct Dental confirms the lead qualifies.');
+    assert.equal(staffingUpTo(FLAT, 'Group'), 100);
+    assert.equal(staffingUpTo(FLAT, 'Private practice'), 100);
+  });
+
+  test('the empty My Earnings line reads one amount per company', () => {
+    assert.equal(
+      emptyEarnings(HF, FLAT),
+      "$0 so far. Here's how you earn: $100 when HealthFirst reaches an office you sent and confirms the lead qualifies. $100 when Direct Dental reaches the customer and confirms the lead qualifies.",
+    );
+  });
+
+  test('a plan that still pays by type keeps naming the type', () => {
+    assert.equal(
+      staffingNotYetLine(STAFFING, {}),
+      '$100 for a private practice, or $200 for a group, when Direct Dental reaches the customer and confirms the lead qualifies.',
+    );
+    assert.equal(staffingNotYetLine(STAFFING, { practiceType: 'Group' }), '$200 for a group when Direct Dental reaches the customer and confirms the lead qualifies.');
   });
 });
 
@@ -328,8 +363,8 @@ describe('a bad REP_PAY_PLAN promises nothing, and ledger amounts still show', (
     };
     const team = /** @type {any} */ (shapeTeam(raw, null, '2026-11-20', { pay: true }));
     assert.deepEqual(team.tiles, { referrals: 2, signed: 0, earned: '$150', paid: '$50' });
-    assert.equal(team.team[0].money, 'Earned $150. Paid $50.');
-    assert.equal(team.own.sentence, "You've earned $50 from your team's signed offices. Paid $0. Waiting $50.");
+    assert.equal(team.team[0].money, 'Total earned $150. Paid $50.');
+    assert.equal(team.own.sentence, "You've earned $50 from your team's signed offices. Paid $0. Awaiting payment $50.");
     // No manager rows yet, no plan: nothing to promise, so no own block.
     const none = /** @type {any} */ (shapeTeam({ ...raw, managerRows: [] }, null, '2026-11-20', { pay: true }));
     assert.equal('own' in none, false);

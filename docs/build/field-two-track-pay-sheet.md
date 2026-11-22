@@ -334,8 +334,9 @@ not hold since 11/13: 3F's Test_mode reads the Referrals row's Test (decision 97
   rows included, has a whole-dollar amount from 1 to 1000. The site adds the period after a
   Void Reason, so a Void Reason never ends in one.
 - **Plan keys** (`src/lib/rep-pay-plan.mjs`): `REP_PAY_PLAN` is the HealthFirst plan,
-  set in Vercel to `reached:100,manager:50`; `REP_PAY_PLAN_STAFFING` is unset, and takes
-  `reached_private:100,reached_group:100,manager:50` (R11), all three parts required. The
+  set in Vercel to `reached:100,manager:50`; `REP_PAY_PLAN_STAFFING` is set (11/21/2026
+  9:35 PM ET, P4) to `reached_private:100,reached_group:100,manager:50` (R11), all three
+  parts required. With equal amounts the site names one amount and no practice type. The
   site's plan words promises only. HSBS 10 reads its own copy of the amounts from Ledger
   Settings (R7), and Brian changes both together from the promo file.
 - **Sheets F1 and F2** (on `main`) add Practice Type, Award Practice Type, Qualified, Not

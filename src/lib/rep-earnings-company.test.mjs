@@ -102,7 +102,7 @@ describe('S5 done-when 2 and 3: a TEST staffing case reached and qualified shows
     const g = s.lines.find((l) => l.referralId === 'G');
     assert.deepEqual(
       { office: p?.office, amount: p?.amount, company: p?.company, what: p?.what, status: p?.status },
-      { office: 'TEST P', amount: '$100', company: 'Direct Dental, Private practice', what: 'Direct Dental reached the customer', status: 'Earned, waiting to be paid' },
+      { office: 'TEST P', amount: '$100', company: 'Direct Dental, Private practice', what: 'Direct Dental reached the customer', status: 'Earned, awaiting payment' },
     );
     assert.deepEqual(
       { amount: g?.amount, company: g?.company, what: g?.what },
@@ -245,7 +245,7 @@ describe('S5 done-when 1: Earned, My Earnings and the ledger total agree to the 
     assert.equal(total, 500);
     assert.equal(view.summary.earned, total, 'the Earned tile (Track and My Earnings read the same summary)');
     assert.equal(view.summary.waiting + view.summary.paid, total, 'Earned = Waiting + Paid');
-    const counted = view.summary.lines.filter((l) => l.status === 'Earned, waiting to be paid' || /^Paid on /.test(l.status));
+    const counted = view.summary.lines.filter((l) => l.status === 'Earned, awaiting payment' || /^Paid on /.test(l.status));
     assert.equal(sum(counted.map((l) => usdNumber(l.amount))), total, 'the lines that count add up to Earned');
     assert.equal(view.summary.lines.length, raw.length, 'one line per ledger row, Void and Pending review included');
     for (const l of view.summary.lines.filter((x) => /^Not paid/.test(x.status))) {
@@ -281,19 +281,19 @@ describe('S5 done-when 1: Earned, My Earnings and the ledger total agree to the 
     );
     const total = ledgerTotal(raw) + ledgerTotal(other);
     assert.equal(usdNumber(team.tiles.earned), total, 'Team earned');
-    const byPerson = team.team.map((m) => usdNumber(/Earned (\$[\d,]+)/.exec(m.money)?.[1]));
+    const byPerson = team.team.map((m) => usdNumber(/Total earned (\$[\d,]+)/.exec(m.money)?.[1]));
     assert.equal(sum(byPerson), total, 'the people add up to the tile');
     for (const m of team.team) {
-      const earned = usdNumber(/Earned (\$[\d,]+)/.exec(m.money)?.[1]);
+      const earned = usdNumber(/Total earned (\$[\d,]+)/.exec(m.money)?.[1]);
       assert.equal(sum(m.awards.map((a) => usdNumber(a.amount))), earned, `${m.name}: the lines add up to the person`);
     }
     const one = team.team.find((m) => m.name === 'TEST Rep One');
-    assert.equal(one.money, 'Earned $500. Paid $300.');
+    assert.equal(one.money, 'Total earned $500. Paid $300.');
     assert.equal(usdNumber(team.tiles.paid), 300);
     assert.deepEqual(one.awards.find((a) => a.office === 'TEST S2'), { office: 'TEST S2', company: 'Direct Dental, Group', amount: '$200' });
     assert.deepEqual(one.awards.find((a) => a.office === 'TEST H1'), { office: 'TEST H1', company: 'HealthFirst', amount: '$100' });
     // The same rep's own My Earnings is the same number.
-    assert.equal(moneyView(refs, raw, HF, ST).summary.earned, usdNumber(/Earned (\$[\d,]+)/.exec(one.money)?.[1]));
+    assert.equal(moneyView(refs, raw, HF, ST).summary.earned, usdNumber(/Total earned (\$[\d,]+)/.exec(one.money)?.[1]));
   });
 });
 
@@ -305,8 +305,8 @@ describe('S5 done-when 5: a TEST staffing sign shows $50 for the manager', () =>
 
   test('the manager line names Direct Dental and "signed", and the $50 is the manager\'s earned', () => {
     const team = /** @type {any} */ (shapeTeam(raw, HF, TODAY, { pay: true, staffing: ST }));
-    assert.equal(team.own.sentence, "You've earned $50 from your team's signed offices. Paid $0. Waiting $50.");
-    assert.deepEqual(team.own.lines, ['Nov 16. TEST S1. Direct Dental, signed. TEST Rep. $50. Earned, waiting to be paid.']);
+    assert.equal(team.own.sentence, "You've earned $50 from your team's signed offices. Paid $0. Awaiting payment $50.");
+    assert.deepEqual(team.own.lines, ['Nov 16. TEST S1. Direct Dental, signed. TEST Rep. $50. Earned, awaiting payment.']);
     // The rep's $100 is the rep's; the manager's $50 never joins it.
     assert.equal(team.tiles.earned, '$100');
   });
@@ -374,7 +374,7 @@ describe('S5 review: what a Void line says, contact past the first call, a dispu
       assert.equal(l.label, `${l.office}. ${l.company}. ${l.status}`, 'the label is the shown parts, nothing more');
     }
     // A line that pays still reads in full.
-    assert.equal(summarizeEarnings(sanitizeLedger([row('P', { company: 'Staffing', practiceType: 'Group', amount: 200 })]), [], PLANS).lines[0].label, 'Nov 10. TEST P. Direct Dental, Group. Direct Dental reached the customer. $200. Earned, waiting to be paid.');
+    assert.equal(summarizeEarnings(sanitizeLedger([row('P', { company: 'Staffing', practiceType: 'Group', amount: 200 })]), [], PLANS).lines[0].label, 'Nov 10. TEST P. Direct Dental, Group. Direct Dental reached the customer. $200. Earned, awaiting payment.');
   });
 
   test('every status past first contact counts as reached for the promise, for both companies', () => {
@@ -426,9 +426,9 @@ describe('S5 review: what a Void line says, contact past the first call, a dispu
       )
     );
     assert.equal(team.tiles.paid, '$300');
-    assert.equal(team.team[0].money, 'Earned $300. Paid $300.');
+    assert.equal(team.team[0].money, 'Total earned $300. Paid $300.');
     assert.deepEqual(team.own.lines, ['Nov 16. TEST D. Direct Dental, signed. TEST Rep. $50. Paid on Nov 20. Disputed.']);
-    assert.equal(team.own.sentence, "You've earned $50 from your team's signed offices. Paid $50. Waiting $0.");
+    assert.equal(team.own.sentence, "You've earned $50 from your team's signed offices. Paid $50. Awaiting payment $0.");
   });
 });
 

@@ -75,7 +75,7 @@ describe('money under a closed-won plan', () => {
   test('a signed award is earned the same way under either plan', () => {
     const rows = sanitizeLedger([row({})]);
     const won = moneyForReferrals([ref({ signed: true })], rows, '2026-11-15', WON).lines.R1;
-    assert.equal(won, '$150 earned. $150 waiting to be paid.');
+    assert.equal(won, '$150 earned. $150 awaiting payment.');
     assert.equal(summarizeEarnings(rows, [], WON).earned, 150);
   });
 
@@ -157,7 +157,7 @@ describe('the draft plan, REP_PAY_PLAN=signed:150,manager:50 (Brian, 11/9)', () 
   test('the lead screen money line: "$150 if they sign." before the sign, "$150 earned." after it', () => {
     assert.equal(moneyForReferrals([ref({})], [], '2026-11-15', DRAFT).lines.R1, '$150 if they sign.');
     const signed = moneyForReferrals([ref({ signed: true })], sanitizeLedger([row({})]), '2026-11-15', DRAFT).lines.R1;
-    assert.equal(signed, '$150 earned. $150 waiting to be paid.');
+    assert.equal(signed, '$150 earned. $150 awaiting payment.');
   });
 
   test('"Up to" counts only the $150 sign award, for every open office, reached or not', () => {
