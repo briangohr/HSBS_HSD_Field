@@ -8,7 +8,15 @@ be in the HSBS-HSD-Field repo").
 How to read them:
 
 - `docs/field-flow-contract.md` is the site side and wins over anything here. When a sheet
-  and the contract disagree, stop and ask Brian.
+  and the contract disagree, follow the contract and fix the sheet in the same PR. Ask Brian
+  only when the gap changes what a real partner or rep receives or is paid.
+- Who does the live steps (Brian, 11/21/2026): where a sheet says Brian imports a package,
+  pastes a flow address, saves, turns a flow On or Off, runs it, fills a column or sets a
+  Vercel value, Claude now does that step itself (`CLAUDE.md`, Live changes). Brian still
+  signs in, gives the go for the first email a new flow sends to a real partner or rep,
+  types any new real recipient address, and approves deletes. Business rules such as "only
+  Brian sends a lead on" or "only Brian corrects a signed answer" are about who in the
+  business acts on a lead. They are unchanged.
 - The wording is field only. Where a live SharePoint list, column, flow or value still
   carries the other team's name (for example `PVA Roster`, `PVA Slug`, `PVA page`,
   `Update for PVA`, the site `HSBSPVAReferrals`), the real name is kept in code quotes so a

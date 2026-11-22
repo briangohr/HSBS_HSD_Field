@@ -5,8 +5,10 @@ flow packages and this repo. Field only. This sheet replaces pieces 1 and 2 of
 `docs/plans/partner-update-window.md` and keeps that plan's decided rules (O1 to O8,
 "How it works", T1 and T2). Where the two differ, this sheet wins.
 
-This repo never edits a flow, list or Vercel setting. Brian makes every live change. The
-build thread writes the code PR and the flow packages; Brian imports, turns on and fills in.
+The site never edits a flow, list or Vercel setting. Since 11/21/2026 Claude makes the live
+changes itself (`CLAUDE.md`, Live changes): the build thread writes the code PR and the flow
+packages, then imports, turns on and fills in. Brian signs in and gives the go for the first
+email to a real partner.
 
 ## Why
 
