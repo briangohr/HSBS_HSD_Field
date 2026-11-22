@@ -432,6 +432,13 @@ A save with no clear answer keeps its `submissionId` and the exact updates; the 
 lock and Save resends them. 7F tags each Status Log line `[s:<submissionId>]` and skips a
 case that already holds the tag, so a resend writes nothing twice.
 
+### Field Notify Outbox and HSBS 7N (no site change)
+
+The site never reads or writes the Field Notify Outbox list and never calls HSBS 7N. 7N is a
+scheduled flow that retries failed field notifications from that list (sheet PU, piece E).
+No request or answer in this contract changes. FT-2b (7F hand backs) and FT-2c (7G asks)
+will add Outbox writes inside those flows; each updates this note if `save` changes.
+
 ## What must stay true
 
 - The key (Referral Key or Partner Links Link Key) is a secret in the URL, and so is the

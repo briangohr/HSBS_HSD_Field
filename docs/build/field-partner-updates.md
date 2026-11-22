@@ -376,6 +376,62 @@ The reply resets the clock so the partner is not asked again for a lead they jus
 Track shows "Updated <date>". The partner still picks a status on the page for Track to
 show one.
 
+## E. Field Notify Outbox and HSBS 7N Field notify retry (new site, FT-2a)
+
+Built 11/21 to 11/22/2026 by Claude (fix thread FT-2). Field only. TEST only until Brian
+gives written OK for real retries.
+
+**Why.** A hand back email (7F) or a partner ask (7G) that fails to send was lost. The
+Outbox holds each notification so one flow can retry it.
+
+**List "Field Notify Outbox"** on `sites/HSBSField`. Columns: Title (shown as Notify Id,
+indexed, unique), NotifyKind (Hand back, Partner ask), CaseId, PartnerRow, MailTo, MailCc,
+MailSubject, MailBody, State (indexed, default Pending: Pending, Sending, Sent, Parked,
+Expired, Cleared), Tries (default 0), NextTry (indexed), LastError, SentOn, Expires, Test
+(default No), ClaimedOn. Partner Links gained a DateTime column LastAskSent.
+
+**Flow "HSBS 7N Field notify retry (new site)".** Recurrence every 30 minutes, 7:00 AM to
+9:30 PM ET, one run at a time. No HTTP trigger. Each run:
+
+1. Resets a row stuck in Sending for more than 15 minutes to Pending.
+2. Reads Pending rows that are due (NextTry blank or past) or past Expires, 50 per run.
+3. An expired row goes to Expired with no send. Otherwise it claims the row (Sending, with
+   IF-MATCH on its etag), sends the stored To, CC, Subject and Body unchanged, and marks it
+   Sent. A Partner ask that sends stamps that row's LastAskSent.
+4. A failed send adds a try and sets NextTry to now plus 30 minutes times tries. At 5 tries
+   the row is Parked. A Cleared row never sends.
+5. Brian gets one digest email listing each row parked or expired in the run, titled
+   `Field notify retry: <n> parked or expired` (`[TEST] ` first while `Test_only` is true).
+
+**TEST guard.** Compose `Test_only` is `true`. While it is, 7N reads only Test Yes rows. A
+Test Yes row may mail only Brian (To is Brian, or a value with no `@` as the TEST fault
+switch; CC blank or Brian). Any other address parks the row with no send, whatever
+`Test_only` says.
+
+**Still to build.** FT-2b: 7F writes an Outbox row before its hand back email. FT-2c: 7G
+writes one per partner ask (only after Monday 11/23's 8 AM ET run). Until then the Outbox
+holds TEST rows only.
+
+**Live change record (ET).**
+
+- 11/21, before the proof runs: list and LastAskSent column added; 7N v1, then v2, imported.
+- 11/21 11:45 and 11:46 PM: 7N v2 runs Succeeded on TEST rows 1 to 12. Proved: one send then
+  Sent with no resend; a fault backs off and the retry sends once fixed; 5 tries parks; a
+  Cleared row never sends; an expired row goes to Expired; a Partner ask stamps LastAskSent;
+  a stuck claim resets; a TEST row to anyone but Brian parks; a Test No row is untouched.
+- v2 never sent the digest: `if()` evaluates both branches, so `formatNumber(null)` failed and
+  the closing compose hid it. v3 wraps nullable values in `coalesce`.
+- 11/22 12:20 AM: v3 imported (Update) and turned On. TEST run 12:23 AM: row L parked at 5
+  tries and row M expired, but the run Failed and sent no digest. `empty()` on a Number column
+  (CaseId, PartnerRow) throws in Logic Apps, so the digest line was never added.
+- 11/22 12:30 AM: v4 imported and turned On. It tests those columns with `equals(x, null)`. The
+  model (`sim.py`) now fails on `empty()` of a number, so this cannot slip through again.
+- 11/22 12:31 AM: TEST run Succeeded. Rows L2 (Parked, 5 tries) and M2 (Expired); exactly one
+  email to Brian, `[TEST] Field notify retry: 2 parked or expired`. Test No row G untouched.
+
+**Undo.** Turn 7N Off. Nothing else reads the Outbox. Earlier definitions are in the project
+files under `partner-updates/ft2/rollback/` (v1, v2 and v3 as imported).
+
 ## What the site, 1F and 3F keep
 
 - 3F HealthFirst and 3F Staffing: no change. The site: no change (fact 1).

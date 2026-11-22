@@ -249,6 +249,29 @@ SPIFF Ledger has no validation formula.
 Total earned $900, Awaiting payment $900, Paid $0, Pending review $0: the same as the ledger
 sum above. The branch-only flag is deleted after this PR.
 
+## P5c record: pay on in production (11/21/2026)
+
+Run by Claude in the thread "Turn on real pay in production", TEST people only.
+
+- `REP_PAY_ENABLED` changes only what `/api/earnings`, `/api/team` and the Earnings screens
+  read and show (`repPayEnabled` in `src/lib/register-flow.mjs`). The site sends no mail, so
+  turning pay on emails nobody.
+- 11:21 PM ET: Vercel `hsbs-hsd-field` env `REP_PAY_ENABLED` = `true`, Production only.
+  Preview has no general copy, so pay stays off on previews.
+- 11:22 PM ET: production redeployed (commit 0024646), READY on `hsbs-hsd-field.vercel.app`.
+  Smoke: `/j` 302 to `/join?src=qr`, `/join` 200, TEST rep `/refer/<key>` 200.
+- TEST rep production `/api/earnings`: earned $900, awaiting $900, paid $0, pending review $0.
+  Matches the P5b reconcile.
+- Real reps read $0 earned, $0 awaiting, $0 paid, plus the plan promise. Every SPIFF Ledger row
+  is Test Yes, and LedgerTestOnly Yes keeps HSBS 10 and 10D from writing a non-TEST row.
+- LedgerTestOnly stays Yes until the Dec 4 release (build order step 6: Brian's go, groups G
+  and S, and P2-3 on the first real save Monday 11/23).
+- The two branch-only `REP_PAY_ENABLED` copies from P4 and P5b are `false`, Preview only, on
+  merged branches, so they do nothing. Their removal in the Vercel dashboard is tracked in the
+  FT-2b handoff.
+- Undo: set `REP_PAY_ENABLED` to `false` (the app reads only exactly `true`), then redeploy
+  production.
+
 ## Brian's decisions this sheet rests on (11/13)
 
 **Gate G0: this sheet is not built until PR #121 is merged to `main`.** Decisions 75, 76,
