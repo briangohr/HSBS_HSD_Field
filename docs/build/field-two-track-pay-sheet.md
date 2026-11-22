@@ -190,6 +190,49 @@ work, and monthly stays Off. All live facts in V6 are builder-recorded. Both 10M
 until plan Task 6 turns by hand On, and monthly stays Off until Brian releases the first real
 payout.
 
+### V7 Task 3: frozen 10M manifest and bound Paid confirmation (offline build, 11/22/2026 4:50 to 5:20 PM ET)
+
+Offline only. No list was created, no package was imported, no flow ran, no mail was sent.
+Live 10M stays the V5/V6 gate build, both flows Off, `RealPayoutsOn` No. Plan Task 6 does the
+ordered import. Builder project files: `pay-ledger/proof-v34/task3/` (`HANDOFF_task3.md`,
+`LIST_SCHEMAS.md`, `build/`, `out/`, `rollback/`).
+
+V7.1 Records (not created yet; Task 6 creates them first). SPIFF Ledger gets one indexed text
+column `PayoutManifest` (the Manifest ID that stamped the row). New lists: `Payout Manifests`
+(Title = Manifest Key `<Batch ID>|v<Version>`, unique; `ManifestId` UUID, unique), `Payout
+Manifest Lines` (Title = `<Manifest ID>|<SPIFF Ledger item ID>|<Award Key>`, unique) and
+`Payout Confirmations` (Title = Confirmation ID, unique). Each line holds the financial
+fingerprint: compact JSON in a fixed property order (ledger record ID, Record Type, Award Key,
+Adjustment ID, Parent Award Key, payee roster ID, payee name, payee email, role, payer, amount,
+Test, company, referral, practice, event, earned date), all text. ETag, validation and payout
+fields and Status are not in it. The header snapshot is the fingerprints sorted by line Title,
+joined with LF.
+
+V7.2 States. Draft, Frozen, Delivered, Forwarded, Partially Paid, Paid, Failed, Invalidated.
+
+| Step | Rule |
+|---|---|
+| List | Newest Version Delivered or later: refused. Frozen: resume at the pre-email check. Draft: resume, same Manifest ID. None, Failed or Invalidated: new Version. Rows stamped by the pre-manifest flow with this batch: refused |
+| Freeze | Header and each line are written, then read back by unique Title (a lost response is safe). Line set must equal the ready set. Rows are stamped IF-MATCH (Payout Batch, PayoutManifest, Sent On), reread, and the header goes Frozen only when every fingerprint matches |
+| Before the email | Lines must equal the header snapshot, count and total; every row must still match, be Waiting, not Disputed and stamped with this manifest. Else Invalidated |
+| Email | Summary and detail CSV and the table come from the lines only. Delivered is set only after the send |
+| Invalidate | Draft, Frozen or Delivered only. Waiting rows lose their stamps, one Ledger Run Errors row, one mail "stopped, do not forward it", run Failed. No replacement under that Version |
+| Resend | Batch, Manifest ID and Version. Delivered or later only. Delivered and a row changed, voided, disputed or moved: Invalidated, nothing sent. Forwarded or later: the same list byte for byte, changes listed beside it |
+| Forwarded | New hand mode, Batch, Manifest ID and Version. Delivered becomes Forwarded; a repeat changes nothing. Sends no email |
+| Paid | Batch, Manifest ID, Version, Confirmation ID, line count, total, Paid On, Not paid keys. Needs Forwarded. Every check runs before a write. One immutable Payout Confirmations row, then the header's accepted Confirmation ID. Per line: Paid; Not paid back to Waiting; voided or changed after listing and paid: Paid and Disputed (the note keeps the frozen amount; Task 4 Adjustment). Closes Paid or Partially Paid only when no line needs a look. The same Confirmation ID is a no-op retry; a reused one with other values, or a second one on the list, is refused |
+
+V7.3 Offline results. 10M model 146/146, lazy and eager (the Task 2 build fails the new
+checks at M4). HSBS 10 108/108 and 10D 49/49 on the extended sim. Lint 0. Nesting 5 and 6
+(limit 8), longest expression 2,928 characters. Candidate package canonical hashes: monthly
+7845d830d479680e, by hand b9be7eec6391ae0a. Undo of a later import: the V5 packages as Update.
+
+V7.4 Open for later tasks: Snapshot text holds about 170 lines (Task 6 measures or caps); a
+payee with no Rep Roster row is listed with roster ID 0 and a blank name; a forwarded list that
+was Invalidated is refused by Forwarded (Task 4 Adjustment path); `ValidationRunId` stays blank
+until Task 5 and Task 6 require a complete 10D pass; a row that changes while a list runs now
+invalidates that version instead of being skipped. All V7 results are builder-recorded offline
+model results.
+
 ## Field site refresh (11/21/2026)
 
 Brian, 11/21/2026: "it should show real dollars. What I will need to create is a file for

@@ -589,6 +589,11 @@ Since 11/22/2026 4:09 PM ET both 10M flows are Off under TSM pay plan v3.4 until
 Ledger Settings `Live` row has `RealPayoutsOn` Yes and LedgerTestOnly No (pay sheet, V5). TEST
 runs do not need it. Live since 11/22/2026 4:42 PM ET; both 10M flows stay Off (pay sheet,
 V6). Earnings and My Team are unchanged.
+The v3.4 Task 3 build (offline, not live; pay sheet, V7) makes each list one frozen payout
+manifest: Resend sends the same frozen list, a new hand mode Forwarded records that Brian
+forwarded that exact version, and Paid needs the Manifest ID, version, line count, total and a
+Confirmation ID. It adds a `PayoutManifest` column to SPIFF Ledger. No request or answer in this
+contract changes.
 
 ## What must stay true
 
