@@ -18,13 +18,49 @@ and DD, it's 100 of qualified lead and $50 to the manager".
 | R2 | Who writes the partner's answers | 7B, with 7A listing open cases | HSBS 7F Field partner (new site) on a partner save, and 7H on a partner email reply. "Open" is a case 7F would list |
 | R3 | Who reads the ledger for the site | 1R `earnings` and `team` | HSBS 1F (new site) `earnings` and `team`. Its package of 11/18 already reads `SPIFF Ledger` on the field site by name (Payee Email and Payee Role filter, Test rows only for a TEST caller) |
 | R4 | Rep award event | Reached and Qualified (decision 65) | **Qualified is `Yes`.** 7F writes Qualified `Yes` only with Talked To Doctor `Yes` (choices `qualified`, `meeting`, `proposal`, `signed`), so a partner save pays exactly as before. Only a hand edit of Qualified alone differs, and it now pays. The ledger Event stays `Reached` and the key stays `<id>\|Reached\|Rep`, because the site reads only `Reached` and `Signed` |
-| R5 | Rep amount | HealthFirst $100. Direct Dental $100 private practice, $200 group, by Award Practice Type | **$100 for both companies, one flat amount.** Award Practice Type no longer sets any amount. Rule G, lists X4 and X9, gate G3 and the decision 82 follow-up no longer touch pay, and the ledger's Practice Type stays blank |
+| R5 | Rep amount | HealthFirst $100. Direct Dental $100 private practice, $200 group, by Award Practice Type | **Changed 11/22 (Brian, 11:30 AM ET: "$100 unless someone selects the multiple office selection in the app").** HealthFirst $100 flat (its form has no office choice). Direct Dental $100, or $200 when the Referrals row's Rep Practice Type (`RepPracticeType`, the rep's pick on the send, written by 1F) is `Group` (3 or more locations). Amounts come from Ledger Settings `ST_Qualified` and `ST_Qualified_Group`. Award Practice Type still sets nothing: rule G, lists X4 and X9, gate G3 and the decision 82 follow-up stay retired, and the ledger has no Practice Type column. (11/21 to 11/22 it was one flat $100 for both.) |
 | R6 | Manager award | $50 at the sign | **$50 at the sign, unchanged** (Brian, 11/21, on the manager pay card: "When it signs"). Rule B as written |
 | R7 | Where amounts live | Initialize variable steps in HSBS 10 | Number columns on the Ledger Settings `Live` row ("Amount settings"), filled from the promo file (`docs/build/field-promo-file.md`). A new promotion is one row edit, never a flow edit |
 | R8 | 12 month look-back | Any source, the other team's app and the FSC app included | Field-site Referrals rows only, any source on that list |
 | R9 | Column names | `Solutions` on the case, JDE | Service Cases `Service` (single choice) names the company. Referrals: `JDEAccount`, `Solutions` (multiple choice), `Source`, `PracticeName`, `CustomerName`, `Referring Rep Email`, `Test`. BB2 still records each exact name (record 4) |
 | R10 | Signed | Status `Closed - Won` with Signed Date and Signed Product | Partner Status `Signed` or `Close won`, with Signed Date set. 7F's `signed` choice writes both |
-| R11 | Site plan words | `REP_PAY_PLAN_STAFFING` `reached_private:100,reached_group:200,manager:50` | `reached_private:100,reached_group:100,manager:50`. The site's parser takes it as it is today and shows $100 for either type. HealthFirst stays `reached:100,manager:50` |
+| R11 | Site plan words | `REP_PAY_PLAN_STAFFING` `reached_private:100,reached_group:200,manager:50` | `reached_private:100,reached_group:200,manager:50` again since 11/22 (R5). It was `reached_private:100,reached_group:100,manager:50` from 11/21 to 11/22. HealthFirst stays `reached:100,manager:50` |
+
+## Multi-office build record: HSBS 10 group amount (11/22/2026)
+
+Thread "Pay $200 for multi-office leads". Brian, 11/22 11:30 AM ET: "$100 unless someone selects
+the multiple office selection in the app". Times ET.
+
+- Field: the only multiple office choice in the app is `Group (3 or more locations)` on the
+  Direct Dental form. 1F saves it as `Group` in Referrals `RepPracticeType`; 3F copies it to the
+  Service Case. HSBS 10 reads the Referrals row (it never reads the request body or Award
+  Practice Type). The HealthFirst form has no such choice, so HealthFirst never pays the group
+  amount, even if a row says `Group`.
+- HSBS 10 change (generator `gen_10.py` in the project files `pay-ledger/build/`): `Get_settings`
+  selects `ST_Qualified_Group`; the amount check requires it 1 to 1000; `Get_ref` selects
+  `RepPracticeType`; new step `Multi_office` = company `Staffing` and `RepPracticeType` = `Group`;
+  `A_R` = `HF_Qualified` for HealthFirst, else `ST_Qualified_Group` when `Multi_office`, else
+  `ST_Qualified`. Manager award unchanged ($50 at the sign). A row already written keeps its
+  amount (D3). Offline: `test_10.py` 80 of 80 (9 new), `test_10d.py` 49 of 49, lint 0 problems.
+- 11:37 AM: Ledger Settings column `ST_Qualified_Group` (Number) added; `Live` row set to 200.
+- 11:43 AM: backup copy `HSBS 10 Ledger writer (new site) BACKUP 2026-11-22 before multi-office`
+  (Off). Generator backup in `pay-ledger/rollback/multi-office-before/`.
+- 11:44 AM: new package imported as Update, HSBS 10 turned On 11:45 AM. Six TEST-LOAD case saves
+  (cases 84 to 89, Partner Status `Trying to reach`, no Qualified) landed in the 1 minute it was
+  Off: Ledger Run Errors 12 to 17. They write no row under either version, so they were set
+  Resolved Yes.
+- TEST proof 11:46 to 11:48 AM: two TEST Direct Dental sends from Test Fieldsite through
+  production `/api/referral` (F533 `Private practice`, F534 `Group`, both Test Yes; 3F sent each
+  `[TEST]` intro to Brian only). Cases 116 and 117 saved `qualified` on the TEST partner page.
+  SPIFF Ledger 36 `116|Reached|Rep` $100 and 35 `117|Reached|Rep` $200, both Waiting, Staffing,
+  Direct Dental, Test Yes.
+- 11:49 AM: Vercel `REP_PAY_PLAN_STAFFING` (production and preview) set to
+  `reached_private:100,reached_group:200,manager:50`; production redeployed. Plan equality holds:
+  100 / 200 / 50.
+- Undo: Ledger Settings `ST_Qualified_Group` back to 100 pays $100 for every staffing lead with
+  no flow change. Full undo: import `rollback/multi-office-before/HSBS-10-Ledger-writer-NEW-SITE.zip`
+  as Update (or swap in the backup copy), and set the Vercel value back to
+  `reached_private:100,reached_group:100,manager:50` and redeploy.
 
 ## P2 build record: HSBS 10 and 10S (11/21/2026)
 
@@ -283,7 +319,7 @@ with its merge commit.
 | # | Decision, with Brian's words | What it means here |
 |---|---|---|
 | 65 | Pay needs reached and qualified, for both partners | **Replaced 11/21 (R4):** the award is written when Qualified is Yes. 7F sets Talked To Doctor Yes with every Qualified Yes |
-| 73 | A group is 3 or more locations | **No longer sets pay (R5):** both practice types earn the same $100 |
+| 73 | A group is 3 or more locations | Sets pay again since 11/22 (R5): the rep's `Group` pick pays `ST_Qualified_Group` ($200) |
 | 75 | Matt Penny at Direct Dental gets the staffing payout list. Direct Dental pays the staffing awards (T13). His address goes into Routing in SharePoint, never into the repo. Brian: "Matt Penny for the payout list too" | The staffing payout batch is built here (F4.7). Its recipient is read from Routing |
 | 76 | Katy knows staffing goes to field sales before 12/31, and staffing award pay is cleared as HealthFirst's was on 11/8. Brian: "Already cleared" | Nothing in this sheet waits on Katy |
 | 77 | The manager and plan on file when the pay run handles a sign are the ones that count. Nothing is stamped at the sign. Brian: "Keep today's process" | The sign run reads the Team Roster and the amounts as they are when it runs (F4.4, rule B) |
@@ -321,9 +357,9 @@ noted). If one holds, he builds or turns on nothing further and reports it.
 | S2 | Before go-live (build order step 6): the SPIFF Ledger holds any row with Status `Paid` or `Pending review`, or any row with Test = No other than the TEST rows cleared by hand in checks H19 and H25. After go-live, only `Pending review` stops | No payout has run and HSBS 10 was never built (`docs/build/rep-app-flow-contracts.md`, "Open before pay goes live"). Such a row means something paid or wrote real money already |
 | S3 | Award Key is not set to "Enforce unique values", and cannot be set because two rows share a key | The unique key is what stops a second row (D6) |
 | S4 | Any flow has a trigger on the SPIFF Ledger | A ledger write would start it, and it might send mail |
-| S5 | Service Cases on the field site is missing any of: Qualified, Not Qualified Reason, Closed Reason, or BB2 cannot name the exact Service Cases column for: `Service` (the company), Talked To Doctor, Partner Status, Signed Date, Last Partner Update, Test, and the `Referral` lookup to its Referrals row (R9, R10). Practice Type and Award Practice Type are no longer needed (R5) | HSBS 10 reads every one of them |
+| S5 | Service Cases on the field site is missing any of: Qualified, Not Qualified Reason, Closed Reason, or BB2 cannot name the exact Service Cases column for: `Service` (the company), Talked To Doctor, Partner Status, Signed Date, Last Partner Update, Test, and the `Referral` lookup to its Referrals row (R9, R10). Award Practice Type is not needed (R5) | HSBS 10 reads every one of them |
 | S6 | Closed Reason is stored on Referrals, not on the Service Case (sheet F2, "BB2 records", item 2) | Two companies on one referral would share one reason |
-| S7 | Referrals on the field site is missing, or BB2 cannot name exactly: Title (the referral ID, `HSBS-F<n>` or `HSBS-A<n>`), Source, Referring Rep Email, `JDEAccount` (text), PracticeName, CustomerName, Solutions, Introduced On, Test, Created | HSBS 10 reads every one of them |
+| S7 | Referrals on the field site is missing, or BB2 cannot name exactly: Title (the referral ID, `HSBS-F<n>` or `HSBS-A<n>`), Source, Referring Rep Email, `JDEAccount` (text), PracticeName, CustomerName, Solutions, Introduced On, Test, Created, `RepPracticeType` (R5) | HSBS 10 reads every one of them |
 | S8 | The HSBS 10 HTTP trigger cannot be set to a concurrency limit of 1 | The one-writer rule needs it |
 | S9 | The address HSBS 10D, 10B or 10P would send Brian's mail to is not the Brian address a live HSBS flow already sends Brian-only mail to (for example the daily gap check) | No new recipient (`AGENTS.md`, check 2) |
 | S10 | Routing has no entry holding the staffing payout list contact (decision 75), or it holds more than one address | Only Brian adds a recipient. BB2 never types an address into a flow, the sheet or the report |
@@ -385,8 +421,8 @@ not hold since 11/13: 3F's Test_mode reads the Referrals row's Test (decision 97
 - **Open**: the case passes the test 7F uses to list it: its Partner Status is not one of
   7F's closed words (`Signed`, `Not moving forward`, `Hand back to HSBS`, `Close won`,
   `Close loss`, `Returned to HSBS`).
-- **Award type**: retired 11/21 (R5). HSBS 10 reads neither Practice Type nor Award
-  Practice Type. Where an older line below says "with a valid award type", read it as
+- **Award type**: retired 11/21 (R5). HSBS 10 never reads Award Practice Type. Since 11/22 it
+  reads the Referrals row's `RepPracticeType` only to pick the staffing amount (R5). Where an older line below says "with a valid award type", read it as
   always true.
 - **TEST case**: any of these holds: the Referrals row's Test is Yes; the Service Case's
   Test is Yes; the rep's Rep Roster row has Test = Yes; the Referrals PracticeName or
@@ -466,8 +502,8 @@ not hold since 11/13: 3F's Test_mode reads the Referrals row's Test (decision 97
   Void Reason, so a Void Reason never ends in one.
 - **Plan keys** (`src/lib/rep-pay-plan.mjs`): `REP_PAY_PLAN` is the HealthFirst plan,
   set in Vercel to `reached:100,manager:50`; `REP_PAY_PLAN_STAFFING` is set (11/21/2026
-  9:35 PM ET, P4) to `reached_private:100,reached_group:100,manager:50` (R11), all three
-  parts required. With equal amounts the site names one amount and no practice type. The
+  9:35 PM ET, P4; changed 11/22) to `reached_private:100,reached_group:200,manager:50` (R11),
+  all three parts required. With equal amounts the site names one amount and no practice type. The
   site's plan words promises only. HSBS 10 reads its own copy of the amounts from Ledger
   Settings (R7), and Brian changes both together from the promo file.
 - **Sheets F1 and F2** (on `main`) add Practice Type, Award Practice Type, Qualified, Not
@@ -518,14 +554,15 @@ written in the build report.
 | `HF_Qualified` | `100` | HealthFirst award to the rep when Qualified is Yes. Written as Event `Reached` (`reached` in `REP_PAY_PLAN`) | HealthFirst row, Rep award |
 | `HF_Signed` | `0` | HealthFirst award to the rep at the sign (`signed`). 0 in this promotion | HealthFirst row, Rep sign award |
 | `HF_Manager` | `50` | HealthFirst manager award at the sign (`manager`, R6) | HealthFirst row, Manager award |
-| `ST_Qualified` | `100` | Direct Dental award to the rep when Qualified is Yes, any practice type (R5). Written as Event `Reached` (`reached_private` and `reached_group` in `REP_PAY_PLAN_STAFFING`) | Direct Dental row, Rep award |
+| `ST_Qualified` | `100` | Direct Dental award to the rep when Qualified is Yes and the rep did not pick `Group` (R5). Written as Event `Reached` (`reached_private` in `REP_PAY_PLAN_STAFFING`) | Direct Dental row, Rep award |
+| `ST_Qualified_Group` | `200` (added 11/22) | Direct Dental award to the rep when Qualified is Yes and the Referrals row's `RepPracticeType` is `Group` (R5). Event `Reached` (`reached_group`) | Direct Dental row, Rep group amount |
 | `ST_Manager` | `50` | Direct Dental manager award at the sign (`manager`, R6) | Direct Dental row, Manager award |
 
 **Amount check, every run.** Each amount is a whole number from 0 to 1000; a blank reads
 as a failed check, never as 0. `HF_Qualified` or `HF_Signed` is at least 1. A plan may pay
 nothing at the sign: the Sign Log records that the sign was handled, so raising the plan
 later never pays it (contract, "Open before pay goes live", item 2). `ST_Qualified` and
-`ST_Manager` are each 1 to 1000. Staffing has no award to the rep at the sign. If any of
+`ST_Qualified_Group` and `ST_Manager` are each 1 to 1000. Staffing has no award to the rep at the sign. If any of
 this fails, the run fails before any write and records an X1 row.
 
 ## Build order
@@ -575,7 +612,7 @@ Award Key set to enforce unique values. If it exists, add:
 | List | Columns | Written by |
 |---|---|---|
 | Sign Log | Case ID (number, unique, indexed), Started On (date and time, indexed), Plan Manager (number), Plan Rep Sign (number), Handled On (date and time, indexed) | HSBS 10 only (W16) |
-| Ledger Settings | Title (`Live`, one row), LedgerTestOnly, StaffingAwardsOn, RealPayoutsOn (Yes/No), HF_Qualified, HF_Signed, HF_Manager, ST_Qualified, ST_Manager (Number, 0 decimals) | BB2 or Brian, by hand ("Shared switches", "Amount settings") |
+| Ledger Settings | Title (`Live`, one row), LedgerTestOnly, StaffingAwardsOn, RealPayoutsOn (Yes/No), HF_Qualified, HF_Signed, HF_Manager, ST_Qualified, ST_Qualified_Group (added 11/22), ST_Manager (Number, 0 decimals) | BB2 or Brian, by hand ("Shared switches", "Amount settings") |
 | Payout Batches | Batch ID (Title, unique), Payer (text), Kind (text: `TEST` or `Real`), Created On, Send Started On, Sent On, Confirmed On (date and time, Send Started On and Sent On indexed), Paid On (date), Send Run ID (text), Rows Sent (multiple lines, plain), Not Paid (multiple lines, plain) | HSBS 10B and 10P only; Brian may clear Send Started On by hand (F4.7) |
 
 Payer: if it is a Choice column, add the choice `Direct Dental`, keeping `HealthFirst`. If it
@@ -662,7 +699,7 @@ turned on there are no staffing rows, so nothing happens. Cases that would earn 
 (X5).
 
 **W10 Read the answers** from the case: Qualified, Not qualified, Not Qualified Reason,
-Closed Reason, Signed. Never Practice Type or Award Practice Type (R5), and never Not
+Closed Reason, Signed. Never Award Practice Type (R5), and never Not
 Qualified Note.
 
 **W11 No-pay test** (spec section 6, "A no-pay case pays nobody"). The case is no-pay when
@@ -703,12 +740,12 @@ K_S, one each (Top Count 1). Keep each row's Status, Disputed, Payout Batch and 
 
 | | HealthFirst | Staffing |
 |---|---|---|
-| Qualified award (A_R, Event `Reached`) | `HF_Qualified` | `ST_Qualified`, any practice type (R5) |
+| Qualified award (A_R, Event `Reached`) | `HF_Qualified` | `ST_Qualified_Group` when the Referrals row's `RepPracticeType` is `Group`, else `ST_Qualified` (R5) |
 | Rep award at the sign (A_S) | `HF_Signed` | 0 |
 | Manager award (A_M) | `HF_Manager` | `ST_Manager` |
 
-The ledger has no Practice Type column (R5). A staffing Void row carries `ST_Qualified`,
-like any other staffing Reached row. It never counts and never pays.
+The ledger has no Practice Type column (R5). A staffing Void row carries the same A_R amount
+as a paid row would. It never counts and never pays.
 
 **W14 Void or dispute existing rows (rule V).** Only when the case is no-pay. For each row
 read in W12, by Award Key:
@@ -817,8 +854,9 @@ ledger row: no zero-dollar row is ever written to the ledger (Brian, 11/11).
    (D18). A no-pay reason found later voids a Waiting Manager row, and disputes a Paid one,
    by rule V (M11, second and third orders).
 
-**Rule G, the blank award type guard: retired 11/21 (R5).** Direct Dental pays one flat
-amount, so a blank Award Practice Type holds nothing back. Do not build it.
+**Rule G, the blank award type guard: retired 11/21 (R5).** The amount comes from the rep's
+pick on the Referrals row (blank pays `ST_Qualified`), never Award Practice Type, so a blank
+Award Practice Type holds nothing back. Do not build it.
 
 **W17 Every row this run writes** carries these values. "Writes" means a Create item
 whose Award Key is the row's key.
@@ -871,9 +909,9 @@ last email:
    Brian or Claude states in writing the site's `REP_PAY_PLAN` and `REP_PAY_PLAN_STAFFING`
    values (not secrets), and they equal the Ledger Settings amounts after the change:
    `reached:<HF_Qualified>,manager:<HF_Manager>` (plus `signed:<HF_Signed>` when it is not 0)
-   and `reached_private:<ST_Qualified>,reached_group:<ST_Qualified>,manager:<ST_Manager>`,
+   and `reached_private:<ST_Qualified>,reached_group:<ST_Qualified_Group>,manager:<ST_Manager>`,
    each part's number equal, order ignored. Today that is `reached:100,manager:50` and
-   `reached_private:100,reached_group:100,manager:50`. If they differ: **stop and ask Brian** (spec
+   `reached_private:100,reached_group:200,manager:50`. If they differ: **stop and ask Brian** (spec
    section 6: "Brian changes a plan in both places together"). BB2 writes both values in
    the build report.
 
@@ -967,7 +1005,7 @@ reads the amount on the row). A line for a TEST case or row starts with `TEST `.
 | X6 | Signed without Qualified | Rep app, and Partner Status `Signed` or `Close won`, and (Qualified is not Yes, or Signed Date is blank), and no Sign Log row with Handled On set. This is the spec's "every signed case with Qualified blank" list for the turn-on gap (sheet F2, build order step 7), for rep app cases (Ask Brian A2) | The answers are filled (Brian, in SharePoint) and the sign row is written |
 | X7 | Disputed paid award | A ledger row with Status `Paid` and Disputed Yes. The line adds the Award Key and the Dispute Note | Never; Brian reads it each day (rep app v3: "disputed paid awards") |
 | X8 | Waiting award with no qualify answer | Rep app, open, a Waiting K_R, Qualified blank (a row written before the qualify rule; spec section 6, M27) | The partner answers Qualified |
-| X9 | Retired 11/21 (R5): practice type no longer changes an amount | Not built | |
+| X9 | Retired 11/21 (R5): the partner's practice type never changes an amount | Not built | |
 | X10 | Not qualified, reason Other | A HealthFirst or staffing case, any source, Qualified No, reason `Other`. The line adds the Not Qualified Note word for word | Seven days after Last Partner Update (Ask Brian A5) |
 | X11 | Live rep, Test manager | A K_M row with Test Yes whose manager is a TEST person, on a case whose Referrals Test, Service Case Test and rep's Rep Roster Test are all No (a non-TEST case by its columns; a `TEST` practice name alone does not make it TEST here, which is how check H19 runs). The line adds the Award Key | Brian clears Test on the row |
 | X12 | Payer does not match Company | A ledger row whose Payer is blank, or does not match its Company by the company table (blank Company reads `HealthFirst`). The line adds the Award Key | It is fixed by hand |
@@ -1189,7 +1227,7 @@ when every gate holds, each written in the build report:
 |---|---|---|
 | G1 | Every check in groups A, H, G and S passed | The build report |
 | G2 | `LedgerTestOnly` is already false (go-live step 6 done) | The flow's settings |
-| G3 | Retired 11/21 (R5): Direct Dental pays one flat amount, so no practice type confirmation is needed | |
+| G3 | Retired 11/21 (R5): the amount follows the rep's pick (Brian, 11/22), so no partner confirmation is needed | |
 | G4 | No live (not TEST) rep app staffing case has Qualified Yes yet. The natural order is that this switch goes on before, or together with, `Staffing` in the site's `REP_APP_COMPANIES`, so no real staffing lead exists yet. If one does: stop and Ask Brian A7 | A Get items count, in the build report |
 | G5 | Brian's go in chat, in his own words, quoted in the build report | |
 | G6 | The plan equality check (freeze check part 4) passes for the staffing plan | The two values in the build report |
@@ -1265,8 +1303,8 @@ SharePoint. Choice names are 7F's (`docs/field-flow-contract.md`, 7F save).
 - A3. The Ledger Settings row reads LedgerTestOnly Yes, StaffingAwardsOn No, RealPayoutsOn
   No, and the `Settings read` step of a run of HSBS 10, 10D, 10B and 10P shows those
   values. Deleting the row makes each fall back to the same safe values and record an X1
-  row; put it back. The five amounts read `HF_Qualified` 100, `HF_Signed` 0, `HF_Manager`
-  50, `ST_Qualified` 100, `ST_Manager` 50. Blanking one makes the next run fail before any
+  row; put it back. The six amounts read `HF_Qualified` 100, `HF_Signed` 0, `HF_Manager`
+  50, `ST_Qualified` 100, `ST_Qualified_Group` 200 (HSBS 10 only, 11/22), `ST_Manager` 50. Blanking one makes the next run fail before any
   write; put it back. HSBS 10's trigger concurrency reads 1.
 - A3a. (One switch, every flow) BB2 sets StaffingAwardsOn Yes in the row for group S and
   confirms it in the `Settings read` step of HSBS 10 and 10D: a TEST staffing case saved
@@ -1442,9 +1480,9 @@ SharePoint. Choice names are 7F's (`docs/field-flow-contract.md`, 7F save).
 
 - S1. (R5) A TEST staffing case saved `qualified`: one K_R, Waiting, $100, Company
   `Staffing`, Payer `Direct Dental`.
-- S2. (R5) Two TEST staffing cases, one with Practice Type `Private practice` and one
-  `Group` (or blank): each K_R is $100.
-- S3. Retired 11/21 (R5): a practice type change never changes an amount.
+- S2. (R5, 11/22) Two TEST staffing cases, Rep Practice Type `Private practice` and `Group`:
+  K_R $100 and $200. Blank: $100. PASS live 11/22 (multi-office build record).
+- S3. (R5) A practice type change after the K_R row exists never changes its amount (D3).
 - S4. (M4) Same JDE to HealthFirst, then to staffing: the staffing case earns. The reverse
   on another JDE: the HealthFirst case earns.
 - S5. (M5) Same JDE to staffing twice within 12 months: the second has one K_R, Void,
@@ -1504,7 +1542,7 @@ temporary flow from A6.
 |---|---|---|
 | 9 F4: Company on the ledger | F4.1, F4.2, W17 | A1, A2, S1 |
 | 9 F4 and 11/21: per-company amounts, from the promo file | Amount settings, W13 | A3, S1, S2 |
-| 11/21 (R5): one flat staffing amount, never from practice type | W10, W13 | S1, S2 |
+| 11/22 (R5): staffing $200 when the rep picked `Group`, else $100 | W10, W13 | S1, S2, S3 |
 | 6 and 11/21 (R4): Qualified Yes, both companies | W15 | H1, H2, S9 |
 | 6 (T18): no auto-reached award; two silent-partner lists | W15, X2, X3 | H16 |
 | 6: not-qualified void; Paid stays Paid and Disputed | W11, W14, W15 | H3 to H7 |
@@ -1549,7 +1587,7 @@ Each has a safe default that the build follows until he answers. Ask one at a ti
 - **A3. Ask Brian:** For "reached, no qualify answer for five business days", the clock
   starts at the date the partner gave for talking (Talked On). OK? Safe default: Talked On;
   a reached case with no Talked On is listed from the first day.
-- **A4. Retired 11/21** (R5): every staffing row carries `ST_Qualified`.
+- **A4. Retired 11/21** (R5): a staffing row carries `ST_Qualified`, or `ST_Qualified_Group` for a `Group` pick (11/22).
 - **A5. Ask Brian:** How long should the information lines (X9, a type changed after its
   award; X10, a not-qualified "Other" note) stay on the daily email? Safe default: seven
   days from the partner's last update.
