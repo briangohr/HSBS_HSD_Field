@@ -57,9 +57,15 @@ export const staffingTerms = (plan) => (usable(plan) ? `${plan.reachedPrivate},$
  */
 export const asStaffingPlan = (plan) => (usable(plan) ? { reachedPrivate: plan.reachedPrivate, reachedGroup: plan.reachedGroup } : null);
 
-/** The line under the header; '' with no plan. */
+/**
+ * The line under the header; '' with no plan. A flat plan (the same amount for both
+ * types, pay sheet R11) names one amount and no type, as the Earnings words do.
+ */
 export function staffingPayLine(plan) {
   if (!usable(plan)) return '';
+  if (plan.reachedPrivate === plan.reachedGroup) {
+    return `You earn ${usd(plan.reachedPrivate)} when ${STAFFING_NAME} reaches the customer and confirms the lead qualifies.`;
+  }
   return `You earn ${usd(plan.reachedPrivate)} for a private practice, or ${usd(plan.reachedGroup)} for a group with 3 or more locations, when ${STAFFING_NAME} reaches the customer and confirms the lead qualifies.`;
 }
 

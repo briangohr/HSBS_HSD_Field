@@ -79,4 +79,11 @@ describe('staffing form rules (field two-track spec, section 4)', () => {
     );
     assert.equal(staffingPayLine(null), '');
   });
+
+  test('a flat plan names one amount and no practice type (pay sheet R11)', () => {
+    assert.equal(
+      staffingPayLine({ reachedPrivate: 100, reachedGroup: 100 }),
+      'You earn $100 when Direct Dental reaches the customer and confirms the lead qualifies.',
+    );
+  });
 });
