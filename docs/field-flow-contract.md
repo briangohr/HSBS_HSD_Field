@@ -584,7 +584,11 @@ rows and emails it to Brian only, who forwards it to Alexa (pay sheet, 10M build
 `Paid` with Paid On, which `earnings` and `team` already send as `status` `Paid` and `paidOn`.
 No request or answer in this contract changes, and no mail goes to a rep or a manager.
 Since 11/22/2026 4:09 PM ET both 10M flows are Off under TSM pay plan v3.4 until 10M honors
-`RealPayoutsOn` (pay sheet, V3.4 stabilization record). Earnings and My Team are unchanged.
+`RealPayoutsOn` (pay sheet, V3.4 stabilization record). The v3.4 Task 2 build makes every Real
+10M mode stop, with one Ledger Run Errors row and one failure mail to Brian, unless exactly one
+Ledger Settings `Live` row has `RealPayoutsOn` Yes and LedgerTestOnly No (pay sheet, V5). TEST
+runs do not need it. Live since 11/22/2026 4:42 PM ET; both 10M flows stay Off (pay sheet,
+V6). Earnings and My Team are unchanged.
 
 ## What must stay true
 
