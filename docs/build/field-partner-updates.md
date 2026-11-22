@@ -762,6 +762,17 @@ live package: only Get_case and Multi_office.
   tested generator output. Imported as Update 2:26 PM, On 2:28 PM, flow checker 0 and 0.
 - 2:29 PM: Vercel `PARTNER_OFFICE_CHECK=true` (production and preview). Production code
   reads it only after this PR merges.
+- TEST proof, PASS (2:33 to 2:38 PM): two TEST Direct Dental sends from Test Fieldsite through
+  production `/api/referral`, both `Group` (F697, F698; 3F sent each `[TEST]` intro to Brian
+  only). On the TEST partner page (PR 49 preview, switch on), both leads came back with
+  `askOffices` true and no other lead did. Picking Reached the customer showed the question;
+  Save with no answer said "Lead HSBS-F697: check Office count." and posted nothing. F697 Yes
+  and F698 No saved ("Saved 2 updates."); after the reload neither asks again. Cases 280 and
+  281: Qualified Yes, Reached, `OfficeCountConfirmed` Yes and No. SPIFF Ledger 47
+  `280|Reached|Rep` $200 and 48 `281|Reached|Rep` $100, both Waiting, Staffing, Direct
+  Dental, Test Yes. No new Ledger Run Errors.
+- 2:40 PM: recycled ledger 47 and 48, cases 280 and 281, referrals 697 and 698 (site recycle
+  bin).
 - Undo 7F: import `rollback/HSBS-7F-before-offices.zip` as Update, turn On. The column can stay.
 - Undo HSBS 10: import `pay-ledger/rollback/offices-before/HSBS-10-Ledger-writer-NEW-SITE.zip`
   as Update, turn On. Quick undo of the question alone: `PARTNER_OFFICE_CHECK` off (then no
