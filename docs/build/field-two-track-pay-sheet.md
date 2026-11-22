@@ -136,6 +136,48 @@ the multiple office selection in the app". Times ET.
   as Update (or swap in the backup copy), and set the Vercel value back to
   `reached_private:100,reached_group:100,manager:50` and redeploy.
 
+## No-answer close words build record (11/22/2026)
+
+Thread "Fix no-answer close label on Earnings" (loops finding L1). Times ET. Field only, TEST
+rows only.
+
+- Problem: 7F closes a lead after the 4th Not reached yet save (and on `dq_noanswer`) with Not
+  Qualified Reason `Other` and Not Qualified Note `Disqualified, no answer after 4 attempts`.
+  HSBS 10 built the void reason from the reason only, so Earnings read "Not paid: HealthFirst
+  marked this lead as not qualified (Other)."
+- Fix in HSBS 10 only (7F, 10S, 10D, the site and 1F unchanged): `Get_case` also selects
+  `Not_x0020_Qualified_x0020_Note`; `NQ_reason` is `no answer after 4 attempts` when the reason
+  is `Other` and the note contains those words, else the stored reason as before (rule 3 under
+  W11). A site-only fix was not possible: the site never sees the note.
+- Generator: `pay-ledger/build/gen_10.py`; `test_10.py` 90/90 (4 new L1 checks: HealthFirst,
+  Direct Dental, Other with another note keeps `(Other)`, a real reason wins), `test_10d.py`
+  49/49, lint 0 problems.
+- 2:37 PM: exported live HSBS 10, definition hash (metadata left out) `6e8a1c4c20343cad`, the
+  office count build, so the backup below is exactly what was live. Patched in page with
+  `pay-ledger/noanswer/patch_10_noanswer_inpage.js` (only the two inputs; live metadata ids
+  kept): `481b5111cb1a78b8`, equal to the tested generator build.
+- 2:39 PM: imported as Update onto HSBS 10 (top SharePoint connection). 2:40 PM: On. Ledger Run
+  Errors stayed at 17 (no case save landed in the minute it was Off).
+- TEST proof 2:41 to 2:43 PM, PASS: TEST HealthFirst send from Test Fieldsite through
+  production `/api/referral` (F699, Test Yes; `[TEST]` intro to Brian only). Case 282 saved
+  `trying` 4 times through production `/api/partner-save` with the TEST partner key, each 200.
+  The 4th closed it: Not moving forward, Qualified No, reason `Other`, note
+  `Disqualified, no answer after 4 attempts`, Closed Reason `Not qualified`. Outbox row 23 Sent
+  to Brian (one `[TEST]` hand back). SPIFF Ledger 49 `282|Reached|Rep` Void, $100, Test Yes,
+  reason `HealthFirst marked this lead as not qualified (no answer after 4 attempts)`.
+  Production `/api/earnings` for Test Fieldsite: "TEST NOANSWER 1122 L1. HealthFirst. Not paid:
+  HealthFirst marked this lead as not qualified (no answer after 4 attempts)."
+- 2:44 PM: recycled Referrals 699, Service Cases 282, SPIFF Ledger 49, Field Notify Outbox 23
+  (each checked first: Test Yes or the TEST case, no payout batch, Outbox Sent).
+- Older TEST rows voided before this change keep `(Other)` (for example ledger 32, case 59).
+  HSBS 10 does not rewrite the reason on a row that is already Void. No real lead has closed
+  this way yet (the 4-try close went live 11/22 1:19 PM ET; first real partner asks Mon 11/23).
+- 10D's X10 ("Not qualified, reason Other") still lists a no-answer close for 7 days, with its
+  note. Unchanged here.
+- Undo: import `pay-ledger/rollback/noanswer-before/HSBS-10-Ledger-writer-NEW-SITE.zip` as
+  Update onto HSBS 10 (same definition as the live export, hash `6e8a1c4c20343cad`), turn On.
+  Generator and tests backup in the same folder.
+
 ## P2 build record: HSBS 10 and 10S (11/21/2026)
 
 Built by Claude in the thread "Build pay ledger writer" as importable packages, on Brian's
@@ -800,8 +842,14 @@ any of these holds. The first that holds gives the reason, in this order:
 3. **Not qualified (T16).** Qualified is `No`. Reason:
    `<Name in words> marked this lead as not qualified (<Not Qualified Reason as stored>)`,
    for example `Direct Dental marked this lead as not qualified (No permission to contact)`.
-   If the reason is blank (a hand edit), the reason ends after `not qualified`. The note is
-   never used.
+   If the reason is blank (a hand edit), the reason ends after `not qualified`. One
+   exception reads the note (L1, 11/22): when the reason is `Other` and Not Qualified Note
+   contains `no answer after 4 attempts` (any case), the words in brackets are
+   `no answer after 4 attempts`. That is how 7F stores a lead closed on the 4th
+   Not reached yet save, or saved as `dq_noanswer`, so the rep reads
+   `HealthFirst marked this lead as not qualified (no answer after 4 attempts)`, not
+   `(Other)`. Any other `Other` keeps `(Other)`. A stored reason other than `Other` always
+   wins over the note. The note never decides pay, only these words.
 
 A hand back is not a no-pay reason (T22). No flow reads a typed note to decide pay.
 
