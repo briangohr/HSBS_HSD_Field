@@ -98,7 +98,7 @@ builder-recorded (Claude read it; Codex did not).
 Thread "Make real-pay switch block payouts". Built on the stamp thread's generators
 (`history-stamp/build/gen_10m.py` and `test_10m.py`, LastWriter included), not on
 `pay-ledger/build`. Kept in Brian's builder project files under `pay-ledger/proof-v34/task2/`
-(`build/`, `out/`, and the generator before the gate in `rollback/`). Nothing live changed in V5.
+(`build/`, `out/`, and the generator before the gate in `rollback/`). Nothing live changed in V5; V6 is the live record.
 
 The guard, in both 10M flows:
 
@@ -155,6 +155,40 @@ Paid still work, TEST Forwarded is an unknown mode, no error row), R10 (switch Y
 `Live` row: Real List runs). H19 now expects the gate (Failed, one error row) for LedgerTestOnly
 Yes. The older Real checks (M2 to M30, H16 to H18, P1 to P6) model a released switch
 (`RealPayoutsOn` Yes) and still pass. N1: nesting stays within the Power Automate limit of 8.
+
+### V6 Task 2: live import and TEST proof (11/22/2026, times ET)
+
+Run in the Claude app browser by the thread "Capture pay baseline and pause 10M" from this
+thread's live steps, field site only, TEST rows only. `RealPayoutsOn` stayed No the whole
+time. The monthly flow was imported but never run. Results file in builder project files:
+`pay-ledger/proof-v34/task2/LIVE_RESULTS_2026-11-22.md`.
+
+| When | Step | Result |
+|---|---|---|
+| 4:38:55 PM | Before | Open Ledger Run Errors 0. One `Live` row: RealPayoutsOn No, LedgerTestOnly No. SPIFF Ledger 33 rows, all TEST, no batch. Financial hash 23490033230523a4 (same as V1.13) |
+| about 4:39 PM | Export (undo) | Live by hand 9944aff52c0a04a8, monthly dea3e7c9e08900a9 (pre-stamp, equal to the V2 backups) |
+| 4:41:16 PM | Monthly imported as Update | Read-back 654ea1592f6706f8 = package. Stayed Off |
+| 4:42:55 PM | By hand imported as Update | Read-back 81b33a4056a52f82 = package. On at 4:44:21 PM for the proof only |
+| 4:44:46 PM | TEST List, Only keys = 2 TEST rows | Succeeded (run ...1589CU01). Rows 12 and 14 stamped batch `PAY-2026-11-TEST-221644` with LastWriter. One TEST list mail to Brian |
+| 4:45:30 PM | TEST Resend of that batch | Succeeded (run ...5578CU06). Same TEST list mail, no row change |
+| 4:45:57 PM | TEST Paid, Paid On 2026-11-22 | Succeeded (run ...0725CU29). Rows 12 and 14 Paid with LastWriter. Ledger financial hash 600337057e189b4f |
+| 4:46:38 PM | Real List | **Failed** in 2 s (run ...0201CU03). Error row 21, Step `HSBS 10M by hand: Real_gate: RealPayoutsOn is not Yes (it is: False)`. One mail "HSBS payout: HSBS 10M by hand failed, real pay is off (RealPayoutsOn)". No list |
+| 4:47:07 PM | Real Resend `PAY-2026-11` | **Failed** (run ...1349CU17). Error row 22, same Step, one failure mail, no list |
+| 4:47:21 PM | Real Paid `PAY-2026-11` | **Failed** (run ...6394CU19). Error row 23, same Step, one failure mail, no Paid write |
+| 4:47:37 PM | Forwarded `PAY-2026-11` | Refused as unknown mode (run ...4553CU00). No error row, no write |
+| after 4:47:37 PM | Ledger check | Financial hash 600337057e189b4f, full row hash unchanged from after TEST Paid: the three Real attempts changed no ledger row |
+| 4:47:58 PM | Clean up | Error rows 21 to 23 Resolved. Rows 12 and 14 back to Waiting, batch, Sent On and Paid On blank, LastWriter `hand: Make real-pay switch block payouts`. Financial hash 23490033230523a4, equal to before |
+| 4:48:22 PM | By hand Off | Both 10M flows Off |
+
+Every mail went to Brian only; nothing went to a partner or rep. Undo: import the step "Export"
+packages (or `pay-ledger/rollback/v34-baseline/packages`, or `history-stamp/out` for the
+stamp without the gate) as Update, and keep both Off.
+
+Task 2 acceptance: every Real entry point stopped while `RealPayoutsOn` is No (live for by
+hand List, Resend and Paid; offline for monthly, R2 and R3), TEST List, Resend and Paid still
+work, and monthly stays Off. All live facts in V6 are builder-recorded. Both 10M flows stay Off
+until plan Task 6 turns by hand On, and monthly stays Off until Brian releases the first real
+payout.
 
 ## Field site refresh (11/21/2026)
 

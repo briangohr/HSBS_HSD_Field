@@ -587,7 +587,8 @@ Since 11/22/2026 4:09 PM ET both 10M flows are Off under TSM pay plan v3.4 until
 `RealPayoutsOn` (pay sheet, V3.4 stabilization record). The v3.4 Task 2 build makes every Real
 10M mode stop, with one Ledger Run Errors row and one failure mail to Brian, unless exactly one
 Ledger Settings `Live` row has `RealPayoutsOn` Yes and LedgerTestOnly No (pay sheet, V5). TEST
-runs do not need it. Earnings and My Team are unchanged.
+runs do not need it. Live since 11/22/2026 4:42 PM ET; both 10M flows stay Off (pay sheet,
+V6). Earnings and My Team are unchanged.
 
 ## What must stay true
 
