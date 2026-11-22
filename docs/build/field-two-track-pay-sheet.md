@@ -613,7 +613,7 @@ Award Key set to enforce unique values. If it exists, add:
 | List | Columns | Written by |
 |---|---|---|
 | Sign Log | Case ID (number, unique, indexed), Started On (date and time, indexed), Plan Manager (number), Plan Rep Sign (number), Handled On (date and time, indexed) | HSBS 10 only (W16) |
-| Ledger Settings | Title (`Live`, one row), LedgerTestOnly, StaffingAwardsOn, RealPayoutsOn (Yes/No), HF_Qualified, HF_Signed, HF_Manager, ST_Qualified, ST_Manager (Number, 0 decimals) | BB2 or Brian, by hand ("Shared switches", "Amount settings") |
+| Ledger Settings | Title (`Live`, one row), LedgerTestOnly, StaffingAwardsOn, RealPayoutsOn (Yes/No), HF_Qualified, HF_Signed, HF_Manager, ST_QualifiedPrivate, ST_QualifiedGroup, ST_Manager (Number, 0 decimals; `ST_Qualified` until B2) | BB2 or Brian, by hand ("Shared switches", "Amount settings") |
 | Payout Batches | Batch ID (Title, unique), Payer (text), Kind (text: `TEST` or `Real`), Created On, Send Started On, Sent On, Confirmed On (date and time, Send Started On and Sent On indexed), Paid On (date), Send Run ID (text), Rows Sent (multiple lines, plain), Not Paid (multiple lines, plain) | HSBS 10B and 10P only; Brian may clear Send Started On by hand (F4.7) |
 
 Payer: if it is a Choice column, add the choice `Direct Dental`, keeping `HealthFirst`. If it
@@ -909,9 +909,11 @@ last email:
    Brian or Claude states in writing the site's `REP_PAY_PLAN` and `REP_PAY_PLAN_STAFFING`
    values (not secrets), and they equal the Ledger Settings amounts after the change:
    `reached:<HF_Qualified>,manager:<HF_Manager>` (plus `signed:<HF_Signed>` when it is not 0)
-   and `reached_private:<ST_Qualified>,reached_group:<ST_Qualified>,manager:<ST_Manager>`,
-   each part's number equal, order ignored. Today that is `reached:100,manager:50` and
-   `reached_private:100,reached_group:100,manager:50`. If they differ: **stop and ask Brian** (spec
+   and `reached_private:<ST_QualifiedPrivate>,reached_group:<ST_QualifiedGroup>,manager:<ST_Manager>`,
+   each part's number equal, order ignored. After the 11/22 baseline (B2, B9) that is
+   `reached:100,manager:50` and `reached_private:100,reached_group:200,manager:50`. Before
+   B2's columns exist, both staffing parts compare to the one `ST_Qualified` (live today:
+   `reached_private:100,reached_group:100,manager:50`). If they differ: **stop and ask Brian** (spec
    section 6: "Brian changes a plan in both places together"). BB2 writes both values in
    the build report.
 
@@ -1303,8 +1305,9 @@ SharePoint. Choice names are 7F's (`docs/field-flow-contract.md`, 7F save).
 - A3. The Ledger Settings row reads LedgerTestOnly Yes, StaffingAwardsOn No, RealPayoutsOn
   No, and the `Settings read` step of a run of HSBS 10, 10D, 10B and 10P shows those
   values. Deleting the row makes each fall back to the same safe values and record an X1
-  row; put it back. The five amounts read `HF_Qualified` 100, `HF_Signed` 0, `HF_Manager`
-  50, `ST_Qualified` 100, `ST_Manager` 50. Blanking one makes the next run fail before any
+  row; put it back. The amounts read `HF_Qualified` 100, `HF_Signed` 0, `HF_Manager`
+  50, `ST_QualifiedPrivate` 100, `ST_QualifiedGroup` 200, `ST_Manager` 50 (before B2:
+  `ST_Qualified` 100). Blanking one makes the next run fail before any
   write; put it back. HSBS 10's trigger concurrency reads 1.
 - A3a. (One switch, every flow) BB2 sets StaffingAwardsOn Yes in the row for group S and
   confirms it in the `Settings read` step of HSBS 10 and 10D: a TEST staffing case saved
