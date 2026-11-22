@@ -54,6 +54,24 @@ packages: project files `pay-ledger/build/gen_10m.py`, `test_10m.py`, `pay-ledge
 | M10 | Paid | Mode `Paid` with the batch ID, Paid On (`YYYY-MM-DD`, not after today, not before any row's Sent On or Earned On) and Not paid (Award Keys Alexa did not pay, blank when she paid all). Checks run before any write: a Not paid key that is not on this batch (as F4.8 check 6), a batch with no rows, or a row whose Test does not match the batch stops the run and changes nothing. Then each row, read fresh, with `IF-MATCH`: `Waiting` becomes `Paid` with Paid On; a Not paid `Waiting` row gets Sent On cleared and keeps its Payout Batch, so a retry still finds it on the batch and a later list carries it (its stamp then replaces the batch); a `Waiting` row with Sent On blank was returned by an earlier run and is never marked Paid by a retry; a `Void` row that was paid becomes `Paid`, Disputed Yes, Dispute Note `voided after it was listed, then paid: ` and its Void Reason (money that moved is never hidden, D3); a `Paid` row with the same Paid On is left as it is. So a retry with the same inputs changes nothing done. Brian gets the counts. Claude runs it when Brian says Alexa paid |
 | M11 | Failure | A failed run writes a Ledger Run Errors row (Step starts `HSBS 10M`) and emails Brian. Rows stamped before the failure keep their batch, and Mode `Resend` lists them |
 
+### 10M live log (11/22/2026, times ET)
+
+No prior flow, so nothing to back up. Pay switches untouched (LedgerTestOnly No, StaffingAwardsOn
+Yes, RealPayoutsOn No, amounts unchanged).
+
+| When | What | Undo |
+|---|---|---|
+| 12:54 PM | Ledger Settings: new column `PayoutDate` (Single line of text, 10). `Live` row PayoutDate blank to `2026-11-30` | Set it blank (same result). The column is read by 10M only |
+| 1:00 PM | Imported "HSBS 10M Payout by hand (new site)" as new (package sha256 `f78c323f...2389`), Brian's SharePoint and Office 365 connections | Turn Off |
+| 1:05 PM | Imported "HSBS 10M Monthly payout (new site)" as new (sha256 `22e64ca6...a3a1`) | Turn Off |
+| 1:06 PM | Hand flow On | Turn Off |
+| 1:08 PM | TEST List, Only keys `49\|Reached\|Rep`, `56\|Reached\|Rep`, `48\|Signed\|Manager`: exactly those 3 rows (Ids 12, 28, 15) got Payout Batch `PAY-2026-11-TEST-221308` and Sent On 11/22; the other 30 rows unchanged. One email to Brian only, "2 people, $250" (TEST rep $200 for 2 leads, TEST manager $50). `payout-<batch>.csv` opens in Excel with the right columns | Rows restored at 1:14 PM |
+| 1:11 PM | TEST Resend of that batch: the same email again, no ledger write (Modified times unchanged) | None needed |
+| 1:12 PM | TEST Paid, Paid On 2026-11-22, Not paid `56\|Reached\|Rep`: Ids 12 and 15 Paid with Paid On 11/22; Id 28 back to Waiting, Sent On cleared, batch kept. Email "Marked Paid: 2, Back to Waiting: 56\|Reached\|Rep" | Rows restored at 1:14 PM |
+| 1:13 PM | Same Paid inputs again: no row changed. Email "Marked Paid: 0, Unchanged: 3" | None needed |
+| 1:14 PM | Restored Ids 12, 15, 28 by REST MERGE: Status Waiting, Payout Batch, Sent On and Paid On blank (as before the proof). No ledger row holds a batch. No Ledger Run Errors row since noon | None needed |
+| 1:15 PM | Monthly flow On. Its first list is Mon 11/30 10 AM; every other day it ends quietly. Today the ledger has no real row, so 11/30 sends Brian an empty-month note unless real rows arrive | Turn Off |
+
 ## Multi-office build record: HSBS 10 group amount (11/22/2026)
 
 Thread "Pay $200 for multi-office leads". Brian, 11/22 11:30 AM ET: "$100 unless someone selects
