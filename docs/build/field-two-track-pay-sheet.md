@@ -6,6 +6,9 @@
 > refresh" below first. It wins over any older line in this sheet that still reads
 > otherwise. If a step still reads two ways, stop and ask Brian.
 
+> **11/22/2026: HSBS 10M replaces HSBS 10B and 10P.** Read "10M build record" below. F4.7
+> and F4.8 are kept as history only.
+
 ## Field site refresh (11/21/2026)
 
 Brian, 11/21/2026: "it should show real dollars. What I will need to create is a file for
@@ -25,6 +28,74 @@ and DD, it's 100 of qualified lead and $50 to the manager".
 | R9 | Column names | `Solutions` on the case, JDE | Service Cases `Service` (single choice) names the company. Referrals: `JDEAccount`, `Solutions` (multiple choice), `Source`, `PracticeName`, `CustomerName`, `Referring Rep Email`, `Test`. BB2 still records each exact name (record 4) |
 | R10 | Signed | Status `Closed - Won` with Signed Date and Signed Product | Partner Status `Signed` or `Close won`, with Signed Date set. 7F's `signed` choice writes both |
 | R11 | Site plan words | `REP_PAY_PLAN_STAFFING` `reached_private:100,reached_group:200,manager:50` | `reached_private:100,reached_group:200,manager:50` again since 11/22 (R5). It was `reached_private:100,reached_group:100,manager:50` from 11/21 to 11/22. HealthFirst stays `reached:100,manager:50` |
+
+## 10M build record: monthly payout list (11/22/2026)
+
+Brian, 11/22/2026 12:12 PM ET: "How hard could a payout run be, it's a once a month cut to
+alexa with the names and emails of the TSM's who qualified based on the partner service case
+updates". 12:31 PM ET: the list goes to Brian only, and he forwards it to Alexa.
+
+**HSBS 10M replaces HSBS 10B and 10P (F4.7, F4.8), which are not built.** There is no batch per
+payer, no list to HealthFirst or Matt Penny, no Payout Batches list and no payer confirmation
+flow. Where F4.7, F4.8 or an older line names 10B or 10P, read 10M. Generator, offline tests and
+packages: project files `pay-ledger/build/gen_10m.py`, `test_10m.py`, `pay-ledger/out10m/`.
+
+| # | What | As built |
+|---|---|---|
+| M1 | Flows | "HSBS 10M Monthly payout (new site)": every day 10 AM Eastern (after 10D, which can hold an open catch-up row until about 9 AM). "HSBS 10M Payout by hand (new site)": manual, Mode `List`, `Resend` or `Paid`. Both trigger concurrency 1 |
+| M2 | Payout day | Ledger Settings `PayoutDate` (Text, `YYYY-MM-DD`, the one setting) when it is a real date in the current Eastern month, else the last weekday of the month. November 2026: Mon 11/30. Any other day the scheduled run ends quietly. A `PayoutDate` in another month is ignored, so it never needs clearing |
+| M3 | Real pay gate | A Real list needs exactly one `Live` row with LedgerTestOnly No (fail safe, as 10D). 10M does not read StaffingAwardsOn or RealPayoutsOn. **RealPayoutsOn is retired** with 10B and 10P: it stays No and no flow reads it |
+| M4 | Freeze | No list while a Ledger Run Errors row is open (X1). Brian gets one email saying why, nothing is stamped, and the list is made by hand (Mode `List`, Kind `Real`) once the rows are resolved |
+| M5 | Rows | SPIFF Ledger: Status `Waiting`, Disputed not Yes, Sent On blank (Payout Batch blank, or the batch of a row Alexa did not pay, M10), Test = the kind (a Real list never holds a TEST row and a TEST list never a real one, D8), Amount a whole number 1 to 1000, Payer matching Company (X12), Earned On (Eastern date) on or before the cutoff (the run date), and not on X17 (office match tested live as in 10D, unless Office Check is `Cleared`). Each Waiting row held out is named in the email with its reason |
+| M6 | Batch ID | Real: `PAY-<yyyy-MM>`, one per month. A Real list whose batch already has rows is refused (Mode `Resend` sends the list again). TEST: `PAY-<yyyy-MM>-TEST-<ddHHmm>` |
+| M7 | Stamp | Each row: Payout Batch = the batch ID and Sent On = today, one MERGE with `IF-MATCH` on the ETag from the read. A 412 (HSBS 10 changed it, for example a void) leaves the row out and names it. The one-writer rule holds by columns: HSBS 10 never writes Payout Batch, Sent On or Paid On, and 10M changes Status only from `Waiting` (or `Void`, see M10) to `Paid`, each time with `IF-MATCH`. **Sent On means the row was in the list email Brian got** (M8) |
+| M8 | The list | Read back from the ledger by Payout Batch, so the email is always what is stamped. One email **to Brian only**: a table, `payout-<batch>.csv` for Alexa (one line per person: Name from Rep Roster, Email, Role, Total, Leads, HealthFirst, Direct Dental, Batch) and `payout-detail-<batch>.csv` for Brian (one line per row). A cell that starts with `=`, `+`, `-` or `@` gets a leading `'`. A row returned as not paid (M10) is left out of the totals and named. A row that is `Void` in the read-back is left out of the totals, named "void, left out of this list, will not be marked Paid", and has its Sent On cleared (MERGE with `IF-MATCH` on the ETag from the same read) before the email is built, so a later Paid never marks it Paid. If that clear fails (a 412 because HSBS 10 changed the row again), the run fails (M11) and sends no list; Mode `Resend` recovers. A row voided after the read-back was in the email as `Waiting` and keeps Sent On. A cleared void row keeps its Payout Batch and is never relisted (M5 needs Status `Waiting`). No customer name, phone or email. No mail to anyone else (D15, S9) |
+| M9 | Resend | Mode `Resend` with a batch ID: the list again from a fresh read-back. It writes nothing except the M8 Sent On clear on a row that is now `Void`. A Real Resend says "Rows on an earlier list that are now void are left out. Forward only this list." This is the recovery when the list email fails after the stamp |
+| M10 | Paid | Mode `Paid` with the batch ID, Paid On (`YYYY-MM-DD`, not after today, not before any row's Sent On or Earned On) and Not paid (Award Keys Alexa did not pay, blank when she paid all). Checks run before any write: a Not paid key that is not on this batch (as F4.8 check 6), a batch with no rows, or a row whose Test does not match the batch stops the run and changes nothing. Then each row, read fresh, with `IF-MATCH`: `Waiting` becomes `Paid` with Paid On; a Not paid `Waiting` row gets Sent On cleared and keeps its Payout Batch, so a retry still finds it on the batch and a later list carries it (its stamp then replaces the batch); a `Waiting` row with Sent On blank was returned by an earlier run and is never marked Paid by a retry; a `Void` row with Sent On blank was left out of the list Brian got (M8): it is never marked Paid, whether or not it is in Not paid, and when it is not in Not paid it is named "void, left out of the list, not marked Paid; if Alexa paid it anyway, tell Claude"; a `Void` row with Sent On set was in that list and voided after it, so when it was paid (not in Not paid) it becomes `Paid`, Disputed Yes, Dispute Note `voided after it was listed, then paid: ` and its Void Reason (money that moved is never hidden, D3); a `Paid` row with the same Paid On is left as it is. So a retry with the same inputs changes nothing done. Brian gets the counts. Claude runs it when Brian says Alexa paid. No flow and no hand step clears a row's Payout Batch, since this run finds rows by it (X13) |
+| M11 | Failure | A failed run writes a Ledger Run Errors row (Step starts `HSBS 10M`) and emails Brian. Rows stamped before the failure keep their batch, and Mode `Resend` lists them |
+
+### 10M live log (11/22/2026, times ET)
+
+No prior flow, so nothing to back up. Pay switches untouched (LedgerTestOnly No, StaffingAwardsOn
+Yes, RealPayoutsOn No, amounts unchanged).
+
+| When | What | Undo |
+|---|---|---|
+| 12:54 PM | Ledger Settings: new column `PayoutDate` (Single line of text, 10). `Live` row PayoutDate blank to `2026-11-30` | Set it blank (same result). The column is read by 10M only |
+| 1:00 PM | Imported "HSBS 10M Payout by hand (new site)" as new (package sha256 `f78c323f...2389`), Brian's SharePoint and Office 365 connections | Turn Off |
+| 1:05 PM | Imported "HSBS 10M Monthly payout (new site)" as new (sha256 `22e64ca6...a3a1`) | Turn Off |
+| 1:06 PM | Hand flow On | Turn Off |
+| 1:08 PM | TEST List, Only keys `49\|Reached\|Rep`, `56\|Reached\|Rep`, `48\|Signed\|Manager`: exactly those 3 rows (Ids 12, 28, 15) got Payout Batch `PAY-2026-11-TEST-221308` and Sent On 11/22; the other 30 rows unchanged. One email to Brian only, "2 people, $250" (TEST rep $200 for 2 leads, TEST manager $50). `payout-<batch>.csv` opens in Excel with the right columns | Rows restored at 1:14 PM |
+| 1:11 PM | TEST Resend of that batch: the same email again, no ledger write (Modified times unchanged) | None needed |
+| 1:12 PM | TEST Paid, Paid On 2026-11-22, Not paid `56\|Reached\|Rep`: Ids 12 and 15 Paid with Paid On 11/22; Id 28 back to Waiting, Sent On cleared, batch kept. Email "Marked Paid: 2, Back to Waiting: 56\|Reached\|Rep" | Rows restored at 1:14 PM |
+| 1:13 PM | Same Paid inputs again: no row changed. Email "Marked Paid: 0, Unchanged: 3" | None needed |
+| 1:14 PM | Restored Ids 12, 15, 28 by REST MERGE: Status Waiting, Payout Batch, Sent On and Paid On blank (as before the proof). No ledger row holds a batch. No Ledger Run Errors row since noon | None needed |
+| 1:15 PM | Monthly flow On. Its first list is Mon 11/30 10 AM; every other day it ends quietly. Today the ledger has no real row, so 11/30 sends Brian an empty-month note unless real rows arrive | Turn Off |
+
+### 10M P0 fix live log: a void row left out of the email is never Paid (11/22/2026, times ET)
+
+Codex P0 on PR 44: a row voided between the stamp and the read-back (or before a Resend) was left
+out of the email totals but kept Sent On, so a Paid confirm with Not paid blank marked it Paid.
+Fix as M8, M9 and M10 above. Offline: `test_10m.py` 74/74 (P1 to P13 and N1 new; 8 of the new checks
+fail on the old build), also with SIM_EAGER=1; `test_10` 80/80, `test_10d` 49/49, lint 0. Backup:
+`pay-ledger/rollback/p0-void-before/` (the packages imported at 1:00 and 1:05 PM; the live exports
+at 1:30 PM matched them action for action). Pay switches and real rows untouched; the ledger held
+no real row.
+
+| When | What | Undo |
+|---|---|---|
+| 1:33 PM | First import of the hand flow refused by Power Automate: "nested at level 9 which exceeds the maximum nesting limit of 8". Nothing changed (live export after it still matched the backup). The void checks were flattened and `test_10m.py` N1 now checks the nesting limit | None needed |
+| 1:36 PM | "HSBS 10M Payout by hand (new site)" imported as Update (top SharePoint connection, month-old Outlook connection). Package `out10m/HSBS-10M-Payout-by-hand-NEW-SITE.zip`, actions hash `054c064b5ce15519` | Import `rollback/p0-void-before/HSBS-10M-Payout-by-hand-NEW-SITE.zip` as Update, turn On |
+| 1:39 PM | "HSBS 10M Monthly payout (new site)" imported as Update, same connections. Actions hash `811b70fb3eba8467` | Import `rollback/p0-void-before/HSBS-10M-Monthly-payout-NEW-SITE.zip` as Update, turn On |
+| 1:40 PM | Hand flow On | Turn Off |
+| 1:41 PM | TEST List, Only keys `49\|Reached\|Rep`, `56\|Reached\|Rep`, `48\|Signed\|Manager`: Ids 12, 15, 28 got Payout Batch `PAY-2026-11-TEST-221341` and Sent On 11/22. Email "2 people, $250", to Brian only | Rows restored at 1:44 PM |
+| 1:42 PM | Id 28 voided by REST (Status Void, Void Reason "TEST 10M P0 proof") | Restored at 1:44 PM |
+| 1:42 PM | TEST Resend: Id 28 Sent On cleared, batch kept; email "2 people, $150" names it "void, left out of this list, will not be marked Paid"; no other row written | Restored at 1:44 PM |
+| 1:44 PM | TEST Paid, Paid On 2026-11-22, Not paid blank: Ids 12 and 15 Paid; Id 28 stays Void, Paid On blank, Disputed No, not written. Email "Marked Paid: 2", "Needs a look: 56\|Reached\|Rep (void, left out of the list, not marked Paid ...)" | Restored at 1:44 PM |
+| 1:44 PM | Restored Ids 12, 15, 28 by REST MERGE: Status Waiting, Void Reason, Payout Batch, Sent On and Paid On blank (as before, `pay-ledger/proofP0/ledger_before_2026-11-22_1342ET.txt`). No ledger row holds a batch. No new Ledger Run Errors row | None needed |
+
+Codex P0 on PR 47 (1:48 PM): X13 told Brian to clear Payout Batch on a void row, which would hide it from 10M `Paid` if Alexa paid it anyway. X13's drop-off rule now says nobody clears Payout Batch by hand, and M10 says no flow or hand step does. The 10D exceptions email only lists the row (its text never said to clear it), so no flow changed. `test_10m.py` 76/76 with X13a (batch kept: Paid, Disputed) and X13b (batch cleared: missed, stays Void).
+| 1:46 PM | Monthly flow On. First list still Mon 11/30 10 AM | Turn Off |
 
 ## Multi-office build record: HSBS 10 group amount (11/22/2026)
 
@@ -336,8 +407,7 @@ with its merge commit.
 | HSBS 10 | **The one ledger writer.** An HTTP flow that takes one Service Case ID, reads the case fresh, and writes or voids its ledger rows. One run at a time (trigger concurrency 1) | Ledger rows only |
 | HSBS 10S | On a Service Case save (created or modified), sends that case's ID to HSBS 10 | Nothing |
 | HSBS 10D | Every day at 7:00 AM Eastern: sends each rep app case to HSBS 10, then emails Brian the ledger exceptions | Nothing but its email to Brian |
-| HSBS 10B | Brian's payout batch, one payer per batch. Run by Brian by hand | Payout Batch and Sent On on ledger rows, and the payout list email |
-| HSBS 10P | Brian marks a confirmed batch Paid. Run by Brian by hand | Status and Paid On on ledger rows |
+| HSBS 10M | The monthly payout list to Brian, who forwards it to Alexa, and the hand flow that marks a confirmed batch Paid (10M build record). Replaces 10B and 10P | Payout Batch, Sent On, Status (to Paid) and Paid On on ledger rows, and the list email to Brian |
 
 **Why one writer.** Every ledger write goes through HSBS 10, and HSBS 10 runs one request
 at a time. A save and the daily run can never decide the same case at once, so two runs can
@@ -353,7 +423,7 @@ noted). If one holds, he builds or turns on nothing further and reports it.
 | # | Stop when | Why |
 |---|---|---|
 | S0 | PR #121 is not merged to `main` (gate G0) | Decisions 75, 76, 77, 82 and 84 are not yet on `main` |
-| S1 | Any flow other than the HSBS 10 this sheet builds (and 10B and 10P) writes the SPIFF Ledger and is turned on | A second writer breaks the one-writer rule. Brian decides what happens to it |
+| S1 | Any flow other than the HSBS 10 this sheet builds (and 10M, by the columns in the 10M build record, M7) writes the SPIFF Ledger and is turned on | A second writer breaks the one-writer rule. Brian decides what happens to it |
 | S2 | Before go-live (build order step 6): the SPIFF Ledger holds any row with Status `Paid` or `Pending review`, or any row with Test = No other than the TEST rows cleared by hand in checks H19 and H25. After go-live, only `Pending review` stops | No payout has run and HSBS 10 was never built (`docs/build/rep-app-flow-contracts.md`, "Open before pay goes live"). Such a row means something paid or wrote real money already |
 | S3 | Award Key is not set to "Enforce unique values", and cannot be set because two rows share a key | The unique key is what stops a second row (D6) |
 | S4 | Any flow has a trigger on the SPIFF Ledger | A ledger write would start it, and it might send mail |
@@ -361,7 +431,7 @@ noted). If one holds, he builds or turns on nothing further and reports it.
 | S6 | Closed Reason is stored on Referrals, not on the Service Case (sheet F2, "BB2 records", item 2) | Two companies on one referral would share one reason |
 | S7 | Referrals on the field site is missing, or BB2 cannot name exactly: Title (the referral ID, `HSBS-F<n>` or `HSBS-A<n>`), Source, Referring Rep Email, `JDEAccount` (text), PracticeName, CustomerName, Solutions, Introduced On, Test, Created, `RepPracticeType` (R5) | HSBS 10 reads every one of them |
 | S8 | The HSBS 10 HTTP trigger cannot be set to a concurrency limit of 1 | The one-writer rule needs it |
-| S9 | The address HSBS 10D, 10B or 10P would send Brian's mail to is not the Brian address a live HSBS flow already sends Brian-only mail to (for example the daily gap check) | No new recipient (`AGENTS.md`, check 2) |
+| S9 | The address HSBS 10D or 10M would send Brian's mail to is not the Brian address a live HSBS flow already sends Brian-only mail to (for example the daily gap check) | No new recipient (`AGENTS.md`, check 2) |
 | S10 | Routing has no entry holding the staffing payout list contact (decision 75), or it holds more than one address | Only Brian adds a recipient. BB2 never types an address into a flow, the sheet or the report |
 | S11 | The live 3F HealthFirst (new site) or 3F Staffing (new site) decides a TEST row with a rule that marks a row Test when this sheet's "TEST case" rule (Words used) would not | A row that gets no live email because it is TEST must never earn real money |
 | S12 | The daily catch-up in F4.6 would post more than 5,000 cases in one run | Ask Brian how to split it across days first; never skip a case |
@@ -387,9 +457,8 @@ not hold since 11/13: 3F's Test_mode reads the Referrals row's Test (decision 97
    a TEST rep (Rep Roster Test = Yes). BB2 deletes TEST rows, cases and ledger rows when the
    checks are done and reported.
 3. No live sends. Nothing in this sheet emails a rep, a manager, a partner or a customer.
-   HSBS 10D and 10P email Brian only. HSBS 10B emails Brian, and on Brian's own send run the
-   payer contact read from Routing (F4.7). No dollar amount goes in any email to a rep or a
-   manager (D15).
+   HSBS 10D and 10M email Brian only (10M replaces 10B and 10P, so no payout list goes to a
+   payer). No dollar amount goes in any email to a rep or a manager (D15).
 4. No new recipient beyond those two, and no address typed into a flow.
 5. No secrets anywhere: no flow URL, key, token or password in a sheet, report, Status Log
    line, test note or commit. HSBS 10's trigger URL lives only in the HTTP steps of 10S and
@@ -522,7 +591,8 @@ amount columns in "Amount settings":
 |---|---|---|---|
 | LedgerTestOnly | Yes | HSBS 10 (W7), HSBS 10D (step 1 filter and the lists) | While Yes, HSBS 10 acts only on a TEST case and writes nothing for any other, and 10D posts and lists TEST cases only |
 | StaffingAwardsOn | No | HSBS 10 (W9), HSBS 10D (X5) | While No, HSBS 10 creates no ledger row for a staffing case (F4.4, step W9); rule V still voids or disputes one written while it was on. 10D lists X5 only while it is No. What turns it on: F4.9 |
-| RealPayoutsOn | No | HSBS 10B, HSBS 10P | While No, nothing is sent to a payer and no Real batch is marked Paid (F4.7, F4.8) |
+| RealPayoutsOn | No | Nobody (retired 11/22/2026 with 10B and 10P) | Stays No. HSBS 10M sends nothing to a payer and does not read it (10M build record, M3) |
+| PayoutDate | blank (Text, added 11/22/2026) | HSBS 10M | The payout day, `YYYY-MM-DD`, used only when it is a real date in the current month; else the last weekday of the month (10M build record, M2). Not a pay switch: Claude changes it when Brian gives Alexa's cutoff |
 
 - In this sheet, a switch "true" or "on" means Yes in this row, and "false" or "off" means
   No. Setting a switch always means editing this row, never a flow.
@@ -1009,7 +1079,7 @@ reads the amount on the row). A line for a TEST case or row starts with `TEST `.
 | X10 | Not qualified, reason Other | A HealthFirst or staffing case, any source, Qualified No, reason `Other`. The line adds the Not Qualified Note word for word | Seven days after Last Partner Update (Ask Brian A5) |
 | X11 | Live rep, Test manager | A K_M row with Test Yes whose manager is a TEST person, on a case whose Referrals Test, Service Case Test and rep's Rep Roster Test are all No (a non-TEST case by its columns; a `TEST` practice name alone does not make it TEST here, which is how check H19 runs). The line adds the Award Key | Brian clears Test on the row |
 | X12 | Payer does not match Company | A ledger row whose Payer is blank, or does not match its Company by the company table (blank Company reads `HealthFirst`). The line adds the Award Key | It is fixed by hand |
-| X13 | Voided after joining a batch | A row with Status `Void` and Payout Batch set and Paid On blank. The line adds the Award Key and the batch | Brian clears its Payout Batch (he takes it off the list he sends) |
+| X13 | Voided after joining a batch | A row with Status `Void` and Payout Batch set and Paid On blank. The line adds the Award Key and the batch | 10M `Paid` on its batch marks it `Paid` (Disputed, so it moves to X7) because Alexa paid it. **Nobody clears its Payout Batch by hand**: 10M `Paid` finds the row by it, and a cleared row Alexa paid would stay `Void` with the money hidden (M10, test X13b). 10M already leaves a void row out of the list it sends (M8). A void row Alexa did not pay, or that 10M left out of the list, stays listed; Brian reads it, as X7 |
 | X14 | Rep not on the Rep Roster | Rep app case whose Referring Rep Email is blank or has no Rep Roster row | The rep has a row |
 | X15 | Two cases for one referral and company | W8 | The data is fixed |
 | X17 | Possible repeat office under another JDE | A Waiting row whose Office Check is blank, on a rep app case that is an **office match**: its field-site Referrals PracticeName, trimmed and compared without regard to letter case, matches an earlier Referrals row for the same company, with the same TEST value (decision 90), created in the 12 months before it, with a different or blank JDE. The line adds both Referral IDs and the Award Key. No row is voided by a flow for it: the JDE the rep typed is not checked against any source, so Brian decides. A row on X17 is held out of every batch (F4.7) | Brian sets Office Check `Cleared` on the row (it may then be batched), or voids it by hand with a reason, or the row is no longer Waiting |
@@ -1026,6 +1096,8 @@ only (S9), sent every day, with each list under its name and `None` under an emp
 It is sent from the mailbox Brian's existing daily mail uses.
 
 ## F4.7 HSBS 10B: payout batch, one payer at a time
+
+> Not built. Replaced 11/22/2026 by HSBS 10M (10M build record). Kept as history.
 
 Spec section 6 ("one payout batch per payer"), rep app v3 "Payout, step by step", decisions
 62 and 75. Trigger: manual (instant). Trigger concurrency 1, so two batch runs never
@@ -1156,6 +1228,8 @@ A failure can leave a list unsent, never sent twice, and never marked Paid unsen
 10B never marks a row Paid.
 
 ## F4.8 HSBS 10P: record the payer's confirmation
+
+> Not built. Replaced 11/22/2026 by HSBS 10M Mode `Paid` (10M build record, M10). Kept as history.
 
 Trigger: manual, after the payer confirms payment ("Nothing is marked Paid without a
 confirmed payout", `AGENTS.md`). Trigger concurrency 1. Run-only permission: Brian; BB2 runs

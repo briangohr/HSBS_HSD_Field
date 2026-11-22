@@ -520,6 +520,14 @@ site already treats as no clear answer: the page resends the same `submissionId`
 the case already written, and makes the Outbox row then. FT-2c (7G asks) will add Outbox
 writes inside 7G and updates this note if anything changes.
 
+### HSBS 10M monthly payout (no site change)
+
+The site never calls HSBS 10M. 10M makes the monthly payout list from SPIFF Ledger `Waiting`
+rows and emails it to Brian only, who forwards it to Alexa (pay sheet, 10M build record,
+11/22/2026). It replaces 10B and 10P. When Brian confirms Alexa paid, 10M sets those rows to
+`Paid` with Paid On, which `earnings` and `team` already send as `status` `Paid` and `paidOn`.
+No request or answer in this contract changes, and no mail goes to a rep or a manager.
+
 ## What must stay true
 
 - The key (Referral Key or Partner Links Link Key) is a secret in the URL, and so is the
