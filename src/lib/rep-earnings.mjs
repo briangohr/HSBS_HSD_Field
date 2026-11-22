@@ -4,7 +4,8 @@
 // Rep only; the manager's rows belong to My Team) and the rep's referral list.
 // Contract: docs/field-flow-contract.md.
 //
-// Money words (D11): Earned = Waiting + Paid. Pending review (an auto-reached award
+// Money words (D11): Earned = Waiting + Paid. On screen (Brian 11/21) the tiles read
+// Total earned, Awaiting payment and Paid, and a Waiting row reads "awaiting payment". Pending review (an auto-reached award
 // Brian hasn't cleared, D10) and Void are never counted. A Void row always shows its
 // reason. A Paid row stays paid (D3).
 //
@@ -234,7 +235,7 @@ const DISPUTED = 'Disputed';
 
 function statusWords(row) {
   if (row.status === 'Paid') return row.disputed ? `Paid on ${shortDate(row.paidOn)}. ${DISPUTED}` : `Paid on ${shortDate(row.paidOn)}`;
-  if (row.status === 'Waiting') return 'Earned, waiting to be paid';
+  if (row.status === 'Waiting') return 'Earned, awaiting payment';
   if (row.status === 'Pending review') return 'Pending review';
   return `Not paid: ${row.voidReason}`;
 }
@@ -473,7 +474,7 @@ export function moneyLine(referral, rows, plan = V3_PLAN, facts = referralFacts(
     parts.push(`Paid ${dollars(amt)} on ${shortDate(on)}.${disputed}`);
   }
   const waiting = counted.filter((r) => r.status === 'Waiting').reduce((n, r) => n + r.amount, 0);
-  if (waiting) parts.push(`${dollars(waiting)} waiting to be paid.`);
+  if (waiting) parts.push(`${dollars(waiting)} awaiting payment.`);
   if (pending.length) parts.push(`${dollars(pending.reduce((n, r) => n + r.amount, 0))} pending review.`);
   return withNotPaid(parts.join(' '));
 }

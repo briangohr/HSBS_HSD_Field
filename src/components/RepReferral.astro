@@ -274,7 +274,7 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
         <p><strong data-count="inProgress">0</strong> In progress</p>
         <p><strong data-count="signed">0</strong> Signed</p>
         {payEnabled && (
-          <p><strong data-money="earned">--</strong> Earned<span class="rep-sub" data-money-paid>Paid --</span></p>
+          <p><strong data-money="earned">--</strong> Total earned<span class="rep-sub" data-money-paid>Paid --</span></p>
         )}
       </div>
       {payEnabled && <p class="rep-status" id="rep-money-status" role="status" hidden>Your earnings did not load. Try again in a minute.</p>}
@@ -297,8 +297,8 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
     payEnabled && (
       <section id="rep-earnings" hidden>
         <div class="rep-tiles">
-          <p><strong data-money="earned">--</strong> Earned</p>
-          <p><strong data-money="waiting">--</strong> Waiting</p>
+          <p><strong data-money="earned">--</strong> Total earned</p>
+          <p><strong data-money="waiting">--</strong> Awaiting payment</p>
           <p><strong data-money="paid">--</strong> Paid</p>
         </div>
         <p class="rep-status" id="rep-pending" hidden></p>

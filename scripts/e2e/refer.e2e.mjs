@@ -887,9 +887,13 @@ try {
       earningsFail = false;
     }
   });
-  await check('pay on: My Earnings shows Earned $50, Waiting $50, Paid $0, $50 pending review, and one line per row', async () => {
+  await check('pay on: My Earnings shows Total earned $50, Awaiting payment $50, Paid $0, $50 pending review, and one line per row', async () => {
     await page.click('[data-tab=earnings]');
     await page.waitForSelector('#rep-earnings-lines li', { timeout: 10000 });
+    // Brian 11/21: the tiles read Total earned, Awaiting payment and Paid, and so does Track.
+    const tileWords = await page.locator('#rep-earnings .rep-tiles p').evaluateAll((els) => els.map((e) => e.lastChild?.textContent?.trim()));
+    assert.deepEqual(tileWords, ['Total earned', 'Awaiting payment', 'Paid']);
+    assert.match(await page.textContent('#rep-track .rep-tiles'), /Total earned/);
     assert.equal(await page.textContent('#rep-earnings [data-money=earned]'), '$50');
     assert.equal(await page.textContent('#rep-earnings [data-money=waiting]'), '$50');
     assert.equal(await page.textContent('#rep-earnings [data-money=paid]'), '$0');
@@ -1340,16 +1344,16 @@ try {
     await page.waitForSelector('.team-row', { timeout: 10000 });
     // TEST Rep: $50 waiting (the pending review row does not count). TEST Quiet: $50 paid.
     assert.deepEqual(await page.locator('[data-team-tile]').allTextContents(), ['1', '0', '$100', '$50']);
-    assert.equal(await page.textContent('#team-own-sentence'), "You've earned $100 from your team's signed offices. Paid $50. Waiting $50.");
+    assert.equal(await page.textContent('#team-own-sentence'), "You've earned $100 from your team's signed offices. Paid $50. Awaiting payment $50.");
     assert.equal(await page.locator('#team-own-note').count(), 0);
     assert.equal(CONFIRM_WORDS.test(await page.textContent('#team-panel')), false);
     await page.click('#team-own-toggle');
     assert.deepEqual(await page.locator('#team-own-lines li').allTextContents(), [
-      'Nov 5. TEST South Park Dental. HealthFirst, signed. TEST Rep. $50. Earned, waiting to be paid.',
+      'Nov 5. TEST South Park Dental. HealthFirst, signed. TEST Rep. $50. Earned, awaiting payment.',
       'Oct 15. TEST Gone Dental. HealthFirst, signed. A former team member. $50. Paid on Oct 30.',
     ]);
     const money = await page.locator('.team-row .team-money').allTextContents();
-    assert.deepEqual(money, ['Earned $50. Paid $0.', 'Earned $50. Paid $50.']);
+    assert.deepEqual(money, ['Total earned $50. Paid $0.', 'Total earned $50. Paid $50.']);
     assert.equal(TEAM_PRIVATE.test(await page.content()), false);
   });
 
@@ -1492,7 +1496,7 @@ try {
     await page.addStyleTag({ content: HIDE_TOOLBAR });
     await page.click('[data-tab=team]');
     await page.waitForSelector('#team-own:not([hidden])', { timeout: 10000 });
-    assert.equal(await page.textContent('#team-own-sentence'), "You've earned $100 from your team's signed offices. Paid $50. Waiting $50.");
+    assert.equal(await page.textContent('#team-own-sentence'), "You've earned $100 from your team's signed offices. Paid $50. Awaiting payment $50.");
   });
   // Codex P1 on #113 (round 2): REP_PAY_PLAN changes while the tab is open. The answers
   // below stand in for a server that now holds other terms. Every promise the page worded
@@ -1648,8 +1652,8 @@ try {
       const waiting = dollarsOf(await page.textContent('#rep-earnings [data-money=waiting]'));
       const paid = dollarsOf(await page.textContent('#rep-earnings [data-money=paid]'));
       const shown = await cards();
-      // The lines that count in Earned: Waiting ("Earned, waiting to be paid") and Paid.
-      const lineSum = shown.filter((c) => c.status === 'Earned, waiting to be paid' || /^Paid on /.test(c.status)).reduce((n, c) => n + dollarsOf(c.amount), 0);
+      // The lines that count in Earned: Waiting ("Earned, awaiting payment") and Paid.
+      const lineSum = shown.filter((c) => c.status === 'Earned, awaiting payment' || /^Paid on /.test(c.status)).reduce((n, c) => n + dollarsOf(c.amount), 0);
       const total = ledger(S5_ROWS);
       assert.equal(total, 500);
       assert.deepEqual([track, earned, waiting + paid, lineSum], [total, total, total, total], 'Track tile, My Earnings tile, Waiting plus Paid, the lines');
@@ -1675,7 +1679,7 @@ try {
       assert.deepEqual(shown.find((c) => c.office === 'TEST Dental Six'), { office: 'TEST Dental Six', amount: '$100', company: 'HealthFirst', what: 'HealthFirst reached the office', status: 'Paid on Nov 12. Disputed' });
       assert.equal(paid, 100);
       // A row with no Company reads as HealthFirst, the same as one that says so.
-      assert.deepEqual(shown.find((c) => c.office === 'TEST Dental One'), { office: 'TEST Dental One', amount: '$100', company: 'HealthFirst', what: 'HealthFirst reached the office', status: 'Earned, waiting to be paid' });
+      assert.deepEqual(shown.find((c) => c.office === 'TEST Dental One'), { office: 'TEST Dental One', amount: '$100', company: 'HealthFirst', what: 'HealthFirst reached the office', status: 'Earned, awaiting payment' });
       const widths = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
       assert.ok(widths[0] <= widths[1], `no sideways scroll: ${widths}`);
     });
@@ -1686,7 +1690,7 @@ try {
         amount: '$100',
         company: 'Direct Dental, Private practice',
         what: 'Direct Dental reached the customer',
-        status: 'Earned, waiting to be paid',
+        status: 'Earned, awaiting payment',
       });
     });
     await check('S5 done-when 3: a TEST group reached and qualified shows $200, on My Earnings and its lead screen', async () => {
@@ -1696,7 +1700,7 @@ try {
         amount: '$200',
         company: 'Direct Dental, Group',
         what: 'Direct Dental reached the customer',
-        status: 'Earned, waiting to be paid',
+        status: 'Earned, awaiting payment',
       });
       await page.click('#rep-earnings-lines button >> text=TEST Group Two');
       await page.waitForSelector('#rep-lead:not([hidden])', { timeout: 10000 });
@@ -1733,7 +1737,7 @@ try {
       const total = team.team.reduce((n, m) => n + ledger(m.rows), 0);
       assert.equal(total, 600);
       const tile = dollarsOf(await page.textContent('[data-team-tile=earned]'));
-      const people = (await page.locator('.team-row .team-money').allTextContents()).map((t) => dollarsOf(/Earned (\$[\d,]+)/.exec(t)?.[1]));
+      const people = (await page.locator('.team-row .team-money').allTextContents()).map((t) => dollarsOf(/Total earned (\$[\d,]+)/.exec(t)?.[1]));
       const perPerson = await page.locator('.team-row').evaluateAll((rows) =>
         rows.map((r) => [...r.querySelectorAll('.team-award__amt')].reduce((n, a) => n + Number((a.textContent ?? '').replace(/[^0-9]/g, '')), 0)),
       );
@@ -1743,13 +1747,13 @@ try {
       const lines = await page.locator('.team-row >> nth=0').locator('.team-award').evaluateAll((els) => els.map((e) => e.textContent));
       assert.deepEqual(lines, ['TEST Group TwoDirect Dental, Group$200', 'TEST Practice ThreeDirect Dental, Private practice$100', 'TEST Dental OneHealthFirst$100', 'TEST Dental SixHealthFirst$100']);
       // The manager's own pay: $50 on each sign, one HealthFirst and two Direct Dental.
-      assert.equal(await page.textContent('#team-own-sentence'), "You've earned $150 from your team's signed offices. Paid $0. Waiting $150.");
+      assert.equal(await page.textContent('#team-own-sentence'), "You've earned $150 from your team's signed offices. Paid $0. Awaiting payment $150.");
       await page.click('#team-own-toggle');
       const own = await page.locator('#team-own-lines li').allTextContents();
       assert.deepEqual(own, [
-        'Nov 12. TEST Practice Eight. Direct Dental, signed. TEST Rep Two. $50. Earned, waiting to be paid.',
-        'Nov 11. TEST Practice Three. Direct Dental, signed. TEST Rep One. $50. Earned, waiting to be paid.',
-        'Nov 10. TEST Dental One. HealthFirst, signed. TEST Rep One. $50. Earned, waiting to be paid.',
+        'Nov 12. TEST Practice Eight. Direct Dental, signed. TEST Rep Two. $50. Earned, awaiting payment.',
+        'Nov 11. TEST Practice Three. Direct Dental, signed. TEST Rep One. $50. Earned, awaiting payment.',
+        'Nov 10. TEST Dental One. HealthFirst, signed. TEST Rep One. $50. Earned, awaiting payment.',
       ]);
       assert.equal(CONFIRM_WORDS.test(await page.textContent('#team-panel')), false);
     });
