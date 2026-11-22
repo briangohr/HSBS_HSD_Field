@@ -91,7 +91,7 @@ export function sanitizeReferral(raw) {
   if (!id) return null;
   const source = Array.isArray(row.lines) ? row.lines : Array.isArray(row.cases) ? row.cases : [];
   const lines = source.slice(0, 20).map(sanitizeLine).filter(Boolean);
-  const history = Array.isArray(row.history) ? row.history.slice(0, 50).map(sanitizeHistory).filter(Boolean) : [];
+  const history = Array.isArray(row.history) ? row.history.slice(-50).map(sanitizeHistory).filter(Boolean) : [];
   // The field app has one route: the partner calls first. Anything else is blank.
   const route = row.route === 'Partner' ? 'Partner' : '';
   return {

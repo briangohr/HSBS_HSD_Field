@@ -289,6 +289,27 @@ referral) still reads as before. In `team`, each signed-up member carries its ow
 beside its `referrals`, and the site works out each referral's `reached` from its lines
 (a line with `talkedToDoctor` "Yes") when 1F does not send it. Past 5,000 items in a list,
 a filtered read needs its filter column indexed: Referrals `Referring_x0020_Rep_x0020_Email` and Service Cases `Referral`.
+
+**History from the Status Log (G2, 11/22/2026).** Each line in `cases` (rep `list` and each
+member in `team`) also carries `statusLog`: the case's `Status_x0020_Log` text as stored,
+one event per line, oldest first, lines split by a line feed. Blank or missing means no
+history. The site reads it into the referral's `history` (`src/lib/status-log.mjs`) and
+leaves it off the line:
+
+- A leading `YYYY-MM-DD ` (or `M/D/YYYY `) is the entry's `on`. A line with no date keeps
+  its text with a blank `on`, which shows on the timeline with no date and never in the feed.
+- The flows' bookkeeping tags `[s:...]` (7F save), `[r:...]` (7H reply) and `[esc:...]`
+  (7G escalation) are removed.
+- An escalation line (`<date> escalated to Brian [esc:...]`) is dropped. It is HSBS's own
+  follow-up, never the partner's.
+- A referral with two cases merges their entries by date. One day keeps log order.
+- The newest 50 entries per referral are kept.
+
+When 1F sends a non-empty `history` on a referral itself, that wins and `statusLog` is not
+read. A rep's timeline and feed show each entry in the spec's step words, or the entry's
+own words when the map knows none of it (the partner's note can show there). A manager's
+view keeps only mapped steps. 7H's `<partner>: replied by email` reads "<partner> sent an
+update by email".
 More than 5,000 referrals, or an answer over 4 MB, is a failed read ("Your referrals did not
 load."), never a short list. The same holds for each member's referrals in `team` (inside
 that answer's 2 MB limit).

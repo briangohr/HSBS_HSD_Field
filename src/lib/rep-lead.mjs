@@ -132,6 +132,8 @@ function mapped(t, co) {
   if (/^(meeting set|scheduled)\b/.test(x)) return 'Meeting set';
   if (/^proposal\b/.test(x)) return `${co} sent a proposal`;
   if (/^no change this week\b/.test(x)) return `${co} is working on it`;
+  // 7H logs a partner's email answer to its update ask as "<partner>: replied by email".
+  if (/^replied by email$/.test(x)) return `${co} sent an update by email`;
   return '';
 }
 
