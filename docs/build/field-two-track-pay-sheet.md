@@ -9,6 +9,90 @@
 > **11/22/2026: HSBS 10M replaces HSBS 10B and 10P.** Read "10M build record" below. F4.7
 > and F4.8 are kept as history only.
 
+> **11/22/2026 4:09 PM ET: TSM pay plan v3.4 is the pay plan of record.** Read "V3.4
+> stabilization record" below first. It overrides M3 in the 10M build record: `RealPayoutsOn`
+> is no longer retired. It becomes the one hard gate for every Real 10M mode (plan Task 2), and
+> it stays No until Brian releases the first real payout. Both 10M flows are Off until then.
+
+## V3.4 stabilization record (11/22/2026)
+
+Brian posted "TSM Pay Stabilization and Acceptance Implementation Plan, v3.4" on 11/22/2026
+3:58 PM ET ("V3.4"). It supersedes v3.3 for field pay. It keeps HSBS 10, 10S, 10D, 1F and 10M.
+Its hard gate: no Real 10M mode (List, Resend, Forwarded or Paid) until plan Tasks 1 to 8 pass,
+Codex has no open P0 or P1 on the exact heads and live packages, and Brian releases the first
+real payout in writing. The plan's work order is Task 1 (this record), then Task 2 (10M reads
+`RealPayoutsOn`), Task 3 (frozen manifest), Task 4 (ledger semantics and adjustments), Task 5
+(fully paged 10D validation), Task 6 (dual reader and ordered activation), Task 7 (TEST failure
+matrix), Task 8 (Power BI and RLS), Task 9 (first real payout). One task per thread.
+
+### V1 Task 1: live baseline (read only, 11/22/2026 4:01 to 4:07 PM ET)
+
+Read in the Claude app browser: SharePoint REST on `sites/HSBSField` and the Power Automate
+export and details pages. No flow ran, no row changed, no email was sent.
+
+| # | Item | Value at baseline |
+|---|---|---|
+| V1.1 | Repo | `origin/main` 9ec8736 (PR 52 merged after the plan's f1eb8b9; docs and site only, no pay change) |
+| V1.2 | Ledger Settings | One row, Title `Live` (ID 1, ETag 14, modified 11/22 12:54 PM ET): LedgerTestOnly No, StaffingAwardsOn Yes, RealPayoutsOn No, HF_Qualified 100, HF_Signed 0, HF_Manager 50, ST_Qualified 100, ST_Qualified_Group 200, ST_Manager 50, PayoutDate `2026-11-30` |
+| V1.3 | Vercel `hsbs-hsd-field` | REP_PAY_ENABLED true (Production), REP_APP_ENABLED true, REP_PAY_PLAN `reached:100,manager:50`, REP_PAY_PLAN_STAFFING `reached_private:100,reached_group:200,manager:50`, PARTNER_OFFICE_CHECK true |
+| V1.4 | HSBS 10 Ledger writer (7dc8451c) | On. Live hash 481b5111cb1a78b8 = project files `pay-ledger/out/HSBS-10-Ledger-writer-NEW-SITE.zip`. Last run 3:21 PM ET Succeeded |
+| V1.5 | HSBS 10S Ledger on case save (7cf1095c) | On. Last run 3:21 PM ET Succeeded (one Failed run 3:13 PM ET is the R9 fault test while HSBS 10 was Off; its error row 18 is resolved) |
+| V1.6 | HSBS 10D Daily pass (9f844540) | On. Live hash 005e65625eb10dff; with the signed HSBS 10 address blanked e68dfe81dd1ab0bd = `retries/live-2026-11-22/HSBS-10D-Daily-pass-NEW-SITE.zip`. Last runs 7:00 AM ET and 3:14 PM ET Succeeded. Last pass `catch-up-19`, 5 cases, done 3:19 PM ET |
+| V1.7 | HSBS 10M Payout by hand (42ab04aa) | On at baseline. Live hash 9944aff52c0a04a8 = `pay-ledger/out10m/HSBS-10M-Payout-by-hand-NEW-SITE.zip`. Last run 3:23 PM ET Succeeded (TEST, "nothing to pay") |
+| V1.8 | HSBS 10M Monthly payout (388c3751) | On at baseline. Live hash dea3e7c9e08900a9 = `pay-ledger/out10m/HSBS-10M-Monthly-payout-NEW-SITE.zip`. No run yet. Next real action was Mon 11/30 10 AM ET |
+| V1.9 | Ledger Run Errors | 19 rows, 0 open |
+| V1.10 | SPIFF Ledger | 33 rows, IDs 1 to 34 (no ID 33), one page. Every row is TEST. **Real rows 0.** No row has Payout Batch, Sent On or Paid On. No Paid row. No Disputed row |
+| V1.11 | Counts by Test x Status x Eligibility | TEST x Waiting x (no column): 16 rows, $1,250. TEST x Void x (no column): 17 rows, $1,600. Real: 0 rows, $0. Eligibility does not exist yet (Task 4 adds it), so every row reads blank |
+| V1.12 | TEST detail by role, payer, event | Waiting: Rep Reached HealthFirst 8 / $700; Rep Signed HealthFirst 2 / $300; Manager Signed HealthFirst 4 / $200; Manager Reached HealthFirst 2 / $50 (2 legacy rows from 11/18). Void: Rep Reached HealthFirst 13 / $1,300; Rep Signed HealthFirst 1 / $150; Manager Signed HealthFirst 3 / $150. No Direct Dental row today |
+| V1.13 | Fingerprints | Full row export sha256 1cb37a547114a462... (33 rows, ETags included). Financial fields (ID, keys, role, event, status, amount, dates, batch, Disputed, Test, payer, company, office check, void reason, Old ID) sha256 23490033230523a4... |
+
+Drift from the plan's baseline table: the repo head moved to 9ec8736 (V1.1). Ledger Settings,
+Vercel pay flags and flow states match it. SPIFF Ledger has no Eligibility column, no
+Schema Version and no validation fields yet; plan Tasks 4 and 5 add them. 4 legacy schema 1
+rows (IDs 1 to 4, Old ID 3 to 6) have no Award Key and amounts from an older plan ($50 rep,
+$25 manager); all TEST. The stamp thread's LastWriter and Reason columns are not live yet.
+
+### V2 Task 1: backups (11/22/2026 4:06 PM ET)
+
+Kept in Brian's builder project files, outside git, under
+`pay-ledger/rollback/v34-baseline/` (file hashes in `SHA256SUMS.txt` there):
+
+- `packages/`: HSBS 10, HSBS 10D (signed address blanked, paste from live on import), both 10M.
+  Each package's canonical hash equals the live export (V1.4, V1.6 to V1.8).
+- `list-schemas.txt`: SPIFF Ledger, Ledger Settings (with the `Live` row values), Ledger Run
+  Errors, Ledger Pass Log and Sign Log: every column's internal name, type, index, unique,
+  required and choices.
+- `spiff-ledger-rows.jsonl`: all 33 SPIFF Ledger rows with every column, ID, ETag, Created,
+  Modified and version. Its compact JSON hash equals the live read (V1.13). It holds TEST
+  payee addresses, so it never enters git or a handoff.
+
+### V3 Task 1: containment live log (times ET)
+
+| When | What | Before | After | Undo |
+|---|---|---|---|---|
+| 4:08:31 PM | "HSBS 10M Monthly payout (new site)" turned Off (details page, More, Turn off) | On | Off | Turn On (only after Task 2 is live and accepted, or Brian says so) |
+| 4:08:57 PM | "HSBS 10M Payout by hand (new site)" turned Off | On | Off | Turn On |
+
+`RealPayoutsOn` stays No (not touched). No Real List, Resend or Paid ran. The coordinator told
+Brian first that the Mon 11/30 10 AM ET automatic list is paused until Task 2 is live.
+
+### V4 Task 1: reconciliation (11/22/2026 4:10 PM ET)
+
+| Check | Before (4:05 PM) | After (4:10 PM) | Result |
+|---|---|---|---|
+| SPIFF Ledger rows | 33 | 33 | Same |
+| Full row hash (ETags included) | 1cb37a54... | 1cb37a54... | Same: no row changed |
+| Ledger Settings | ETag 14, RealPayoutsOn No | ETag 14, RealPayoutsOn No | Same |
+| Open Ledger Run Errors | 0 | 0 | Same |
+| 10M hand definition hash | 9944aff52c0a04a8 | 9944aff52c0a04a8 | Same (Off changes state only) |
+| 10M monthly definition hash | dea3e7c9e08900a9 | dea3e7c9e08900a9 | Same |
+| Payout emails since 3:55 PM | none | none | No email (mail search; last 10M mail was TEST at 3:23 PM) |
+| Real batch or real Paid row | none | none | Nothing to stop for |
+
+Task 1 acceptance: both 10M flows Off, RealPayoutsOn No, no financial row changed, backups
+complete, and the baseline accounts for all 33 ledger rows. Every live fact in V1 to V4 is
+builder-recorded (Claude read it; Codex did not).
+
 ## Field site refresh (11/21/2026)
 
 Brian, 11/21/2026: "it should show real dollars. What I will need to create is a file for
