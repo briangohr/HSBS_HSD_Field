@@ -454,3 +454,27 @@ describe('S5 review: the footer for a company the site does not know', () => {
     assert.equal(moneyForReferrals([ref('H', hfLine({ partnerStatus: 'Signed' }), { signed: true })], [], TODAY, PLANS).lines.H, `Signed. ${MAIN}`);
   });
 });
+
+describe('L2: a row whose company is the payer\'s screen name (1F sends Payer) names its company', () => {
+  test('"Direct Dental" reads as the Staffing key, so the line names Direct Dental', () => {
+    const r = sanitizeLedgerRow(row('DD', { company: 'Direct Dental', practiceType: 'Group', amount: 200 }));
+    assert.equal(r?.company, 'Staffing');
+    assert.equal(r?.practiceType, 'Group', 'the ledger row\'s own type is kept, as on a Staffing row');
+    const s = summarizeEarnings([/** @type {any} */ (r)], [], PLANS);
+    const line = s.lines.find((l) => l.referralId === 'DD');
+    assert.equal(line?.company, 'Direct Dental, Group');
+    assert.match(String(line?.label), /^Nov 10\. TEST DD\. Direct Dental, Group\. Direct Dental reached the customer\. \$200\. /);
+    assert.equal(s.earned, 200);
+  });
+
+  test('"HealthFirst" as a payer name still reads HealthFirst, and an unknown name still reads nothing', () => {
+    assert.equal(sanitizeLedgerRow(row('A', { company: 'HealthFirst' }))?.company, 'HealthFirst');
+    assert.equal(sanitizeLedgerRow(row('A', { company: 'GoTu' }))?.company, '');
+    assert.equal(sanitizeLedgerRow(row('A', { company: 'direct dental' }))?.company, '', 'only the exact screen name');
+  });
+
+  test('a manager\'s own row with the payer name reads the same on My Team', () => {
+    const m = sanitizeLedgerRow(row('DD', { company: 'Direct Dental', event: 'Signed', payeeRole: 'Manager', amount: 50, repEmail: 'test.rep@henryschein.com' }), 'Manager');
+    assert.equal(m?.company, 'Staffing');
+  });
+});

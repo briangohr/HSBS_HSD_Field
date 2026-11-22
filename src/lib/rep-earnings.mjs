@@ -74,15 +74,17 @@ const PRACTICE_TYPES = ['Private practice', 'Group'];
 /**
  * A ledger row's Company as a company key (spec section 4). Blank is HealthFirst (spec
  * section 6, "Ledger": every row written before the column existed is HealthFirst). A
- * Solutions value is read as its key. Anything else is '': the row still counts in every
- * total, because a total always equals the ledger, and names no company.
+ * Solutions value is read as its key, and so is a company's exact screen name: 1F sends
+ * the row's Payer (`Direct Dental` on a staffing row) as `company` (LOOPS L2, 11/22/2026).
+ * Only the exact name counts. Anything else is '': the row still counts in every total,
+ * because a total always equals the ledger, and names no company.
  * @param {unknown} v
  */
 function ledgerCompany(v) {
   const t = typeof v === 'string' ? v.trim() : '';
   if (!t || t === HEALTHFIRST) return HEALTHFIRST;
   if (t === STAFFING) return STAFFING;
-  return keyForSolutions(t);
+  return keyForSolutions(t) || (REP_COMPANIES.find((c) => c.name === t)?.key ?? '');
 }
 
 /**
