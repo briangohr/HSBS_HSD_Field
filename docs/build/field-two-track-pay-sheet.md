@@ -266,9 +266,9 @@ Run by Claude in the thread "Turn on real pay in production", TEST people only.
   is Test Yes, and LedgerTestOnly Yes keeps HSBS 10 and 10D from writing a non-TEST row.
 - LedgerTestOnly stays Yes until the Dec 4 release (build order step 6: Brian's go, groups G
   and S, and P2-3 on the first real save Monday 11/23).
-- The two branch-only `REP_PAY_ENABLED` copies from P4 and P5b are `false`, Preview only, on
-  merged branches, so they do nothing. Their removal in the Vercel dashboard is tracked in the
-  FT-2b handoff.
+- The two branch-only `REP_PAY_ENABLED` copies from P4 and P5b (`false`, Preview only, on
+  merged branches) were removed in the Vercel dashboard on 11/22/2026 at 8:30 AM ET. Only the
+  Production `true` copy remains.
 - Undo: set `REP_PAY_ENABLED` to `false` (the app reads only exactly `true`), then redeploy
   production.
 

@@ -436,8 +436,12 @@ case that already holds the tag, so a resend writes nothing twice.
 
 The site never reads or writes the Field Notify Outbox list and never calls HSBS 7N. 7N is a
 scheduled flow that retries failed field notifications from that list (sheet PU, piece E).
-No request or answer in this contract changes. FT-2b (7F hand backs) and FT-2c (7G asks)
-will add Outbox writes inside those flows; each updates this note if `save` changes.
+No request or answer in this contract changes. Since 11/22/2026 (FT-2b) 7F writes a
+disqualify hand back to the Outbox and sends it from there. The `save` answers are the same.
+A failed send still answers 200. A failed Outbox lookup or row create answers 503, which the
+site already treats as no clear answer: the page resends the same `submissionId`, 7F finds
+the case already written, and makes the Outbox row then. FT-2c (7G asks) will add Outbox
+writes inside 7G and updates this note if anything changes.
 
 ## What must stay true
 

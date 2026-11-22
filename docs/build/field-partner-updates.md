@@ -408,9 +408,29 @@ Test Yes row may mail only Brian (To is Brian, or a value with no `@` as the TES
 switch; CC blank or Brian). Any other address parks the row with no send, whatever
 `Test_only` says.
 
-**Still to build.** FT-2b: 7F writes an Outbox row before its hand back email. FT-2c: 7G
-writes one per partner ask (only after Monday 11/23's 8 AM ET run). Until then the Outbox
-holds TEST rows only.
+**7F hand backs (FT-2b, live 11/22/2026).** A disqualify save (`dq_noanswer`,
+`dq_notinterested`, or an old page's `handback`) now goes through the Outbox:
+
+1. The hand back email moved out of the case write. A failed or skipped case write sends
+   nothing. The note runs after the case is written (or is already done on a page retry).
+2. Notify Id is `dq:<case id>:<submissionId>`. 7F looks it up by Title. If a row exists, in
+   any State, 7F does nothing more: 7N owns retries.
+3. No row: 7F creates it (Hand back, Pending, Tries 0, Test from the TEST partner row or the
+   case). A 500 `SPDuplicateValuesFoundException` from a racing resend counts as exists. Then
+   it claims the row (Sending, IF-MATCH on its etag) and sends once. Sent: Sent, SentOn,
+   Tries 1. Failed: Pending, Tries 1, LastError (250 characters), NextTry now plus 30
+   minutes. A 412 or other failed claim sends nothing; 7N picks the row up.
+4. A failed send never fails the save. A failed Outbox lookup, referral read or create (other
+   than the duplicate) answers 503 `write_failed`; the page resends the same `submissionId`,
+   finds the case done, and makes the row then.
+5. To is always Brian. Only a TEST row whose Partner Links PartnerEmail has no `@` uses that
+   value, as the TEST fault switch. Subject and body are unchanged (`[TEST] ` on TEST rows).
+
+Built by `partner-updates/build/patch_7f_outbox.py` on the live 7F export, checked with
+`lint_flow.py` (0 problems) and `test_7f_outbox.py` (51/51) before import.
+
+**Still to build.** FT-2c: 7G writes one Outbox row per partner ask (only after Monday
+11/23's 8 AM ET run is read back).
 
 **Live change record (ET).**
 
@@ -428,9 +448,29 @@ holds TEST rows only.
   model (`sim.py`) now fails on `empty()` of a number, so this cannot slip through again.
 - 11/22 12:31 AM: TEST run Succeeded. Rows L2 (Parked, 5 tries) and M2 (Expired); exactly one
   email to Brian, `[TEST] Field notify retry: 2 parked or expired`. Test No row G untouched.
+- 11/22 8:30 AM (FT-2b): exported live 7F. Its triggers and actions match the PR 20 build, so
+  that package is saved as the rollback `partner-updates/ft2/rollback/HSBS-7F-before-outbox.zip`.
+- 11/22 8:43 AM: patched 7F imported (Update) onto HSBS 7F Field partner (new site), same
+  connections. 8:44 AM: turned On. The production page's saves still reach 7F, so the trigger
+  URL in Vercel is unchanged.
+- 11/22 8:46 AM, E1: TEST Partner Links row 1 PartnerEmail set to a value with no `@`. A TEST
+  `dq_noanswer` save on Case 59 (HSBS-F80) answered 200 `{"ok":true}`. Outbox row 17 Pending,
+  Tries 1, LastError set, NextTry plus 30 minutes. No email.
+- 11/22 8:47 AM, E2: the same save again (same `submissionId`) answered 200. Still one row,
+  one Status Log line, Tries 1.
+- 11/22 8:48 AM, E3: PartnerEmail and row 17 MailTo set back to Brian, NextTry made due, 7N
+  run by hand. Exactly one email, `[TEST] Field lead disqualified: HSBS-F80`. Row 17 Sent.
+- 11/22 8:49 AM: clean TEST `dq_noanswer` save on Case 52 (HSBS-F76) with the fault off. 7F
+  sent one email right away. Row 18 Sent, Tries 1.
+- 11/22 8:59 AM, E4: the next scheduled 7N run Succeeded and sent nothing. Rows 17 and 18 stayed
+  Sent (Tries 2 and 1). TEST Partner Links row 1 PartnerEmail ends as Brian.
+- E5 (5 tries parks, Cleared never sends) was proven on 7N in FT-2a and is unchanged.
 
-**Undo.** Turn 7N Off. Nothing else reads the Outbox. Earlier definitions are in the project
-files under `partner-updates/ft2/rollback/` (v1, v2 and v3 as imported).
+**Undo.** 7N: turn it Off. Earlier definitions are in the project files under
+`partner-updates/ft2/rollback/` (v1, v2 and v3 as imported). 7F: re-import
+`partner-updates/ft2/rollback/HSBS-7F-before-outbox.zip` as Update onto HSBS 7F Field partner
+(new site), turn it On (imports arrive Off), then do one TEST save to confirm the trigger URL.
+That brings back the old direct hand back email.
 
 ## What the site, 1F and 3F keep
 
