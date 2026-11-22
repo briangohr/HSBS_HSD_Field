@@ -48,7 +48,7 @@ These are BB2 start v1's rules, still in force, plus the Microsoft Learn rule.
 | Field 7A and 7B copies | In the launch (decision 135) | None |
 | HSBS Field gap check (sheet GC) | New launch piece (decision 132) | None |
 | HSBS 1J sign-up and its welcome sender | Not recorded in the repo | R0 |
-| Pay flows HSBS 10, 10S, 10D, 10B, 10P | Not built (decision 120) | R1a, R1b |
+| Pay flows HSBS 10, 10S, 10D, 10M (10M replaces 10B and 10P, 11/22/2026) | 10, 10S, 10D live; 10M see the pay sheet 10M build record | R1a, R1b |
 | Company on ledger rows in 1F (F6.4) | Not built | R2 |
 | Roster load, 590 rows | Not built | R3 |
 | Link delivery to loaded people | No sheet until now | R4 |
