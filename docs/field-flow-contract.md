@@ -2,7 +2,8 @@
 
 The site side of the contract between this site and its three Power Automate flows. The
 flow side (how 1F, 1J and 7F are built, step by step) lives in the build sheets in `docs/build/`
-and on the Field Build Desk. When the two disagree, stop and ask Brian.
+and on the Field Build Desk. When the two disagree, this doc wins and the sheet is fixed to
+match. Ask Brian only when the gap changes what a real partner or rep receives or is paid.
 
 Rules for all three flows: one HTTP trigger per flow, method POST, JSON in and JSON out. The
 trigger URLs are secrets in Vercel env and never reach the browser, a log or this repo.
