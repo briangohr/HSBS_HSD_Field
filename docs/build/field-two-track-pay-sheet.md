@@ -44,7 +44,7 @@ wins for HSBS 10 and 10S.
 | B6 | Trigger | 10S: "When an item is created or modified" on Service Cases, with a trigger condition so only `HealthFirst` and the staffing value start a run. It posts `{"caseId": <ID>}`. The HSBS 10 address is pasted into 10S's HTTP step by Brian, with Secure inputs on |
 | B7 | Run record | Each HSBS 10 run ends with a `Result` step (company, TEST, no-pay reason, sign handled, roster conflict, manager) so a check reads one step |
 | B9 | How 10D knows its posts finished | A 202 says only that HSBS 10 queued the run. So a 10D catch-up post also sends `passId` (`catch-up-<the catch-up row's ID>`). HSBS 10 writes one Ledger Pass Log row (`Pass_x0020_ID`, `Case_x0020_ID`, `Finished_x0020_At`, `Outcome`) at the end of every run that carries a `passId`: `done`, `ended` (an End step: not a company, not rep app, no rep, not TEST, no case) or `failed`. A run without `passId` (a 10S save) writes none. F4.6 step 1 counts these rows |
-| B8 | Not built in P2 | 10D (P3), 10B and 10P (P6), Payout Batches (P6). Rule G and the X lists are not in HSBS 10 |
+| B8 | Not built in P2 | 10D (P3, see the P3 build record), 10B and 10P (P6), Payout Batches (P6). Rule G and the X lists are not in HSBS 10 |
 
 **Known follow-up for staffing (before `StaffingAwardsOn`).** 1F (new site) sends `Payer` as
 the row's `company`. A staffing row's Payer is `Direct Dental`, which the site reads as an
@@ -103,6 +103,43 @@ and 84 (`docs/claude-code/DECISIONS.md`; 75 to 84 as recorded on PR #121).
 This is a build sheet. BB2 builds it in Power Automate and SharePoint. The repo never edits
 a flow. It never contains a flow URL, key, email address or phone number, and neither does
 the build report.
+
+## P3 build record: HSBS 10D (11/21/2026)
+
+Built by Claude in the thread "Build daily pay pass" as one importable package,
+"HSBS 10D Daily pass (new site)", from the same generator as P2 (`pay-ledger/` in the
+project files). Where this record and an older line in F4.6 differ, this record wins for 10D.
+
+| # | What | Built |
+|---|---|---|
+| D1 | Trigger | Recurrence, every day, 7:00 AM, Eastern Standard Time. Trigger concurrency 1, so a hand run and the 7 AM run never overlap |
+| D2 | Settings | Same read and amount check as HSBS 10 (`Settings read` step). A bad row: one Ledger Run Errors row (Step `HSBS 10D: Check_settings`), no catch-up and no posts, the lists in safe mode (TEST only, staffing off), the email still goes, and the run ends Failed |
+| D3 | Reads | Rep Roster, Service Cases (`HealthFirst` and the staffing value), Ledger, Sign Log, open Ledger Run Errors and Active Team Roster rows, each one Get items of up to 5,000. Referrals is read in 5,000-ID windows from 1 to the highest ID, every source (X17 needs the other rows), and step 1 keeps `Source` `Rep app` |
+| D4 | Catch-up row | Ledger Run Errors, Title `HSBS 10D catch-up`, Step `catch-up <Eastern date>`, Case ID 0, Resolved No. Pass ID `catch-up-<row ID>` |
+| D5 | Posts | Each rep app case (TEST only while `LedgerTestOnly`) to HSBS 10 with `caseId` and `passId`, one at a time. HTTP retry policy off; any 2xx is accepted. A 429 waits 30 s, up to 10 tries. Any other answer: a Ledger Run Errors row (`HSBS 10D: post to HSBS 10 answered <code>`), and the loop goes on. 5,000 or more cases read, or more than 5,000 to post: nothing is posted, an S12 row is written |
+| D6 | Wait | Every minute, count Ledger Pass Log rows for the pass ID, at most 120 minutes. The catch-up row is marked Resolved Yes only when every window was read, every post was accepted, the count reached the accepted posts, and no row is `failed`. Else it stays open and X1 lists it |
+| D7 | X3 clock (record 7) | The field-site Service Cases has no Talked On column (read 11/21). X3's clock starts at Last Partner Update; a reached case with no Last Partner Update is listed from the first day. Reached means Talked To Doctor `Yes` or Partner Status `Reached` |
+| D8 | Open | A case is open while Closed Reason is blank and Partner Status is not one of 7F's closed words (record 5) |
+| D9 | Five business days | Today (Eastern) minus 7 days, or minus 6 on a Saturday. Holidays are not skipped |
+| D10 | X19 | Payout Batches does not exist yet (P6). X19 reads `None (the Payout Batches list is made with HSBS 10B)` until 10B adds the list and 10D reads it |
+| D11 | Lines | List, Referral ID, case ID, company in words, practice name, rep email, then the list's extra. Ledger lines add the Award Key. No amounts; no customer name, phone or email; the X10 note word for word. `TEST ` prefix; while `LedgerTestOnly` the email opens with one line saying only TEST lines are listed |
+| D12 | Failure | Every step sits in one scope. If it fails: a Ledger Run Errors row (Step `HSBS 10D: <steps>`) and a short email to Brian, then the run ends Failed |
+| D13 | HSBS 10 address | Pasted by Claude into `Post_case` after import (copy button on HSBS 10's trigger), with Secure inputs on. Never printed or stored |
+
+**Offline model.** `test_10d.py` runs 10D with HSBS 10 behind its HTTP step: 47 checks
+covering A3 and A6 for 10D, H16, H18 (X8 part), H28 (freeze line, open catch-up row), H35,
+the first hand run on the TEST rows, 500, 429 and silent-run handling, and every list. All
+pass with `if`, `and` and `or` evaluated lazily or eagerly. HSBS 10's 61 checks still pass.
+
+**Live checks in P3** (TEST rows only):
+
+| # | Sheet check | What | Pass |
+|---|---|---|---|
+| P3-1 | A3 | First hand run | `Settings read` shows the P2 values; trigger concurrency 1 |
+| P3-2 | Step 1 | Same run | Posts every TEST rep app case (today 42, 43, 44); one Pass Log row each, `done` or `ended`; no new ledger row; catch-up row Resolved Yes |
+| P3-3 | Step 3, H28 | The email | One email to Brian, subject `HSBS ledger exceptions <date>`; X1 starts with the freeze line; X10 lists case 44; no amount |
+| P3-4 | A6 | A case saved while the pass posts it | One ledger row only |
+| P3-5 | A3 | A blank amount, then a hand run | Error row `HSBS 10D: Check_settings`, no posts, email still sent; restore, mark resolved |
 
 ## Brian's decisions this sheet rests on (11/13)
 
