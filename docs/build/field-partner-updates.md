@@ -472,6 +472,68 @@ Built by `partner-updates/build/patch_7f_outbox.py` on the live 7F export, check
 (new site), turn it On (imports arrive Off), then do one TEST save to confirm the trigger URL.
 That brings back the old direct hand back email.
 
+## F. 7F speed at 50 leads (FT-5, 11/22/2026)
+
+**Why.** T4c (`proof-runs/HANDOFF_T4c.md`) found 7F too slow at partner scale. A 50-lead
+`trying` save answered the site 504 at 55.7 s (7F took about 6 minutes; every loop ran one
+lead at a time), and the leads read answered 503 at 20 s with about 55 open leads. The site
+waits 55 s for a save. Monday 11/23 8 AM ET is the first real partner ask.
+
+**What changed in 7F (no site change, no answer change).**
+
+1. Leads: one Referrals read for all open leads (ID range) instead of one per lead.
+   `Each_lead` runs 50 at a time with a Query. Every lead appends one item (a skip marker when
+   it has no intro), and the answer is 503 unless the item count equals the open lead count.
+2. Save, check: one Referrals read for the posted cases. `Check_each` runs 50 at a time with a
+   Query. The unused variables (tries, writeState, doneIds, savedCount) are gone, so no loop
+   sets a per-lead variable.
+3. Save, write: `Write_each` runs 50 at a time (saves cap at 50, so one wave). The 412 retry
+   Until reads its own `Try_state` Compose. After the loop 7F reads the posted cases again and
+   answers 200 `{"ok":true,"saved":n}` only when no posted case that is still open and ours
+   lacks the tag; n is the posted cases that carry the tag. Otherwise 503 `write_failed`.
+4. Save, fewer steps per lead (part 4). Power Automate pays for every action in a loop, run or
+   skipped. Part 3 still had about 40 per lead, most of them skipped, so a resend that wrote
+   nothing took 24 s inside the loop. Now:
+   - `Work` (a Query) sends only posted leads whose case lacks this save's tag into the loop,
+     so a resend runs no write iterations.
+   - The merge body is built for all leads before the loop by Selects (one action each, not
+     one per lead): `W_base`, `W_due` (next business day after the meeting date, the same 15
+     days as before), `P_all` (the old `M_all` without Status Log, plus the log line), then
+     `P_status` to `P_qual` (the same field drops as `M_status` to `M_qual`).
+   - In the loop: Get_fresh, Fresh_state, Should_write, Merge, Try_state (inside the 412
+     Until) and Write_result. Merge adds the Status Log from the fresh read and drops Closed
+     On unless the case closes now and has none, the same as the old `M_body`.
+   - The hand back note moved to its own loop, `HB_each` (50 at a time), after `Write_each`,
+     over the hand back and disqualify leads only. It reads the case fresh and queues the
+     Outbox row only when this save's tag is on the case, as before.
+
+Unchanged: the tag `[s:<submissionId>]`, the 422 rules, the merge fields and IF-MATCH, pay
+fields, the Outbox Notify Id, and every answer's shape. Built by the patch scripts in the
+project files (`partner-updates/speed/`, part 4 in `speed/part4/patch_7f_p4.mjs`), each run on
+the live 7F export and checked by the offline model test (old 7F against new, loops forward
+and reversed, faults injected): 53 of 53 pass for part 4.
+
+**Live change record (ET), all on TEST rows and the TEST partner row.**
+
+| When | What | Result |
+|---|---|---|
+| 11/22 12:21 PM | Parts 1 and 2 imported (Update) and On | Leads, 55 open: 200 in 10.7 to 12.0 s (was 503 at 20 s). Save 50 `trying`: 504 at 55.4 s, all 50 written right; resend 200 in 34.1 s |
+| 11/22 12:41 PM | Part 3: `Write_each` 20 to 50 at a time | Save 50: 200 in 54.0 s (1 s margin). Resend 200 in 34.0 s |
+| 11/22 12:58 PM | Part 4: steps per lead cut, done leads skipped, hand back in its own loop. Live export matched the part 3 build before the change | Leads, 5 open: 200 in 8.2 s. Save 50 `trying` (cases 218 to 267): **200 saved 50 in 25.0 s**. Resend same body: 200 saved 50 in 14.8 s, no case modified after the first save |
+
+Part 4 read back: 50 of 50 cases carry one tag from one `submissionId`, Partner Status "Trying
+to reach", Qualified and Closed On blank. Field Notify Outbox, SPIFF Ledger, Ledger Run Errors
+and Sign Log gained no rows. Cases 64 and 65 untouched. All 50 TEST cases and 50 TEST
+referrals went to the recycle bin after each part.
+
+**Undo.** Import the saved package as Update onto HSBS 7F Field partner (new site), turn it On
+(imports arrive Off), then one TEST leads read. Part 4 only:
+`partner-updates/speed/rollback/HSBS-7F-before-part4.zip`. Part 3 only:
+`speed/rollback/HSBS-7F-before-part3.zip`. All of FT-5: `speed/rollback/HSBS-7F-before-speed.zip`.
+
+**Next 7F change.** The Friday cadence patch (PR 43) must be rebuilt on a fresh export of
+this 7F, not on an older package.
+
 ## What the site, 1F and 3F keep
 
 - 3F HealthFirst and 3F Staffing: no change. The site: no change (fact 1).
