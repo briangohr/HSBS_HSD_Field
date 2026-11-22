@@ -1,5 +1,10 @@
 # Partner update window: 2 business days (field leads)
 
+> 11/20/2026: the field lists moved to `sites/HSBSField` on 11/18, so the old 7A, 7B, 7C and
+> 7D no longer reach field cases. Pieces 1 and 2 are done by `docs/build/field-partner-updates.md`
+> (sheet PU), which builds field-only flows and a field partner page. The decided rules below
+> still hold; where they differ, sheet PU wins. O8 needs no filter (sheet PU, fact 9).
+
 Status: draft for Brian's OK, 11/19/2026, revised the same day after review. Field build
 only. Nothing on the PVA side changes except the two filters in O8, if Brian approves them.
 Start: Mon 11/23/2026. If T2 has not passed by Fri 11/20 at 3:00 PM ET, the start moves to

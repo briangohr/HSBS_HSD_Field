@@ -6,7 +6,7 @@
 // Off (404) unless REP_APP_ENABLED=true. Contract: docs/field-flow-contract.md.
 import '../../styles/global.css';
 import RepReferral from '../../components/RepReferral.astro';
-import { clientIp } from '../../lib/http';
+import { clientIp, secretUrlNotFound } from '../../lib/http';
 import { repAppCompanies, repAppEnabled, repAskState, repPayEnabled, repPromisePlan, repStaffingPromisePlan } from '../../lib/register-flow.mjs';
 import { sendTab } from '../../lib/rep-companies.mjs';
 import { pickRepFields, submitRep, type RepSubmitResult } from '../../lib/rep-submit';
@@ -16,7 +16,7 @@ import { isReferralKey } from '../../lib/field-form.mjs';
 export const prerender = false;
 
 if (!repAppEnabled()) {
-  return new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+  return secretUrlNotFound();
 }
 
 const key = String(Astro.params.key ?? '').trim();

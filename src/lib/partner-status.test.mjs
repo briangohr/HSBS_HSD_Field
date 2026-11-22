@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { decorateReferrals } from './track.mjs';
-import { STAND_WORDS, displayStatus, isHandedBackStatus } from './partner-status-words.mjs';
+import { STAND_WORDS, choiceGroupsFor, displayStatus, isHandedBackStatus, isQualifiedStatus } from './partner-status-words.mjs';
 
 test('status words are the same stored values everywhere, and old values still display', () => {
   assert.deepEqual(STAND_WORDS, [
@@ -53,4 +53,20 @@ test('status words are the same stored values everywhere, and old values still d
   assert.equal(isHandedBackStatus('Hand back to HSBS'), true);
   assert.equal(isHandedBackStatus('Return to HSBS'), false);
 
+});
+
+test('once qualified, the Qualifying group is frozen and only the later steps are offered', () => {
+  const codes = (status) => choiceGroupsFor(status).flatMap((g) => g.choices.map((c) => c.code));
+  // No change is not in either group: the page shows it as its own check-in box.
+  const all = ['qualified', 'trying', 'dq_noanswer', 'meeting', 'proposal', 'signed', 'lost'];
+  for (const open of ['', 'Trying to reach', 'Sent']) {
+    assert.equal(isQualifiedStatus(open), false, open);
+    assert.deepEqual(codes(open), all, open);
+    assert.ok(choiceGroupsFor(open).every((g) => g.done === ''), open);
+  }
+  for (const qualified of ['Reached', 'Meeting set', 'Scheduled', 'Complete', 'Proposal or agreement sent', 'Signed']) {
+    assert.equal(isQualifiedStatus(qualified), true, qualified);
+    assert.deepEqual(codes(qualified), ['meeting', 'proposal', 'signed', 'lost'], qualified);
+    assert.deepEqual(choiceGroupsFor(qualified).map((g) => g.done), ['Reached the customer', ''], qualified);
+  }
 });

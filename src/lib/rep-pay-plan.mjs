@@ -158,7 +158,22 @@ export function usableStaffingPlan(plan) {
 /** The staffing sentence for the empty My Earnings line. '' with no staffing plan. */
 function staffingHowTo(staffing) {
   if (!usableStaffingPlan(staffing)) return '';
-  return `${usd(staffing.reachedPrivate)} for a private practice, or ${usd(staffing.reachedGroup)} for a group, when Direct Dental reaches the customer and confirms the lead qualifies.`;
+  return `${staffingAmountWords(staffing)} when Direct Dental reaches the customer and confirms the lead qualifies.`;
+}
+
+/**
+ * The staffing amount in words. A flat plan (the same amount for both types, pay sheet
+ * R11: `reached_private:100,reached_group:100`) names one amount and no type, since the
+ * type changes nothing. Otherwise the type on the case picks the amount, and a case with
+ * no type names both. The list form ends in a comma so the sentence reads on.
+ * @param {StaffingPayPlan} staffing
+ * @param {string} [practiceType]
+ */
+function staffingAmountWords(staffing, practiceType = '') {
+  if (staffing.reachedPrivate === staffing.reachedGroup) return usd(staffing.reachedPrivate);
+  if (practiceType === 'Group') return `${usd(staffing.reachedGroup)} for a group`;
+  if (practiceType === 'Private practice') return `${usd(staffing.reachedPrivate)} for a private practice`;
+  return `${usd(staffing.reachedPrivate)} for a private practice, or ${usd(staffing.reachedGroup)} for a group,`;
 }
 
 /**
@@ -221,13 +236,7 @@ export function notYetLine(plan, facts = {}) {
  */
 export function staffingNotYetLine(staffing, facts = {}) {
   if (!usableStaffingPlan(staffing)) return '';
-  const amount =
-    facts.practiceType === 'Group'
-      ? `${usd(staffing.reachedGroup)} for a group`
-      : facts.practiceType === 'Private practice'
-        ? `${usd(staffing.reachedPrivate)} for a private practice`
-        : `${usd(staffing.reachedPrivate)} for a private practice, or ${usd(staffing.reachedGroup)} for a group,`;
-  return `${amount} ${stillToCome('Direct Dental', 'the customer', facts)}`;
+  return `${staffingAmountWords(staffing, facts.practiceType)} ${stillToCome('Direct Dental', 'the customer', facts)}`;
 }
 
 /**

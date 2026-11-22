@@ -136,7 +136,7 @@ describe('the lead screen (test 18)', () => {
 
   test('the rep sees office, sent date, company, contact, the timeline with dates, and the latest update', () => {
     const [lead] = leadViews([full], TODAY);
-    assert.deepEqual(Object.keys(lead), ['id', 'office', 'sentLabel', 'company', 'chip', 'tone', 'stale', 'steps', 'contact', 'update']);
+    assert.deepEqual(Object.keys(lead), ['id', 'office', 'sentLabel', 'company', 'chip', 'tone', 'stale', 'steps', 'contact', 'update', 'lastUpdated', 'next']);
     assert.equal(lead.id, 'R1');
     assert.equal(lead.office, 'TEST North Side Dental');
     assert.equal(lead.sentLabel, 'Sent Nov 3');
@@ -179,9 +179,23 @@ describe('the lead screen (test 18)', () => {
     assert.equal(flagged.steps.at(-1).label, 'Signed and billed');
   });
 
-  test('no update text means no update block; a row without an id or contact is dropped', () => {
+  test('no update text means no update block; a row without an id is dropped', () => {
     assert.equal('update' in leadViews([row({})], TODAY)[0], false);
     assert.deepEqual(leadViews([{ practiceName: 'x' }, null, 'x'], TODAY), []);
+  });
+
+  test('a blank Doctor Name keeps the referral on Track (G2 finding 7)', () => {
+    // Practice name only: the office is the practice, and no empty Contact line.
+    const [practiceOnly] = leadViews([row({ id: 'HSBS-F12', doctorName: '' })], TODAY);
+    assert.equal(practiceOnly.office, 'TEST North Side Dental');
+    assert.equal('contact' in practiceOnly, false);
+    // Neither name: the rep sees the referral id, a manager still sees "Office".
+    const neither = row({ id: 'HSBS-F12', doctorName: '', practiceName: '' });
+    assert.equal(leadViews([neither], TODAY)[0].office, 'Referral HSBS-F12');
+    assert.equal(leadViews([neither], TODAY, { team: true })[0].office, 'Office');
+    // The list's other names for the same fields (doctor, practice) read the same way.
+    const alias = { id: 'HSBS-F13', doctor: '', practice: 'TEST Alias Dental', created: '2026-11-03', cases: [{ company: 'HealthFirst', partnerStatus: 'Sent' }] };
+    assert.equal(leadViews([alias], TODAY)[0].office, 'TEST Alias Dental');
   });
 });
 
@@ -362,5 +376,58 @@ describe('a new case with no partner status yet', () => {
     const r = fresh(STAFFING);
     r.cases[0].company = null;
     assert.equal(leadViews([r], TODAY)[0].chip, 'Sent to HealthFirst');
+  });
+});
+
+describe('the partner page qualify choices on Track (11/20/2026)', () => {
+  test('Qualified, Disqualified and Demo set log lines read in plain words', () => {
+    assert.equal(stepWords('Qualified', 'HealthFirst'), 'HealthFirst qualified the lead');
+    assert.equal(stepWords('Test Field Partner: Qualified', 'HealthFirst'), 'HealthFirst qualified the lead');
+    assert.equal(stepWords('Disqualified, no answer after 4 attempts', 'HealthFirst'), 'Closed: did not qualify');
+    assert.equal(stepWords('HealthFirst: Disqualified, not interested', 'HealthFirst'), 'Closed: did not qualify');
+    assert.equal(stepWords('Demo set', 'HealthFirst'), 'Meeting set');
+    assert.equal(stepWords('Trying to reach', 'HealthFirst'), 'HealthFirst is reaching out');
+  });
+  test('a Qualified line counts as reached; a Disqualified one does not', () => {
+    assert.deepEqual(historyKinds('Test Field Partner: Qualified. TEST wants a demo'), ['reached']);
+    assert.deepEqual(historyKinds('Test Field Partner: Disqualified, not interested'), ['status']);
+  });
+});
+
+describe('Last updated and What happens next (Brian, 11/21)', () => {
+  const lead = (r) => leadViews([r], TODAY)[0];
+  test('last updated is the partner update date, else the sent date', () => {
+    assert.equal(lead(withStatus('Trying to reach')).lastUpdated, 'Last updated Nov 18.');
+    assert.equal(lead(row({ lines: [] })).lastUpdated, 'Last updated Nov 3.');
+    assert.equal(lead(row({ lines: [{ company: 'HealthFirst', status: '', detail: '' }] })).lastUpdated, 'Last updated Nov 3.');
+    assert.equal(lead(row({ sentOn: '', lines: [] })).lastUpdated, undefined);
+  });
+
+  test('the next step follows the chip, for each stage', () => {
+    const cases = [
+      ['Sent', 'HealthFirst reaches out to the office.'],
+      ['Trying to reach', 'HealthFirst keeps trying to reach the office.'],
+      ['Reached', 'HealthFirst sets up a meeting with the office.'],
+      ['Meeting set', 'HealthFirst meets with the office, then sends a proposal.'],
+      ['Proposal or agreement sent', 'The office decides on the proposal.'],
+      ['No change this week', 'HealthFirst sends its next update.'],
+      ['Signed', 'Nothing more to do. The office signed.'],
+      ['Not moving forward', 'Nothing more to do. This referral is closed.'],
+    ];
+    for (const [status, words] of cases) assert.equal(lead(withStatus(status)).next, `What happens next: ${words}`, status);
+    assert.equal(lead(row({ lines: [] })).next, 'What happens next: HealthFirst reaches out to the office.');
+  });
+
+  test('a qualified save reads as reached; a staffing line names Direct Dental', () => {
+    const qualified = row({ history: [{ on: '2026-11-19', text: 'HealthFirst: Qualified' }], lines: [{ company: 'HealthFirst', status: 'Reached', detail: '', updatedOn: '2026-11-19' }] });
+    assert.equal(lead(qualified).next, 'What happens next: HealthFirst sets up a meeting with the office.');
+    const staffing = row({ lines: [{ company: 'HS Staffing / Recruiting Services (including GoTu)', status: 'Trying to reach', detail: '', updatedOn: '2026-11-19' }] });
+    assert.equal(lead(staffing).next, 'What happens next: Direct Dental keeps trying to reach the office.');
+  });
+
+  test('a manager view carries neither line', () => {
+    const t = leadViews([withStatus('Trying to reach')], TODAY, { team: true })[0];
+    assert.equal(t.lastUpdated, undefined);
+    assert.equal(t.next, undefined);
   });
 });

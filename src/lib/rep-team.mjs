@@ -172,7 +172,7 @@ export function shapeTeam(raw, plan, today = todayInNewYork(), opts = {}) {
       if (repRows.some((r) => r.company === 'Staffing')) teamHasStaffing = true;
       const sum = summarizeEarnings(repRows, rawReferrals, plans);
       lines = moneyForReferrals(rawReferrals, repRows, today, plans).lines;
-      money = `Earned ${dollars(sum.earned)}. Paid ${dollars(sum.paid)}.`;
+      money = `Total earned ${dollars(sum.earned)}. Paid ${dollars(sum.paid)}.`;
       // One line per row that counts in Earned (Waiting or Paid), each naming its company
       // (board 5b). They add up to this rep's Earned, to the dollar.
       awards = repRows
@@ -254,7 +254,7 @@ export function shapeTeam(raw, plan, today = todayInNewYork(), opts = {}) {
       const mp = managerPay(managerRows, nameByEmail);
       let sentence;
       if (mp.lines.length) {
-        sentence = `You've earned ${dollars(mp.earned)} from your team's signed offices. Paid ${dollars(mp.paid)}. Waiting ${dollars(mp.waiting)}.`;
+        sentence = `You've earned ${dollars(mp.earned)} from your team's signed offices. Paid ${dollars(mp.paid)}. Awaiting payment ${dollars(mp.waiting)}.`;
       } else {
         sentence = "You've earned $0 from your team's signed offices so far.";
         if (promise) sentence += ` ${promise}`;

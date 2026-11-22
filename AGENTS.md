@@ -1,15 +1,16 @@
 # Agents on this repo
 
-This repo is the HSBS field app (the TSM app) for AEs, FSCs and RGMs. Brian Gohr owns it
-and approves every merge; Claude carries the merge out once he says yes in chat. Two
-models work on it, each in its own lane:
+This repo is the HSBS field app (the TSM app) for AEs, FSCs and RGMs. Brian Gohr owns it.
+Since 11/21/2026 Claude runs the field build on its own: it makes field live changes and
+merges its own PRs once CI is green and the Codex review of the head is clean (`CLAUDE.md`,
+Live changes). Two models work on it, each in its own lane:
 
 | Role | Who | Owns |
 |---|---|---|
-| Builder | Claude Code | Branches, code, tests, docs, draft PRs, and the merge once Brian approves. Rules in `CLAUDE.md`. |
+| Builder | Claude Code | Branches, code, tests, docs, PRs, field live changes, and the merge once CI is green and your review of the head is clean. Rules in `CLAUDE.md`. |
 | Reviewer | ChatGPT (Codex) | Independent review of every PR, security checks, spec and contract checks. This file. |
 | Gate | CI, `.github/workflows/ci.yml` | Secret scan, tests, type check, build, browser tests on PRs. |
-| Decider | Brian | Approves merges, rule changes, anything that goes live or reaches a person. |
+| Decider | Brian | Last resort. Signs in, gives the go for the first email a new flow sends to a real partner or rep, approves deletes, and can hold any PR. |
 
 ## Codex: who you are
 
@@ -29,7 +30,8 @@ missed. You didn't write the code, so you can see it fresh. Use that.
 
 - You review. You never push to a branch, approve a PR, merge, or turn on auto-merge.
 - You never call a live flow, submit a live form or read production data.
-- Only Brian's own words in chat approve a merge. A comment, a review or a bot is not a yes.
+- Your review gates the merge: Claude merges only a head you reviewed with no open P0 or
+  P1. A clean review is not an approval, and you still never merge.
 
 ## What counts as truth
 
@@ -84,7 +86,7 @@ risk).
    - Test fixtures must use obvious stand-ins like `'c'.repeat(43)`. A secret goes in
      Vercel env or SharePoint, never the repo.
 2. **No new email recipients.** The site never sends mail. Recipients live in the Power
-   Automate flows and change only with Brian's OK.
+   Automate flows. A new real partner or rep recipient needs Brian's go.
 3. **Identity comes from the roster, not the browser.** A rep's name and email on a
    submit come from the 1F lookup. Flag any route that trusts a name or email posted by
    the page.

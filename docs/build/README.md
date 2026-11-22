@@ -8,7 +8,15 @@ be in the HSBS-HSD-Field repo").
 How to read them:
 
 - `docs/field-flow-contract.md` is the site side and wins over anything here. When a sheet
-  and the contract disagree, stop and ask Brian.
+  and the contract disagree, follow the contract and fix the sheet in the same PR. Ask Brian
+  only when the gap changes what a real partner or rep receives or is paid.
+- Who does the live steps (Brian, 11/21/2026): where a sheet says Brian imports a package,
+  pastes a flow address, saves, turns a flow On or Off, runs it, fills a column or sets a
+  Vercel value, Claude now does that step itself (`CLAUDE.md`, Live changes). Brian still
+  signs in, gives the go for the first email a new flow sends to a real partner or rep,
+  types any new real recipient address, and approves deletes. Business rules such as "only
+  Brian sends a lead on" or "only Brian corrects a signed answer" are about who in the
+  business acts on a lead. They are unchanged.
 - The wording is field only. Where a live SharePoint list, column, flow or value still
   carries the other team's name (for example `PVA Roster`, `PVA Slug`, `PVA page`,
   `Update for PVA`, the site `HSBSPVAReferrals`), the real name is kept in code quotes so a
@@ -34,6 +42,7 @@ How to read them:
 | F3, staffing intro | `field-two-track-staffing-intro.md` |
 | 3F-F, the 3F Field copy | `field-two-track-3f-field-copy.md` |
 | F4, pay and ledger | `field-two-track-pay-sheet.md` |
+| Promo file: one per pay promotion (11/21) | `field-promo-file.md`, files in `promos/` |
 | F5, roster load | `field-two-track-roster-load.md` |
 | F7, send on | `field-two-track-send-on.md` |
 | SR, sender role | `field-two-track-sender-role.md` |
@@ -42,3 +51,4 @@ How to read them:
 | GC, gap check | `field-two-track-gap-check.md` |
 | Go-live runbook | `field-two-track-go-live.md` |
 | What remains after launch | `field-two-track-remaining-work.md` |
+| PU, partner updates on the new site (11/20) | `field-partner-updates.md` |

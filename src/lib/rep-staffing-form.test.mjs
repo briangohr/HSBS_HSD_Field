@@ -44,6 +44,8 @@ describe('staffing form rules (field two-track spec, section 4)', () => {
   test('the body: needs Staffing, the saved consent is the words on the screen, practice type kept', () => {
     const b = staffingFlowPayload(good, { referralKey: 'k', submissionId: 's' });
     assert.deepEqual(b.needs, ['Staffing']);
+    // The field app sends no other team's permission field.
+    assert.equal('PVApermission' in b, false);
     assert.deepEqual(b.companies, ['HS Staffing / Recruiting Services (including GoTu)']);
     assert.equal(b.consentText, STAFFING_CONSENT);
     assert.equal(b.practiceType, 'Group');
@@ -76,5 +78,12 @@ describe('staffing form rules (field two-track spec, section 4)', () => {
       'You earn $100 for a private practice, or $200 for a group with 3 or more locations, when Direct Dental reaches the customer and confirms the lead qualifies.',
     );
     assert.equal(staffingPayLine(null), '');
+  });
+
+  test('a flat plan names one amount and no practice type (pay sheet R11)', () => {
+    assert.equal(
+      staffingPayLine({ reachedPrivate: 100, reachedGroup: 100 }),
+      'You earn $100 when Direct Dental reaches the customer and confirms the lead qualifies.',
+    );
   });
 });

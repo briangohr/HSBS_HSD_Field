@@ -170,7 +170,6 @@ export function repFlowPayload(input, meta, { askState = false } = {}) {
     jde: cap(input.jde, 40),
     companies: [REP_COMPANY],
     needs: [REP_NEED],
-    PVApermission: true,
     contactFirst: false,
     preferredContact: trim(input.preferredContact),
     consentText: REP_CONSENT,

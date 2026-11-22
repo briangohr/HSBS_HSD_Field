@@ -32,7 +32,7 @@
 // free-text update, and its timeline holds only the mapped step words and dates: a
 // Status Log line the map doesn't know is dropped there, since it can name the doctor.
 
-import { decorateReferrals, isNotQualifiedClose, sanitizeReferral, shortDate, todayInNewYork } from './track.mjs';
+import { decorateReferrals, isNotQualifiedClose, officeName, sanitizeReferral, shortDate, todayInNewYork } from './track.mjs';
 import { displayStatus, displayStatusText, isSignedStatus } from './partner-status-words.mjs';
 import { companyName, keyForSolutions } from './rep-companies.mjs';
 
@@ -112,6 +112,11 @@ function mapped(t, co) {
   if (/^already a customer\b/.test(x)) return 'Closed: already a customer';
   if (/^(hand back to hsbs|handed back to hsbs|returned to hsbs|held)$/.test(x)) return 'Closed: handed back to HSBS';
   if (/^not a fit$/.test(x)) return 'Closed: not a fit';
+  // The partner page's qualify choices (11/20/2026): "Qualified", "Disqualified, ...",
+  // "Demo set".
+  if (/^disqualified\b/.test(x)) return 'Closed: did not qualify';
+  if (/^qualified\b/.test(x)) return `${co} qualified the lead`;
+  if (/^demo set\b/.test(x)) return 'Meeting set';
   if (x === 'closed') return 'Closed';
   if (/^(sent|received)\b/.test(x)) return `Sent to ${co}`;
   // "Not yet, haven't tried" (the stored answer) and "Not called yet" (the label the
@@ -170,7 +175,7 @@ const baseStep = (label) => label.replace(/^(Meeting set) for [A-Z][a-z]{2} \d{1
  * '' for any other partner.
  * @param {{ company: string, solutions?: string } | null | undefined} line
  */
-function lineKey(line) {
+export function lineKey(line) {
   if (!line) return '';
   return keyForSolutions(line.solutions) || keyForSolutions(line.company) || (line.company === DEFAULT_COMPANY ? DEFAULT_COMPANY : '');
 }
@@ -259,11 +264,31 @@ export function chipFor(row, bucket) {
 }
 
 /**
+ * "What happens next" on the rep's lead screen (Brian, 11/21): one plain line from where
+ * the chip says the office stands. Only the chip's own words are read, so nothing new
+ * comes from the list and the line can never disagree with the chip. It promises no time:
+ * the partner's own pace is not on the list.
+ * @param {{ words: string, tone: string }} chip
+ * @param {string} company
+ */
+export function nextWords(chip, company) {
+  if (chip.tone === 'signed') return 'Nothing more to do. The office signed.';
+  if (chip.tone === 'closed') return 'Nothing more to do. This referral is closed.';
+  const w = chip.words;
+  if (w === `Sent to ${company}`) return `${company} reaches out to the office.`;
+  if (w === `${company} is reaching out`) return `${company} keeps trying to reach the office.`;
+  if (w === `${company} qualified the lead` || /^.+ talked with the (doctor|customer)$/.test(w)) return `${company} sets up a meeting with the office.`;
+  if (/^Meeting set\b/.test(w)) return `${company} meets with the office, then sends a proposal.`;
+  if (w === `${company} sent a proposal`) return 'The office decides on the proposal.';
+  return `${company} sends its next update.`;
+}
+
+/**
  * @typedef {{ on: string, label: string }} Step
  * @typedef {{
  *   id: string, office: string, sentLabel: string, company: string, companyLine?: string, chip: string,
  *   tone: 'open' | 'signed' | 'closed', stale: string, steps: Step[],
- *   contact?: string, update?: { on: string, text: string }
+ *   contact?: string, update?: { on: string, text: string }, lastUpdated?: string, next?: string
  * }} Lead
  */
 
@@ -312,7 +337,7 @@ export function leadViews(list, today = todayInNewYork(), opts = {}) {
     /** @type {Lead} */
     const lead = {
       id: row.id,
-      office: row.practiceName || (team ? 'Office' : row.doctorName),
+      office: team ? row.practiceName || 'Office' : officeName(row),
       sentLabel: d.sentLabel,
       company,
       chip: chip.words,
@@ -328,9 +353,14 @@ export function leadViews(list, today = todayInNewYork(), opts = {}) {
       lead.companyLine = `${company}${type}`;
     }
     if (!team) {
-      if (row.practiceName) lead.contact = row.doctorName;
+      if (row.practiceName && row.doctorName) lead.contact = row.doctorName;
       const detail = line ? displayStatusText(line.detail).trim() : '';
       if (detail) lead.update = { on: line?.updatedOn ? shortDate(line.updatedOn) : '', text: detail };
+      // "Last updated" (Brian, 11/21): the partner's last update (1F `updated`, from Last
+      // Partner Update), else the date it was sent, as the contract's fallback says.
+      const lastOn = line?.updatedOn || row.sentOn;
+      if (lastOn) lead.lastUpdated = `Last updated ${shortDate(lastOn)}.`;
+      lead.next = `What happens next: ${nextWords(chip, company)}`;
     }
     out.push(lead);
   }

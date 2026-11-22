@@ -199,7 +199,10 @@ try {
 
     await check(`${tag}: opening a confirm link only peeks; it never confirms`, async () => {
       flowBodies.length = 0;
-      await page.goto(`${BASE}/confirm/${js ? TOKENS.on : TOKENS.off}`);
+      const opened = await page.goto(`${BASE}/confirm/${js ? TOKENS.on : TOKENS.off}`);
+      // G2 finding 12: the token is in the URL, so the page is never cached or indexed.
+      assert.equal(opened.headers()['cache-control'], 'no-store');
+      assert.equal(opened.headers()['x-robots-tag'], 'noindex, nofollow');
       assert.equal(await page.textContent('#cf-ask h1'), 'Is Test Rep on your team?');
       assert.deepEqual(flowBodies.map((b) => b.action), ['confirm-peek']);
     });
@@ -234,6 +237,8 @@ try {
       flowBodies.length = 0;
       const res = await page.goto(`${BASE}/confirm/not-a-token`);
       assert.equal(res.status(), 404);
+      assert.equal(res.headers()['cache-control'], 'no-store');
+      assert.equal(res.headers()['x-robots-tag'], 'noindex, nofollow');
       assert.equal(await page.textContent('h1'), 'This link does not work.');
       assert.equal(flowBodies.length, 0);
     });
@@ -249,7 +254,10 @@ try {
   await check('launch (app on, REP_CONFIRM_ENABLED unset): /confirm and /api/confirm answer 404 and no token reaches 1J; /join still works', async () => {
     flowBodies.length = 0;
     for (const token of [TOKENS.off, TOKENS.on, 'c3'.repeat(32)]) {
-      assert.equal((await fetch(`${BASE}/confirm/${token}`)).status, 404, token);
+      const off = await fetch(`${BASE}/confirm/${token}`);
+      assert.equal(off.status, 404, token);
+      assert.equal(off.headers.get('cache-control'), 'no-store', token);
+      assert.equal(off.headers.get('x-robots-tag'), 'noindex, nofollow', token);
       const form = await fetch(`${BASE}/confirm/${token}`, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded', origin: BASE },
@@ -283,11 +291,11 @@ try {
     const tag = js ? 'JS on' : 'JS off';
     const ctx = await browser.newContext({ ...devices['iPhone 13'], javaScriptEnabled: js, reducedMotion: 'reduce' });
     const page = await ctx.newPage();
-    const fillRoster = async (rgm) => {
-      for (const [name, value] of Object.entries({ firstName: 'Test', lastName: 'Rep', email: 'test.rep@henryschein.com', mobile: '555 010 1234' })) {
+    const fillRoster = async (rgm, role = 'FSC', email = 'test.rep@henryschein.com') => {
+      for (const [name, value] of Object.entries({ firstName: 'Test', lastName: 'Rep', email, mobile: '555 010 1234' })) {
         await page.fill(`[name=${name}]`, value);
       }
-      await page.selectOption('[name=role]', 'FSC');
+      await page.selectOption('[name=role]', role);
       if (rgm) await page.selectOption('[name=rgm]', rgm);
     };
 
@@ -329,6 +337,31 @@ try {
         },
       ]);
     });
+
+    for (const role of ['HSFS', 'Other']) {
+      await check(`${tag}: ${role} can leave the visible RGM pick blank`, async () => {
+        flowBodies.length = 0;
+        await page.goto(`${BASE}/join?src=qr`);
+        await fillRoster('', role, `test.${role.toLowerCase()}@henryschein.com`);
+        const pick = page.locator('[name=rgm]');
+        const hint = page.locator('#rgm-optional');
+        assert.equal(await pick.isVisible(), true);
+        assert.equal(await hint.isVisible(), true);
+        assert.equal(await hint.textContent(), js ? '(optional)' : '(optional for HSFS and Other)');
+        if (js) {
+          await page.selectOption('[name=role]', 'FSC');
+          assert.equal(await hint.isVisible(), false);
+          await page.selectOption('[name=role]', role);
+        }
+        await page.click('#join-send');
+        await page.waitForSelector('#join-sent:not([hidden])', { timeout: 10000 });
+        assert.equal(flowBodies.length, 1);
+        const { role: sentRole, managerName, managerEmail, branch } = flowBodies[0];
+        assert.deepEqual({ sentRole, managerName, managerEmail, branch }, {
+          sentRole: role, managerName: '', managerEmail: '', branch: '',
+        });
+      });
+    }
 
     await check(`${tag}: "Not listed" sends the manager and branch blank, for any role`, async () => {
       flowBodies.length = 0;

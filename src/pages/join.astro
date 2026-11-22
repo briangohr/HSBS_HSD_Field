@@ -124,7 +124,8 @@ const v = (k: string) => (sent ? '' : (values[k] ?? ''));
           {rgms.length ? (
             <label class="join-field">
               Your RGM <span class="join-hint">(Regional General Manager)</span>
-              <select name="rgm" required>
+              <span class="join-hint" id="rgm-optional">(optional for HSFS and Other)</span>
+              <select name="rgm">
                 <option value="">Pick one</option>
                 {rgms.map((r) => <option value={r.region} selected={v('rgm') === r.region}>{rgmLabel(r)}</option>)}
                 <option value={RGM_NOT_LISTED} selected={v('rgm') === RGM_NOT_LISTED}>Not listed, or I don't know</option>
@@ -135,13 +136,13 @@ const v = (k: string) => (sent ? '' : (values[k] ?? ''));
           ) : (
             <>
             <label class="join-field">
-              Manager's name <span class="join-hint">(AEs can leave blank)</span>
+              Manager's name <span class="join-hint">(optional for AE, HSFS and Other)</span>
               <input name="managerName" value={v('managerName')} autocomplete="off" maxlength="120" />
               <span class="join-err" data-for="managerName">{errors.managerName ?? ''}</span>
             </label>
 
             <label class="join-field">
-              Manager's Henry Schein email <span class="join-hint">(AEs can leave blank)</span>
+              Manager's Henry Schein email <span class="join-hint">(optional for AE, HSFS and Other)</span>
               <input name="managerEmail" value={v('managerEmail')} type="email" inputmode="email" autocomplete="off" maxlength="120" />
               <span class="join-err" data-for="managerEmail">{errors.managerEmail ?? ''}</span>
             </label>
@@ -166,13 +167,26 @@ const v = (k: string) => (sent ? '' : (values[k] ?? ''));
     </main>
 
     <script>
-      import { RGM_NOT_LISTED, validateRegistration } from '../lib/register-form.mjs';
+      import { RGM_NOT_LISTED, RGM_OPTIONAL_ROLES, validateRegistration } from '../lib/register-form.mjs';
 
       const form = document.getElementById('join-form') as HTMLFormElement;
       const send = document.getElementById('join-send') as HTMLButtonElement;
       const alertBox = document.getElementById('join-alert') as HTMLElement;
       const formCard = document.getElementById('join-form-card') as HTMLElement;
       const sentCard = document.getElementById('join-sent') as HTMLElement;
+      const pick = form.elements.namedItem('rgm') as HTMLSelectElement | null;
+      const role = form.elements.namedItem('role') as HTMLSelectElement;
+      const rgmOptionalHint = document.getElementById('rgm-optional');
+
+      if (pick && rgmOptionalHint) {
+        rgmOptionalHint.textContent = '(optional)';
+        const showRgmRequirement = () => {
+          pick.required = !RGM_OPTIONAL_ROLES.includes(role.value);
+          rgmOptionalHint.hidden = pick.required;
+        };
+        role.addEventListener('change', showRgmRequirement);
+        showRgmRequirement();
+      }
 
       const showErrors = (errors: Record<string, string>) => {
         form.querySelectorAll<HTMLElement>('.join-err').forEach((el) => {
@@ -193,7 +207,6 @@ const v = (k: string) => (sent ? '' : (values[k] ?? ''));
         const data = Object.fromEntries(new FormData(form).entries()) as Record<string, string>;
         // The pick list's codes, so the page checks the same rule as the server. The
         // RGM emails never reach the page; the server checks the rest.
-        const pick = form.elements.namedItem('rgm') as HTMLSelectElement | null;
         const rgms = pick
           ? [...pick.options].filter((o) => o.value && o.value !== RGM_NOT_LISTED).map((o) => ({ region: o.value, name: 'RGM', email: '' }))
           : [];

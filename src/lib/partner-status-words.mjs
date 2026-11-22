@@ -12,14 +12,63 @@ export const STAND_WORDS = [
   'No change this week',
 ];
 
+/**
+ * "Where does it stand?" on the partner page, one list (Brian, 11/20/2026, after the
+ * HealthFirst process call): qualify first, then the deal. Qualified means reached, knows
+ * the partner will follow up, and wants a demo; up to 4 attempts, then disqualified. `group`
+ * sets the heading the page shows. The words are placeholders until HealthFirst sends its
+ * Salesforce picklist; 7F stores its own value per code (docs/field-flow-contract.md, 7F).
+ */
 export const STAND_CHOICES = [
-  { code: 'meeting', label: 'Meeting set' },
-  { code: 'proposal', label: 'Proposal or agreement sent' },
-  { code: 'signed', label: 'Signed' },
-  { code: 'lost', label: 'Not moving forward' },
-  { code: 'handback', label: 'Hand back to HSBS' },
-  { code: 'nochange', label: 'No change this week' },
+  { code: 'qualified', label: 'Reached the customer', hint: 'Knows you will follow up and wants a demo', group: 'qualify' },
+  { code: 'trying', label: 'Not reached yet', hint: 'Attempts 1 to 3 so far. Need help reaching them? Reply to the intro email.', group: 'qualify' },
+  { code: 'dq_noanswer', label: 'Disqualified: no answer after 4 attempts', hint: '', group: 'qualify' },
+  { code: 'meeting', label: 'Demo set', hint: '', group: 'deal' },
+  { code: 'proposal', label: 'Proposal or agreement sent', hint: '', group: 'deal' },
+  { code: 'signed', label: 'Signed (Closed won)', hint: '', group: 'deal' },
+  { code: 'lost', label: 'Not moving forward (Closed lost)', hint: '', group: 'deal' },
+  // Not a stage: a weekly check-in at any step (a demo set 2 weeks out has a week with no
+  // change). The page shows it as its own tick box under the stage list.
+  { code: 'nochange', label: 'No change this week', hint: '', group: 'checkin' },
 ];
+
+/**
+ * Codes the page no longer offers but the save still takes, so a tab opened before the
+ * change still saves. "Disqualified, not interested" went 11/21/2026 (Brian: one
+ * Disqualified only); a reached customer who says no is Not moving forward.
+ */
+export const RETIRED_CHOICE_CODES = ['dq_notinterested'];
+
+/** The headings over each group of STAND_CHOICES, in page order. */
+export const STAND_GROUPS = [
+  { group: 'qualify', heading: 'Qualifying' },
+  { group: 'deal', heading: 'After qualified' },
+];
+
+/**
+ * Stages that mean the lead is qualified: Reached the customer (stored as Reached) and every
+ * step after it. 7F sets Qualified Yes for each of these.
+ */
+const QUALIFIED_SHOWN = ['Reached the doctor', 'Meeting set', 'Meeting held', 'Proposal or agreement sent', 'Signed', 'Won'];
+
+/** @param {unknown} raw Partner Status as stored */
+export function isQualifiedStatus(raw) {
+  return QUALIFIED_SHOWN.includes(displayStatus(raw));
+}
+
+/**
+ * The groups the page offers one lead. Once a lead is qualified the Qualifying group is
+ * frozen (Brian, 11/21/2026): it shows Qualified as done and offers no choice, so the
+ * partner moves on through the After qualified steps.
+ * @param {unknown} status Partner Status as stored
+ */
+export function choiceGroupsFor(status) {
+  const frozen = isQualifiedStatus(status);
+  return STAND_GROUPS.map((g) => {
+    const done = frozen && g.group === 'qualify';
+    return { ...g, done: done ? 'Reached the customer' : '', choices: done ? [] : STAND_CHOICES.filter((c) => c.group === g.group) };
+  });
+}
 
 /**
  * Old stored values, and the words to show. Keys are exact strings a flow

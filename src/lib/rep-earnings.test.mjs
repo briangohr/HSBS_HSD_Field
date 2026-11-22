@@ -64,7 +64,7 @@ describe('totals (D11: Earned = Waiting + Paid)', () => {
   test('one line per row, newest first, status in words with the void reason', () => {
     const s = summarizeEarnings(rows, []);
     assert.deepEqual(s.lines.map((l) => l.referralId), ['R1', 'R2', 'R3', 'R1']);
-    assert.match(s.lines[0].label, /^Nov 14\. North Side Dental\. HealthFirst\. Office signed\. \$100\. Earned, waiting to be paid\.$/);
+    assert.match(s.lines[0].label, /^Nov 14\. North Side Dental\. HealthFirst\. Office signed\. \$100\. Earned, awaiting payment\.$/);
     assert.match(s.lines[1].label, /Pending review\.$/);
     assert.match(s.lines[2].label, /Not paid: This office was referred to HealthFirst in the last 12 months\.$/);
     for (const l of s.lines) assert.equal(l.label.includes('..'), false, l.label);
@@ -102,7 +102,7 @@ describe('money line on each card (spec wording)', () => {
   });
   test('signed, part paid', () => {
     const rows = sanitizeLedger([row({ status: 'Paid', paidOn: '2026-11-30' }), row({ event: 'Signed', amount: 100, earnedOn: '2026-11-14' })]);
-    assert.equal(moneyLine({ signed: true }, rows), '$150 earned. Paid $50 on Nov 30. $100 waiting to be paid.');
+    assert.equal(moneyLine({ signed: true }, rows), '$150 earned. Paid $50 on Nov 30. $100 awaiting payment.');
   });
   test("won't pay: the reason is always shown", () => {
     assert.equal(moneyLine({}, r({ status: 'Void', voidReason: 'This office was referred to HealthFirst in the last 12 months.' })), 'Not paid: This office was referred to HealthFirst in the last 12 months.');
@@ -347,11 +347,11 @@ describe('slice 5: manager rows (My Team)', () => {
     assert.equal('upTo' in mp, false);
     assert.deepEqual({ earned: mp.earned, waiting: mp.waiting, paid: mp.paid, pendingReview: mp.pendingReview }, { earned: 150, waiting: 100, paid: 50, pendingReview: 50 });
     assert.deepEqual(mp.lines.map((l) => l.label), [
-      'Nov 14. North Side Dental. HealthFirst, signed. Test Rep. $50. Earned, waiting to be paid.',
+      'Nov 14. North Side Dental. HealthFirst, signed. Test Rep. $50. Earned, awaiting payment.',
       'Nov 13. North Side Dental. HealthFirst, signed. Test Rep. $50. Paid on Nov 30.',
       'Nov 12. East Dental. HealthFirst, signed. Test Rep. $50. Not paid: this office was referred to HealthFirst in the last 12 months.',
       'Nov 11. Office. HealthFirst, signed. Test Rep. $50. Pending review.',
-      'Nov 10. North Side Dental. HealthFirst, signed. A former team member. $50. Earned, waiting to be paid.',
+      'Nov 10. North Side Dental. HealthFirst, signed. A former team member. $50. Earned, awaiting payment.',
     ]);
     assert.equal(managerPay(rows, /** @type {any} */ (undefined)).lines[0].label.includes('A former team member'), true);
   });

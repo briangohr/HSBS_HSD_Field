@@ -75,8 +75,10 @@ const staffingSend = values.company === 'Staffing';
 const postedPanel = staffingSend ? 'Staffing' : 'HealthFirst';
 const ownPanel = Boolean(result) && postedPanel === open;
 const refusedHere = Boolean(result?.error) && !ownPanel;
-// Names the company whose referral was refused when it is not the one on screen.
-const refusedName = refusedHere && typeof values.company === 'string' && values.company !== open ? companyName(values.company) : '';
+// Names the company whose referral was refused when it is not the one on screen. A 502
+// or 504 may have been saved, so it never gets the "did not send" lead.
+const unclear = result?.status === 502 || result?.status === 504;
+const refusedName = refusedHere && !unclear && typeof values.company === 'string' && values.company !== open ? companyName(values.company) : '';
 // The HealthFirst form keeps only its own answer and values: never a staffing post's
 // errors, consent or fields.
 const hfResult = ownPanel && !staffingSend ? result : undefined;
@@ -272,7 +274,7 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
         <p><strong data-count="inProgress">0</strong> In progress</p>
         <p><strong data-count="signed">0</strong> Signed</p>
         {payEnabled && (
-          <p><strong data-money="earned">--</strong> Earned<span class="rep-sub" data-money-paid>Paid --</span></p>
+          <p><strong data-money="earned">--</strong> Total earned<span class="rep-sub" data-money-paid>Paid --</span></p>
         )}
       </div>
       {payEnabled && <p class="rep-status" id="rep-money-status" role="status" hidden>Your earnings did not load. Try again in a minute.</p>}
@@ -296,8 +298,8 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
     payEnabled && (
       <section id="rep-earnings" hidden>
         <div class="rep-tiles">
-          <p><strong data-money="earned">--</strong> Earned</p>
-          <p><strong data-money="waiting">--</strong> Waiting</p>
+          <p><strong data-money="earned">--</strong> Total earned</p>
+          <p><strong data-money="waiting">--</strong> Awaiting payment</p>
           <p><strong data-money="paid">--</strong> Paid</p>
         </div>
         <p class="rep-status" id="rep-pending" hidden></p>
@@ -330,7 +332,7 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
 </div>
 
 <script>
-  import { CLIENT_WAIT_MS, SENDING_MESSAGE, TIMEOUT_MESSAGE } from '../lib/field-form.mjs';
+  import { CHECKING_MESSAGE, CLIENT_WAIT_MS, SENDING_MESSAGE, TIMEOUT_MESSAGE, UNCLEAR_MESSAGE } from '../lib/field-form.mjs';
   import { matchStates, repReceipt, repSendLabel, stateFromText, stateName, validateRepReferral } from '../lib/rep-referral-form.mjs';
   import { PAY_TERMS_EVENT, TERMS_CHANGED, healthFirstTerms, parsePayPlan } from '../lib/rep-pay-plan.mjs';
   import { staffingReceipt, staffingSendLabel, validateStaffingReferral } from '../lib/rep-staffing-form.mjs';
@@ -573,6 +575,60 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
       if (id instanceof HTMLInputElement) id.value = crypto.randomUUID();
     };
 
+    // Duplicate warning before Send (Brian, 11/21; src/lib/rep-duplicate.mjs). Before a new
+    // send, the page asks /api/referral-check whether the rep already has an open referral
+    // for this office and company. It warns, never blocks: pressing Send again for the same
+    // office sends it. The check starts as soon as the practice name or JDE is filled in,
+    // so Send rarely waits; when it does, it waits at most DUP_WAIT_MS, then sends with no
+    // warning. A retry of a send with no clear answer is never checked: it is the same
+    // referral. With JavaScript off there is no check.
+    const DUP_WAIT_MS = 5000;
+    const dupKey = (company: string, f: { practiceName: string; jde: string }) =>
+      `${company}|${f.practiceName.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]/g, '')}|${f.jde.trim()}`;
+    const dupChecks = new Map<string, Promise<string>>();
+    const dupWarned = new Set<string>();
+    const askDup = (company: string, f: { practiceName: string; jde: string }) => {
+      const k = dupKey(company, f);
+      let p = dupChecks.get(k);
+      if (!p) {
+        p = fetch('/api/referral-check', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ referralKey, company, practiceName: f.practiceName, jde: f.jde }),
+        })
+          .then((res): Promise<{ warning?: unknown }> => (res.ok ? res.json() : Promise.resolve({})))
+          .then((body) => (typeof body?.warning === 'string' ? body.warning : ''))
+          .catch(() => {
+            dupChecks.delete(k); // a failed check may run again on the next press
+            return '';
+          });
+        dupChecks.set(k, p);
+      }
+      return p;
+    };
+    // Starts the check early, when the practice name or JDE has been filled in.
+    const watchDup = (f: HTMLFormElement | null, company: string, current: () => { practiceName: string; jde: string }) => {
+      f?.addEventListener('change', (event) => {
+        const name = (event.target as HTMLInputElement | null)?.name;
+        if (name !== 'practiceName' && name !== 'jde') return;
+        const now = current();
+        if (now.practiceName.trim() || now.jde.trim()) void askDup(company, now);
+      });
+    };
+    // The warning for this office, once. '' when there is none, it was already shown for
+    // these same words, or the check took too long.
+    const dupWarning = async (company: string, f: { practiceName: string; jde: string }) => {
+      const k = dupKey(company, f);
+      if (dupWarned.has(k)) return '';
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const late = new Promise<string>((resolve) => (timer = setTimeout(() => resolve(''), DUP_WAIT_MS)));
+      const warning = await Promise.race([askDup(company, f), late]);
+      clearTimeout(timer);
+      if (warning) dupWarned.add(k);
+      return warning;
+    };
+    watchDup(form, 'HealthFirst', read);
+
     // A confirmed send, from either form: the receipt in that company's words, then
     // everything held in this page is older than the send.
     const showSent = (copy: { title: string; calls: string; money: string }) => {
@@ -594,6 +650,9 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
       freshList = true;
       freshMoney = true;
       sendGen += 1;
+      // The office just sent is now open: the next check for it reads the list again.
+      dupChecks.clear();
+      dupWarned.clear();
     };
 
     // Staffing form (field two-track spec, section 4): the same send path as the form
@@ -633,6 +692,7 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
       };
       sForm.addEventListener('input', sRefresh);
       sForm.addEventListener('change', sRefresh);
+      watchDup(sForm, 'Staffing', sRead);
       const sErrors = (errors: { field: string; message: string }[]) => {
         sForm.querySelectorAll<HTMLElement>('.rs-err').forEach((el) => {
           el.textContent = errors.find((e) => e.field === el.dataset.for)?.message ?? '';
@@ -675,6 +735,19 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
         }
         sErrors([]);
         sSay('');
+        if (!pending) {
+          sSending = true;
+          sButton.disabled = true;
+          sButton.textContent = CHECKING_MESSAGE;
+          const warning = await dupWarning('Staffing', fields);
+          sSending = false;
+          sButton.disabled = false;
+          sRefresh();
+          if (warning) {
+            sSay(warning);
+            return;
+          }
+        }
         sSending = true;
         sButton.disabled = true;
         sButton.textContent = SENDING_MESSAGE;
@@ -715,9 +788,9 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
             return;
           }
           if (Array.isArray(body.errors)) sErrors(body.errors);
-          sSay(body.error ?? (body.timeout ? TIMEOUT_MESSAGE : 'This referral did not send.'));
+          sSay(body.error ?? (body.timeout ? TIMEOUT_MESSAGE : res.status >= 500 ? UNCLEAR_MESSAGE : 'This referral did not send.'));
         } catch {
-          sSay(controller.signal.aborted ? TIMEOUT_MESSAGE : 'This referral did not send. Check your connection and try again.');
+          sSay(controller.signal.aborted ? TIMEOUT_MESSAGE : UNCLEAR_MESSAGE);
         } finally {
           clearTimeout(timer);
           sSending = false;
@@ -760,6 +833,19 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
       }
       showErrors([]);
       say('');
+      if (!hfPending) {
+        sending = true;
+        sendButton.disabled = true;
+        sendButton.textContent = CHECKING_MESSAGE;
+        const warning = await dupWarning('HealthFirst', fields);
+        sending = false;
+        sendButton.disabled = false;
+        refresh();
+        if (warning) {
+          say(warning);
+          return;
+        }
+      }
       sending = true;
       sendButton.disabled = true;
       sendButton.textContent = SENDING_MESSAGE;
@@ -784,9 +870,9 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
           return;
         }
         if (Array.isArray(body.errors)) showErrors(body.errors);
-        say(body.error ?? (body.timeout ? TIMEOUT_MESSAGE : 'This referral did not send.'));
+        say(body.error ?? (body.timeout ? TIMEOUT_MESSAGE : res.status >= 500 ? UNCLEAR_MESSAGE : 'This referral did not send.'));
       } catch {
-        say(controller.signal.aborted ? TIMEOUT_MESSAGE : 'This referral did not send. Check your connection and try again.');
+        say(controller.signal.aborted ? TIMEOUT_MESSAGE : UNCLEAR_MESSAGE);
       } finally {
         clearTimeout(timer);
         sending = false;
@@ -809,6 +895,8 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
       steps: { on: string; label: string }[];
       contact?: string;
       update?: { on: string; text: string };
+      lastUpdated?: string;
+      next?: string;
     };
     let loaded: { counts?: Record<string, number>; leads?: Lead[]; feed?: { on?: string; label: string; referralId: string }[] } | null = null;
     type Money = {
@@ -944,7 +1032,11 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
       now.className = 'lead-now';
       now.append(chip(lead));
       if (lead.stale) now.append(node('span', lead.stale, 'lead-stale'));
-      parts.push(now, node('h3', 'Where it stands', 'lead-h3'));
+      parts.push(now);
+      // Last updated and What happens next (Brian, 11/21), ready-made by the server.
+      if (lead.lastUpdated) parts.push(node('p', lead.lastUpdated, 'lead-last'));
+      if (lead.next) parts.push(node('p', lead.next, 'lead-next'));
+      parts.push(node('h3', 'Where it stands', 'lead-h3'));
       const steps = document.createElement('ol');
       steps.className = 'lead-steps';
       for (const step of lead.steps) {

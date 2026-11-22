@@ -33,6 +33,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { chromium, devices } from 'playwright';
+import { UNCLEAR_MESSAGE } from '../../src/lib/field-form.mjs';
 
 const SITE_PORT = 4402;
 const FLOW_PORT = 4403;
@@ -454,6 +455,9 @@ try {
         assert.equal(await page.textContent('#rep-lead-title'), 'TEST South Park Dental');
         assert.deepEqual(await page.locator('#rep-lead-body .lead-sub').allTextContents(), ['Sent Nov 2. HealthFirst.', 'Contact: TEST Office Manager']);
         assert.equal(await page.textContent('#rep-lead-body .lead-now .lead-chip'), 'Meeting set');
+        // Last updated and What happens next (Brian, 11/21), under the chip.
+        assert.equal(await page.textContent('#rep-lead-body .lead-last'), 'Last updated Nov 4.');
+        assert.equal(await page.textContent('#rep-lead-body .lead-next'), 'What happens next: HealthFirst meets with the office, then sends a proposal.');
         assert.deepEqual(await page.locator('#rep-lead-body .lead-steps li').allTextContents(), ['Nov 2 Sent to HealthFirst', 'Nov 4 Meeting set']);
         assert.equal(await page.textContent('#rep-lead-back'), 'Back to Track');
         // No new route and no key in a new URL: the screen is drawn from the list answer.
@@ -632,6 +636,33 @@ try {
         assert.equal(sent.length, 1, 'the second office must reach 1F');
         assert.equal(sent[0].jde, '005678');
         assert.notEqual(sent[0].submissionId, firstSubmissionId);
+      });
+
+      await check('JS on: an open referral for the same office and company warns once, sends nothing, and Send again sends it (Brian, 11/21)', async () => {
+        await page.click('.rep-another');
+        await page.waitForSelector('#rep-form', { state: 'visible' });
+        bodies.length = 0;
+        await page.fill('[name=contactName]', 'TEST Front Desk');
+        // The list's open row (Meeting set), typed another way.
+        await page.fill('[name=practiceName]', 'test south-park dental');
+        await page.fill('[name=jde]', '007777');
+        await page.fill('[name=officePhone]', '303-555-0199');
+        await page.check('[name=preferredContact][value=Call]');
+        await page.check('[name=permission]');
+        await submit();
+        assert.equal(
+          await page.textContent('#rep-alert'),
+          'You already sent TEST South Park Dental to HealthFirst on Nov 2, and it is still open. Check Track first. To send another referral anyway, press Send again.',
+        );
+        assert.equal(bodies.filter((b) => b.action === 'submit').length, 0, 'a warning sends nothing');
+        assert.equal(await page.isDisabled('#rep-send-button'), false);
+        // The check posts the office, never the rep's name or email.
+        for (const b of bodies.filter((x) => x.action === 'list')) assert.deepEqual(Object.keys(b).sort(), ['action', 'referralKey']);
+        await submit();
+        await page.waitForSelector('#rep-receipt:not([hidden])', { timeout: 10000 });
+        const sent = bodies.filter((b) => b.action === 'submit');
+        assert.equal(sent.length, 1, 'the second press sends');
+        assert.equal(sent[0].practiceName, 'test south-park dental');
       });
     }
 
@@ -856,9 +887,13 @@ try {
       earningsFail = false;
     }
   });
-  await check('pay on: My Earnings shows Earned $50, Waiting $50, Paid $0, $50 pending review, and one line per row', async () => {
+  await check('pay on: My Earnings shows Total earned $50, Awaiting payment $50, Paid $0, $50 pending review, and one line per row', async () => {
     await page.click('[data-tab=earnings]');
     await page.waitForSelector('#rep-earnings-lines li', { timeout: 10000 });
+    // Brian 11/21: the tiles read Total earned, Awaiting payment and Paid, and so does Track.
+    const tileWords = await page.locator('#rep-earnings .rep-tiles p').evaluateAll((els) => els.map((e) => e.lastChild?.textContent?.trim()));
+    assert.deepEqual(tileWords, ['Total earned', 'Awaiting payment', 'Paid']);
+    assert.match(await page.textContent('#rep-track .rep-tiles'), /Total earned/);
     assert.equal(await page.textContent('#rep-earnings [data-money=earned]'), '$50');
     assert.equal(await page.textContent('#rep-earnings [data-money=waiting]'), '$50');
     assert.equal(await page.textContent('#rep-earnings [data-money=paid]'), '$0');
@@ -1309,16 +1344,16 @@ try {
     await page.waitForSelector('.team-row', { timeout: 10000 });
     // TEST Rep: $50 waiting (the pending review row does not count). TEST Quiet: $50 paid.
     assert.deepEqual(await page.locator('[data-team-tile]').allTextContents(), ['1', '0', '$100', '$50']);
-    assert.equal(await page.textContent('#team-own-sentence'), "You've earned $100 from your team's signed offices. Paid $50. Waiting $50.");
+    assert.equal(await page.textContent('#team-own-sentence'), "You've earned $100 from your team's signed offices. Paid $50. Awaiting payment $50.");
     assert.equal(await page.locator('#team-own-note').count(), 0);
     assert.equal(CONFIRM_WORDS.test(await page.textContent('#team-panel')), false);
     await page.click('#team-own-toggle');
     assert.deepEqual(await page.locator('#team-own-lines li').allTextContents(), [
-      'Nov 5. TEST South Park Dental. HealthFirst, signed. TEST Rep. $50. Earned, waiting to be paid.',
+      'Nov 5. TEST South Park Dental. HealthFirst, signed. TEST Rep. $50. Earned, awaiting payment.',
       'Oct 15. TEST Gone Dental. HealthFirst, signed. A former team member. $50. Paid on Oct 30.',
     ]);
     const money = await page.locator('.team-row .team-money').allTextContents();
-    assert.deepEqual(money, ['Earned $50. Paid $0.', 'Earned $50. Paid $50.']);
+    assert.deepEqual(money, ['Total earned $50. Paid $0.', 'Total earned $50. Paid $50.']);
     assert.equal(TEAM_PRIVATE.test(await page.content()), false);
   });
 
@@ -1461,7 +1496,7 @@ try {
     await page.addStyleTag({ content: HIDE_TOOLBAR });
     await page.click('[data-tab=team]');
     await page.waitForSelector('#team-own:not([hidden])', { timeout: 10000 });
-    assert.equal(await page.textContent('#team-own-sentence'), "You've earned $100 from your team's signed offices. Paid $50. Waiting $50.");
+    assert.equal(await page.textContent('#team-own-sentence'), "You've earned $100 from your team's signed offices. Paid $50. Awaiting payment $50.");
   });
   // Codex P1 on #113 (round 2): REP_PAY_PLAN changes while the tab is open. The answers
   // below stand in for a server that now holds other terms. Every promise the page worded
@@ -1617,8 +1652,8 @@ try {
       const waiting = dollarsOf(await page.textContent('#rep-earnings [data-money=waiting]'));
       const paid = dollarsOf(await page.textContent('#rep-earnings [data-money=paid]'));
       const shown = await cards();
-      // The lines that count in Earned: Waiting ("Earned, waiting to be paid") and Paid.
-      const lineSum = shown.filter((c) => c.status === 'Earned, waiting to be paid' || /^Paid on /.test(c.status)).reduce((n, c) => n + dollarsOf(c.amount), 0);
+      // The lines that count in Earned: Waiting ("Earned, awaiting payment") and Paid.
+      const lineSum = shown.filter((c) => c.status === 'Earned, awaiting payment' || /^Paid on /.test(c.status)).reduce((n, c) => n + dollarsOf(c.amount), 0);
       const total = ledger(S5_ROWS);
       assert.equal(total, 500);
       assert.deepEqual([track, earned, waiting + paid, lineSum], [total, total, total, total], 'Track tile, My Earnings tile, Waiting plus Paid, the lines');
@@ -1644,7 +1679,7 @@ try {
       assert.deepEqual(shown.find((c) => c.office === 'TEST Dental Six'), { office: 'TEST Dental Six', amount: '$100', company: 'HealthFirst', what: 'HealthFirst reached the office', status: 'Paid on Nov 12. Disputed' });
       assert.equal(paid, 100);
       // A row with no Company reads as HealthFirst, the same as one that says so.
-      assert.deepEqual(shown.find((c) => c.office === 'TEST Dental One'), { office: 'TEST Dental One', amount: '$100', company: 'HealthFirst', what: 'HealthFirst reached the office', status: 'Earned, waiting to be paid' });
+      assert.deepEqual(shown.find((c) => c.office === 'TEST Dental One'), { office: 'TEST Dental One', amount: '$100', company: 'HealthFirst', what: 'HealthFirst reached the office', status: 'Earned, awaiting payment' });
       const widths = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
       assert.ok(widths[0] <= widths[1], `no sideways scroll: ${widths}`);
     });
@@ -1655,7 +1690,7 @@ try {
         amount: '$100',
         company: 'Direct Dental, Private practice',
         what: 'Direct Dental reached the customer',
-        status: 'Earned, waiting to be paid',
+        status: 'Earned, awaiting payment',
       });
     });
     await check('S5 done-when 3: a TEST group reached and qualified shows $200, on My Earnings and its lead screen', async () => {
@@ -1665,7 +1700,7 @@ try {
         amount: '$200',
         company: 'Direct Dental, Group',
         what: 'Direct Dental reached the customer',
-        status: 'Earned, waiting to be paid',
+        status: 'Earned, awaiting payment',
       });
       await page.click('#rep-earnings-lines button >> text=TEST Group Two');
       await page.waitForSelector('#rep-lead:not([hidden])', { timeout: 10000 });
@@ -1702,7 +1737,7 @@ try {
       const total = team.team.reduce((n, m) => n + ledger(m.rows), 0);
       assert.equal(total, 600);
       const tile = dollarsOf(await page.textContent('[data-team-tile=earned]'));
-      const people = (await page.locator('.team-row .team-money').allTextContents()).map((t) => dollarsOf(/Earned (\$[\d,]+)/.exec(t)?.[1]));
+      const people = (await page.locator('.team-row .team-money').allTextContents()).map((t) => dollarsOf(/Total earned (\$[\d,]+)/.exec(t)?.[1]));
       const perPerson = await page.locator('.team-row').evaluateAll((rows) =>
         rows.map((r) => [...r.querySelectorAll('.team-award__amt')].reduce((n, a) => n + Number((a.textContent ?? '').replace(/[^0-9]/g, '')), 0)),
       );
@@ -1712,13 +1747,13 @@ try {
       const lines = await page.locator('.team-row >> nth=0').locator('.team-award').evaluateAll((els) => els.map((e) => e.textContent));
       assert.deepEqual(lines, ['TEST Group TwoDirect Dental, Group$200', 'TEST Practice ThreeDirect Dental, Private practice$100', 'TEST Dental OneHealthFirst$100', 'TEST Dental SixHealthFirst$100']);
       // The manager's own pay: $50 on each sign, one HealthFirst and two Direct Dental.
-      assert.equal(await page.textContent('#team-own-sentence'), "You've earned $150 from your team's signed offices. Paid $0. Waiting $150.");
+      assert.equal(await page.textContent('#team-own-sentence'), "You've earned $150 from your team's signed offices. Paid $0. Awaiting payment $150.");
       await page.click('#team-own-toggle');
       const own = await page.locator('#team-own-lines li').allTextContents();
       assert.deepEqual(own, [
-        'Nov 12. TEST Practice Eight. Direct Dental, signed. TEST Rep Two. $50. Earned, waiting to be paid.',
-        'Nov 11. TEST Practice Three. Direct Dental, signed. TEST Rep One. $50. Earned, waiting to be paid.',
-        'Nov 10. TEST Dental One. HealthFirst, signed. TEST Rep One. $50. Earned, waiting to be paid.',
+        'Nov 12. TEST Practice Eight. Direct Dental, signed. TEST Rep Two. $50. Earned, awaiting payment.',
+        'Nov 11. TEST Practice Three. Direct Dental, signed. TEST Rep One. $50. Earned, awaiting payment.',
+        'Nov 10. TEST Dental One. HealthFirst, signed. TEST Rep One. $50. Earned, awaiting payment.',
       ]);
       assert.equal(CONFIRM_WORDS.test(await page.textContent('#team-panel')), false);
     });
@@ -1784,6 +1819,9 @@ try {
       const res = await fetch(`${BASE}/refer/${key}`);
       assert.equal(res.status, 404, key);
       assert.match(res.headers.get('content-type') ?? '', /^text\/plain/, key);
+      // G2 finding 12: the key is in the URL, so the 404 is never cached or indexed.
+      assert.equal(res.headers.get('cache-control'), 'no-store', key);
+      assert.equal(res.headers.get('x-robots-tag'), 'noindex, nofollow', key);
       const text = await res.text();
       assert.equal(text, 'Not found', key);
       assert.equal(/team-panel|data-tab="team"|My Team|TEST Rep|TEST Lead Rep/.test(text), false, key);
@@ -2645,6 +2683,37 @@ try {
       assert.equal(posted[1].practiceState, 'CO');
       assert.equal(await box.inputValue(), 'Colorado', 'the box shows the state that was sent');
       assert.equal(await page.inputValue('#rep-form select[name=practiceState]'), 'CO');
+    } finally {
+      await ctx.close();
+    }
+  });
+  // G2 drift audit: a 5xx with no body or a dropped connection may have saved the row,
+  // so the page never says "did not send" for it.
+  await check('a 502 with no body or a dropped connection says it may already have gone through', async () => {
+    const ctx = await browser.newContext({ ...devices['iPhone 13'], reducedMotion: 'reduce' });
+    try {
+      const page = await ctx.newPage();
+      let n = 0;
+      await page.route('**/api/referral', async (route) => {
+        n += 1;
+        if (n === 1) return route.fulfill({ status: 502, contentType: 'text/html', body: '<html>Bad gateway</html>' });
+        return route.abort('connectionreset');
+      });
+      await page.goto(`${BASE}/refer/${REP_KEY}`);
+      await page.fill('[name=contactName]', 'TEST Office Manager');
+      await page.fill('[name=practiceName]', 'TEST North Side Dental');
+      await page.fill('[name=jde]', '001234');
+      await page.fill('[name=officePhone]', '303-555-0100');
+      await page.check('[name=preferredContact][value=Text]');
+      await page.check('[name=permission]');
+      const box = page.locator('#rep-form [data-state-input]');
+      if (await box.count()) await box.fill('Colorado');
+      await page.click('#rep-send-button');
+      await page.waitForFunction((words) => document.getElementById('rep-alert').textContent === words, UNCLEAR_MESSAGE);
+      await page.click('#rep-send-button');
+      await page.waitForFunction(() => !document.getElementById('rep-send-button').disabled);
+      assert.equal(n, 2);
+      assert.equal((await page.textContent('#rep-alert')).trim(), UNCLEAR_MESSAGE);
     } finally {
       await ctx.close();
     }
