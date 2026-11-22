@@ -18,13 +18,51 @@ and DD, it's 100 of qualified lead and $50 to the manager".
 | R2 | Who writes the partner's answers | 7B, with 7A listing open cases | HSBS 7F Field partner (new site) on a partner save, and 7H on a partner email reply. "Open" is a case 7F would list |
 | R3 | Who reads the ledger for the site | 1R `earnings` and `team` | HSBS 1F (new site) `earnings` and `team`. Its package of 11/18 already reads `SPIFF Ledger` on the field site by name (Payee Email and Payee Role filter, Test rows only for a TEST caller) |
 | R4 | Rep award event | Reached and Qualified (decision 65) | **Qualified is `Yes`.** 7F writes Qualified `Yes` only with Talked To Doctor `Yes` (choices `qualified`, `meeting`, `proposal`, `signed`), so a partner save pays exactly as before. Only a hand edit of Qualified alone differs, and it now pays. The ledger Event stays `Reached` and the key stays `<id>\|Reached\|Rep`, because the site reads only `Reached` and `Signed` |
-| R5 | Rep amount | HealthFirst $100. Direct Dental $100 private practice, $200 group, by Award Practice Type | **$100 for both companies, one flat amount.** Award Practice Type no longer sets any amount. Rule G, lists X4 and X9, gate G3 and the decision 82 follow-up no longer touch pay, and the ledger's Practice Type stays blank |
+| R5 | Rep amount | HealthFirst $100. Direct Dental $100 private practice, $200 group, by Award Practice Type | **Superseded 11/22 ("Pay baseline 11/22").** HealthFirst $100. Direct Dental $100 under 3 locations, $200 at 3 or more, by the partner-confirmed Award Practice Type; rule G, X4, X9 and G3 are back |
 | R6 | Manager award | $50 at the sign | **$50 at the sign, unchanged** (Brian, 11/21, on the manager pay card: "When it signs"). Rule B as written |
 | R7 | Where amounts live | Initialize variable steps in HSBS 10 | Number columns on the Ledger Settings `Live` row ("Amount settings"), filled from the promo file (`docs/build/field-promo-file.md`). A new promotion is one row edit, never a flow edit |
 | R8 | 12 month look-back | Any source, the other team's app and the FSC app included | Field-site Referrals rows only, any source on that list |
 | R9 | Column names | `Solutions` on the case, JDE | Service Cases `Service` (single choice) names the company. Referrals: `JDEAccount`, `Solutions` (multiple choice), `Source`, `PracticeName`, `CustomerName`, `Referring Rep Email`, `Test`. BB2 still records each exact name (record 4) |
 | R10 | Signed | Status `Closed - Won` with Signed Date and Signed Product | Partner Status `Signed` or `Close won`, with Signed Date set. 7F's `signed` choice writes both |
-| R11 | Site plan words | `REP_PAY_PLAN_STAFFING` `reached_private:100,reached_group:200,manager:50` | `reached_private:100,reached_group:100,manager:50`. The site's parser takes it as it is today and shows $100 for either type. HealthFirst stays `reached:100,manager:50` |
+| R11 | Site plan words | `REP_PAY_PLAN_STAFFING` `reached_private:100,reached_group:200,manager:50` | **Superseded 11/22:** `reached_private:100,reached_group:200,manager:50` (B9). HealthFirst stays `reached:100,manager:50` |
+
+## Pay baseline 11/22: Direct Dental by locations
+
+Brian, 11/22/2026, 11:34 AM ET, on the pay amount card: "$100 / $200 by locations". Direct
+Dental pays the rep $100 for a practice under 3 locations and $200 for a group of 3 or more,
+when Qualified is `Yes`. This section wins over R5, R11 and every "Retired 11/21 (R5)" line
+below. HealthFirst ($100) and both manager awards ($50 at the sign) do not change. Rows
+already written keep their amount (D3).
+
+| # | What | 11/21 (flat) | 11/22 (now) |
+|---|---|---|---|
+| B1 | Promo file | `promos/direct-dental-launch.csv` Rep amount 100, rule `flat` | Rep amount 100, Rep group amount 200, rule `group-3-plus`, approved 2026-11-22 (`docs/build/field-promo-file.md`) |
+| B2 | Ledger Settings `Live` row | `ST_Qualified` 100 | Two columns: `ST_QualifiedPrivate` 100 and `ST_QualifiedGroup` 200. `ST_Qualified` stays on the row unread until the flow change passes, then is left blank |
+| B3 | HSBS 10 amount (W13) | `ST_Qualified` for any type | `ST_QualifiedPrivate` when the award type is exactly `Private practice`; `ST_QualifiedGroup` when exactly `Group`. No valid award type: no Waiting row (rule G) |
+| B4 | Award type | Not read | The Service Case's Award Practice Type, never Practice Type, never a fallback. The ledger row's Practice Type is the award type (staffing) or blank (HealthFirst) |
+| B5 | Rule G | Retired | Back. A staffing case Qualified `Yes` with no valid award type gets no Waiting row (no K_R, no K_M); it is listed X4 every day until the partner confirms the type, or Brian fills Award Practice Type in SharePoint (decision 84). His edit is a save, so 10S sends the case to HSBS 10 |
+| B6 | Lists X4 and X9 | Not built | Back. X4: staffing, Qualified Yes, no valid award type, no Waiting or Paid K_R. X9: staffing, a K_R exists, and Practice Type differs from Award Practice Type (both values on the line), until seven days after Last Partner Update |
+| B7 | Gate G3 (F4.9) | Retired | Back, field wording: the field partner page (`/update/<key>`) asks the partner to confirm the practice type (under 3 locations or 3 or more) with the qualify answer on a staffing case, never preselecting the rep's pick, and HSBS 7F stamps Award Practice Type only from that confirmation, once, on the first save with Qualified `Yes` (decision 82). **Not built yet:** the site slice and the 7F change. `StaffingAwardsOn` stays `false` until G3 holds |
+| B8 | Checks | S2 $100 for both, S3 retired | S2: two TEST staffing cases, partner confirms `Private practice` on one and `Group` on the other: K_R $100 and $200. S2a: rep picked `Group`, partner confirms `Private practice`: $100. S3: after S2, the partner changes Practice Type: the K_R keeps its amount, X9 lists it. G2: Qualified Yes with Award Practice Type blank: no row, X4 and X5 |
+| B9 | `REP_PAY_PLAN_STAFFING` (Vercel, production) | `reached_private:100,reached_group:100,manager:50` | `reached_private:100,reached_group:200,manager:50` |
+
+**Live order.** One sitting, under "The freeze" check, TEST first:
+
+1. Back up HSBS 10 (export the package) and the Ledger Settings `Live` row values.
+2. Add `ST_QualifiedPrivate` and `ST_QualifiedGroup` (Number) to Ledger Settings; set 100
+   and 200 on the `Live` row.
+3. Change HSBS 10's amount check and W13 to B3 and B4, add rule G (B5) and X4, X9 to 10D
+   (B6). Save. Run group S's S2, S2a, S3 and group G's G2 on TEST cases with
+   `StaffingAwardsOn` set `true` only for that TEST cycle, then back to `false`.
+4. Set Vercel `REP_PAY_PLAN_STAFFING` to B9 (production), redeploy, and check the plan
+   equality (freeze part 4) against the Ledger Settings row.
+5. Record each step with its ET time and undo in this section.
+
+**Undo.** Restore the HSBS 10 package from step 1, set Vercel back to the 11/21 value and
+redeploy. Rows written meanwhile keep their amount.
+
+**Status 11/22:** docs and site test only. No live change yet. Real staffing awards stay off
+(`StaffingAwardsOn` `false`) until G3 (B7) is built and checked.
 
 ## P2 build record: HSBS 10 and 10S (11/21/2026)
 
@@ -518,7 +556,7 @@ written in the build report.
 | `HF_Qualified` | `100` | HealthFirst award to the rep when Qualified is Yes. Written as Event `Reached` (`reached` in `REP_PAY_PLAN`) | HealthFirst row, Rep award |
 | `HF_Signed` | `0` | HealthFirst award to the rep at the sign (`signed`). 0 in this promotion | HealthFirst row, Rep sign award |
 | `HF_Manager` | `50` | HealthFirst manager award at the sign (`manager`, R6) | HealthFirst row, Manager award |
-| `ST_Qualified` | `100` | Direct Dental award to the rep when Qualified is Yes, any practice type (R5). Written as Event `Reached` (`reached_private` and `reached_group` in `REP_PAY_PLAN_STAFFING`) | Direct Dental row, Rep award |
+| `ST_Qualified` | `100` | **Replaced 11/22 by `ST_QualifiedPrivate` 100 and `ST_QualifiedGroup` 200 (B2, B3).** Until then: Direct Dental award to the rep when Qualified is Yes, any practice type (R5). Written as Event `Reached` (`reached_private` and `reached_group` in `REP_PAY_PLAN_STAFFING`) | Direct Dental row, Rep award |
 | `ST_Manager` | `50` | Direct Dental manager award at the sign (`manager`, R6) | Direct Dental row, Manager award |
 
 **Amount check, every run.** Each amount is a whole number from 0 to 1000; a blank reads
@@ -817,8 +855,8 @@ ledger row: no zero-dollar row is ever written to the ledger (Brian, 11/11).
    (D18). A no-pay reason found later voids a Waiting Manager row, and disputes a Paid one,
    by rule V (M11, second and third orders).
 
-**Rule G, the blank award type guard: retired 11/21 (R5).** Direct Dental pays one flat
-amount, so a blank Award Practice Type holds nothing back. Do not build it.
+**Rule G, the blank award type guard: back 11/22 (B5 in "Pay baseline 11/22").** A staffing
+case Qualified `Yes` with no valid award type gets no Waiting row and is listed X4.
 
 **W17 Every row this run writes** carries these values. "Writes" means a Create item
 whose Award Key is the row's key.
@@ -1189,7 +1227,7 @@ when every gate holds, each written in the build report:
 |---|---|---|
 | G1 | Every check in groups A, H, G and S passed | The build report |
 | G2 | `LedgerTestOnly` is already false (go-live step 6 done) | The flow's settings |
-| G3 | Retired 11/21 (R5): Direct Dental pays one flat amount, so no practice type confirmation is needed | |
+| G3 | Back 11/22 (B7): the field partner page asks the partner to confirm the practice type with the qualify answer, never preselecting the rep's pick, and 7F stamps Award Practice Type only from that confirmation. Not built yet | Claude says so in writing, naming the PR and the 7F change |
 | G4 | No live (not TEST) rep app staffing case has Qualified Yes yet. The natural order is that this switch goes on before, or together with, `Staffing` in the site's `REP_APP_COMPANIES`, so no real staffing lead exists yet. If one does: stop and Ask Brian A7 | A Get items count, in the build report |
 | G5 | Brian's go in chat, in his own words, quoted in the build report | |
 | G6 | The plan equality check (freeze check part 4) passes for the staffing plan | The two values in the build report |
@@ -1442,9 +1480,8 @@ SharePoint. Choice names are 7F's (`docs/field-flow-contract.md`, 7F save).
 
 - S1. (R5) A TEST staffing case saved `qualified`: one K_R, Waiting, $100, Company
   `Staffing`, Payer `Direct Dental`.
-- S2. (R5) Two TEST staffing cases, one with Practice Type `Private practice` and one
-  `Group` (or blank): each K_R is $100.
-- S3. Retired 11/21 (R5): a practice type change never changes an amount.
+- S2, S2a, S3: see B8 in "Pay baseline 11/22" ($100 private practice, $200 group, by the
+  partner-confirmed type; a later type change keeps the amount and lists X9).
 - S4. (M4) Same JDE to HealthFirst, then to staffing: the staffing case earns. The reverse
   on another JDE: the HealthFirst case earns.
 - S5. (M5) Same JDE to staffing twice within 12 months: the second has one K_R, Void,

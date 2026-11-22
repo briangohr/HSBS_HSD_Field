@@ -36,30 +36,34 @@ Every column is required. Each check is pass or fail.
 | End | Last day | `YYYY-MM-DD` on or after Start, or `open`: runs until a newer file replaces it |
 | Who earns | Who gets the rep award | `sender`: the person whose own app link sent the lead (any `/join` role) |
 | Rep event | When the rep earns | `qualified` (Qualified is Yes) or `signed` |
-| Rep amount | Dollars | Whole number, 1 to 1000 |
+| Rep amount | Dollars. With `group-3-plus`, the amount for a practice under 3 locations | Whole number, 1 to 1000 |
+| Rep group amount | Dollars for a group of 3 or more locations | Whole number, 1 to 1000. Equals Rep amount with `flat` |
 | Rep sign amount | Extra dollars to the rep at the sign | Whole number, 0 to 1000. 0 means none |
 | Manager event | When the manager earns | `signed` or `none` |
 | Manager amount | Dollars to the rep's manager on the Team Roster | Whole number, 1 to 1000 with `signed`; 0 with `none` |
-| Practice type rule | Whether practice type changes pay | `flat` (the only value sheet F4 builds since 11/21) |
+| Practice type rule | Whether practice type changes pay | `flat`, or `group-3-plus` (Staffing only): Rep amount under 3 locations, Rep group amount at 3 or more, by the practice type the partner confirms (sheet F4, rule G and gate G3) |
 | Cap per rep | Most awards one rep earns in the promotion | `none`, or a whole number |
 | Payer | Who funds the awards | `HealthFirst` or `Direct Dental`, matching Company |
 | Approved by | Who approved the terms | `Brian` |
 | Approved on | Date of approval | `YYYY-MM-DD` |
 
 A file with `signed` as Rep event, a manager event other than `signed` or `none`, a
-practice type rule other than `flat`, a cap other than `none`, or an End other than `open`
+practice type rule other than `flat` or `group-3-plus`, a cap other than `none`, or an End other than `open`
 needs a sheet F4 change before it can pay. Sheet F4 builds only what today's files say.
 
 ## Where each number goes
 
 | Promo file | Ledger Settings (HealthFirst file) | Ledger Settings (Staffing file) | Vercel, HealthFirst | Vercel, Staffing |
 |---|---|---|---|---|
-| Rep amount | `HF_Qualified` | `ST_Qualified` | `reached:<n>` in `REP_PAY_PLAN` | `reached_private:<n>,reached_group:<n>` in `REP_PAY_PLAN_STAFFING` |
+| Rep amount | `HF_Qualified` | `ST_QualifiedPrivate` | `reached:<n>` in `REP_PAY_PLAN` | `reached_private:<n>` in `REP_PAY_PLAN_STAFFING` |
+| Rep group amount | not used | `ST_QualifiedGroup` | not used | `reached_group:<n>` in `REP_PAY_PLAN_STAFFING` |
 | Rep sign amount | `HF_Signed` | must be 0 | `signed:<n>`, left out when 0 | none |
 | Manager amount | `HF_Manager` | `ST_Manager` | `manager:<n>` | `manager:<n>` |
 
 The two Vercel values for today's files: `REP_PAY_PLAN` `reached:100,manager:50` and
-`REP_PAY_PLAN_STAFFING` `reached_private:100,reached_group:100,manager:50`.
+`REP_PAY_PLAN_STAFFING` `reached_private:100,reached_group:200,manager:50` (Brian, 11/22).
+The live values still read the 11/21 flat `reached_private:100,reached_group:100,manager:50`
+and one `ST_Qualified` until the 11/22 change goes live (sheet F4, "Pay baseline 11/22").
 
 ## Changing a promotion
 
@@ -75,6 +79,10 @@ The two Vercel values for today's files: `REP_PAY_PLAN` `reached:100,manager:50`
 | File | Company | Rep | Manager | Approved |
 |---|---|---|---|---|
 | `promos/healthfirst-launch.csv` | HealthFirst | $100 when qualified | $50 when signed | Brian, 11/21/2026 |
-| `promos/direct-dental-launch.csv` | Staffing (Direct Dental) | $100 when qualified | $50 when signed | Brian, 11/21/2026 |
+| `promos/direct-dental-launch.csv` | Staffing (Direct Dental) | When qualified: $100 under 3 locations, $200 at 3 or more | $50 when signed | Brian, 11/22/2026 (replaces the flat $100 of 11/21) |
 
 Brian picked the manager event "When it signs" on 11/21/2026.
+
+Brian picked the Direct Dental amount by locations on 11/22/2026 at 11:34 AM ET ("$100 /
+$200 by locations"). It replaces the flat $100 of 11/21. Rows already written keep their
+amount (D3).

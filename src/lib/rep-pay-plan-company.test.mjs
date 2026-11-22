@@ -157,36 +157,36 @@ describe('Staffing plan, REP_PAY_PLAN_STAFFING', () => {
   });
 });
 
-describe('the Dec 4 plans: HealthFirst and Direct Dental each pay $100 per qualified lead (Brian 11/21, pay sheet R11)', () => {
+describe('the Dec 4 plans: HealthFirst $100; Direct Dental $100 under 3 locations, $200 at 3 or more (Brian 11/22, pay sheet R5 and R11)', () => {
   const HF = parsePayPlan('reached:100,manager:50');
-  const FLAT = parseStaffingPayPlan('reached_private:100,reached_group:100,manager:50');
+  const BY_LOCATIONS = parseStaffingPayPlan('reached_private:100,reached_group:200,manager:50');
 
   test('both values parse as set in Vercel', () => {
     assert.deepEqual(HF, { reached: 100, signed: 0, manager: 50 });
-    assert.deepEqual(FLAT, { reachedPrivate: 100, reachedGroup: 100, manager: 50 });
+    assert.deepEqual(BY_LOCATIONS, { reachedPrivate: 100, reachedGroup: 200, manager: 50 });
   });
 
-  test('a flat staffing plan names one amount and no practice type, whatever the case says', () => {
-    const line = '$100 when Direct Dental reaches the customer and confirms the lead qualifies.';
-    for (const practiceType of ['', 'Group', 'Private practice']) assert.equal(staffingNotYetLine(FLAT, { practiceType }), line, practiceType);
-    assert.equal(staffingNotYetLine(FLAT, { reached: true, practiceType: 'Group' }), '$100 when Direct Dental confirms the lead qualifies.');
-    assert.equal(staffingUpTo(FLAT, 'Group'), 100);
-    assert.equal(staffingUpTo(FLAT, 'Private practice'), 100);
-  });
-
-  test('the empty My Earnings line reads one amount per company', () => {
+  test('Direct Dental shows $200 for a Group and $100 for a Private practice', () => {
+    assert.equal(staffingUpTo(BY_LOCATIONS, 'Group'), 200);
+    assert.equal(staffingUpTo(BY_LOCATIONS, 'Private practice'), 100);
+    assert.equal(staffingNotYetLine(BY_LOCATIONS, { practiceType: 'Group' }), '$200 for a group when Direct Dental reaches the customer and confirms the lead qualifies.');
     assert.equal(
-      emptyEarnings(HF, FLAT),
-      "$0 so far. Here's how you earn: $100 when HealthFirst reaches an office you sent and confirms the lead qualifies. $100 when Direct Dental reaches the customer and confirms the lead qualifies.",
-    );
-  });
-
-  test('a plan that still pays by type keeps naming the type', () => {
-    assert.equal(
-      staffingNotYetLine(STAFFING, {}),
+      staffingNotYetLine(BY_LOCATIONS, {}),
       '$100 for a private practice, or $200 for a group, when Direct Dental reaches the customer and confirms the lead qualifies.',
     );
-    assert.equal(staffingNotYetLine(STAFFING, { practiceType: 'Group' }), '$200 for a group when Direct Dental reaches the customer and confirms the lead qualifies.');
+  });
+
+  test('a flat staffing plan (the retired 11/21 value) still names one amount and no type', () => {
+    const FLAT = parseStaffingPayPlan('reached_private:100,reached_group:100,manager:50');
+    const line = '$100 when Direct Dental reaches the customer and confirms the lead qualifies.';
+    for (const practiceType of ['', 'Group', 'Private practice']) assert.equal(staffingNotYetLine(FLAT, { practiceType }), line, practiceType);
+    assert.equal(staffingUpTo(FLAT, 'Group'), 100);
+  });
+
+  test('the empty My Earnings line names both Direct Dental amounts', () => {
+    const line = emptyEarnings(HF, BY_LOCATIONS);
+    assert.match(line, /\$100 when HealthFirst reaches an office you sent and confirms the lead qualifies\./);
+    assert.match(line, /\$100 for a private practice, or \$200 for a group/);
   });
 });
 
