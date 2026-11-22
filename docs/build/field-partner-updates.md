@@ -715,3 +715,44 @@ Undo: 7F, import `rollback/HSBS-7F-before-cadence.zip` as Update onto 7F, turn O
 leads. 7H, import `rollback/HSBS-7H-before-cadence.zip` as Update onto 7H, turn On. Site:
 revert the hint line in `src/lib/partner-status-words.mjs`.
 
+
+## Office count check for Direct Dental Group leads (11/22/2026)
+
+Brian, 11/22 12:10 PM ET: before a Direct Dental Group lead pays the rep $200, the partner
+confirms the office count. Matt Penny (Direct Dental) owns that confirm. Groups are rare.
+Thread "Add Matt's office count check". Times ET.
+
+Design (the smallest safe change):
+
+- 7F `leads`: each lead gains `askOffices`, true only for a Direct Dental lead whose Referrals
+  row says `RepPracticeType` `Group` and that is not qualified yet.
+- Partner page (behind `PARTNER_OFFICE_CHECK`): on such a lead, picking Reached the customer,
+  Demo set, Proposal or Signed shows "The rep marked this practice as a group. Does it have 3
+  or more locations?" Yes or No. The page will not save without an answer.
+- 7F `save`: `offices` `yes`, `no` or blank (else 422). On the save that first qualifies a
+  Direct Dental Group lead, 7F writes Service Cases `OfficeCountConfirmed` `Yes` or `No` in
+  the same MERGE as Qualified Yes. Ignored on any other lead or save.
+- HSBS 10: `Multi_office` also needs `OfficeCountConfirmed` `Yes`. No, or no answer, pays $100.
+- Why no answer pays $100 and not a "Pending extra $100": HSBS 10 writes the qualified award
+  once and never changes its amount (D3). A pending extra needs a new ledger row type and a
+  1F Earnings change. $100 never overpays, and groups are rare, so a later fix by hand is
+  cheap. The amount still comes only from trusted fields: the rep's pick on the Referrals row
+  (1F) and the case column (7F), never a browser body.
+
+Files (project files `partner-updates/offices/`): `patch_offices_inpage.js` (node:
+`build_offices.mjs <live def> <out def>`), `test_7f_offices.py` 32/32 (live 86b2c0fa vs
+patched). The cadence suite and the FT-5 suite on the patched def differ only by the new
+`askOffices` field (and FT-5's known "reads cut" check). Lint: only the known Write_until note.
+HSBS 10: `pay-ledger/build/gen_10.py` (Get_case, Multi_office), `test_10.py` 86/86 (new
+office count cases fail on the old def), `test_10d.py` 49/49, lint 0. Generator diff vs the
+live package: only Get_case and Multi_office.
+
+### Live change record (Sun 11/22/2026, ET)
+
+- 2:20 PM: Service Cases column `OfficeCountConfirmed` (Text, 10) added on the field site.
+- 2:21 PM: live 7F exported in Browser 1 (378c6cd4), hash 86b2c0fa67a77dc7 (the cadence
+  build). Undo package `partner-updates/offices/rollback/HSBS-7F-before-offices.zip`.
+- 2:22 PM: patched in page, hash 68e75b34c51600dc (same as the tested build), imported as
+  Update onto HSBS 7F Field partner (new site), top SharePoint and Outlook connections. On
+  2:23 PM. Flow checker 0 errors, 0 warnings. TEST partner page read 200 on production.
+- Undo 7F: import `rollback/HSBS-7F-before-offices.zip` as Update, turn On. The column can stay.

@@ -21,7 +21,7 @@ and DD, it's 100 of qualified lead and $50 to the manager".
 | R2 | Who writes the partner's answers | 7B, with 7A listing open cases | HSBS 7F Field partner (new site) on a partner save, and 7H on a partner email reply. "Open" is a case 7F would list |
 | R3 | Who reads the ledger for the site | 1R `earnings` and `team` | HSBS 1F (new site) `earnings` and `team`. Its package of 11/18 already reads `SPIFF Ledger` on the field site by name (Payee Email and Payee Role filter, Test rows only for a TEST caller) |
 | R4 | Rep award event | Reached and Qualified (decision 65) | **Qualified is `Yes`.** 7F writes Qualified `Yes` only with Talked To Doctor `Yes` (choices `qualified`, `meeting`, `proposal`, `signed`), so a partner save pays exactly as before. Only a hand edit of Qualified alone differs, and it now pays. The ledger Event stays `Reached` and the key stays `<id>\|Reached\|Rep`, because the site reads only `Reached` and `Signed` |
-| R5 | Rep amount | HealthFirst $100. Direct Dental $100 private practice, $200 group, by Award Practice Type | **Changed 11/22 (Brian, 11:30 AM ET: "$100 unless someone selects the multiple office selection in the app").** HealthFirst $100 flat (its form has no office choice). Direct Dental $100, or $200 when the Referrals row's Rep Practice Type (`RepPracticeType`, the rep's pick on the send, written by 1F) is `Group` (3 or more locations). Amounts come from Ledger Settings `ST_Qualified` and `ST_Qualified_Group`. Award Practice Type still sets nothing: rule G, lists X4 and X9, gate G3 and the decision 82 follow-up stay retired, and the ledger has no Practice Type column. (11/21 to 11/22 it was one flat $100 for both.) |
+| R5 | Rep amount | HealthFirst $100. Direct Dental $100 private practice, $200 group, by Award Practice Type | **Changed 11/22 (Brian, 11:30 AM ET: "$100 unless someone selects the multiple office selection in the app").** HealthFirst $100 flat (its form has no office choice). Direct Dental $100, or $200 when the Referrals row's Rep Practice Type (`RepPracticeType`, the rep's pick on the send, written by 1F) is `Group` (3 or more locations) **and** the partner confirmed 3 or more locations on the partner page (Service Cases `OfficeCountConfirmed` `Yes`, written by 7F on the save that qualifies the lead; Brian 11/22 12:10 PM ET, Matt Penny at Direct Dental owns the confirm). No or no answer: $100. Amounts come from Ledger Settings `ST_Qualified` and `ST_Qualified_Group`. Award Practice Type still sets nothing: rule G, lists X4 and X9, gate G3 and the decision 82 follow-up stay retired, and the ledger has no Practice Type column. (11/21 to 11/22 it was one flat $100 for both.) |
 | R6 | Manager award | $50 at the sign | **$50 at the sign, unchanged** (Brian, 11/21, on the manager pay card: "When it signs"). Rule B as written |
 | R7 | Where amounts live | Initialize variable steps in HSBS 10 | Number columns on the Ledger Settings `Live` row ("Amount settings"), filled from the promo file (`docs/build/field-promo-file.md`). A new promotion is one row edit, never a flow edit |
 | R8 | 12 month look-back | Any source, the other team's app and the FSC app included | Field-site Referrals rows only, any source on that list |
@@ -128,6 +128,9 @@ the multiple office selection in the app". Times ET.
 - 11:49 AM: Vercel `REP_PAY_PLAN_STAFFING` (production and preview) set to
   `reached_private:100,reached_group:200,manager:50`; production redeployed. Plan equality holds:
   100 / 200 / 50.
+- Office count check (11/22, thread "Add Matt's office count check"): `Get_case` also selects
+  `OfficeCountConfirmed`; `Multi_office` also needs it to be `Yes`. See "Office count build
+  record" below.
 - Undo: Ledger Settings `ST_Qualified_Group` back to 100 pays $100 for every staffing lead with
   no flow change. Full undo: import `rollback/multi-office-before/HSBS-10-Ledger-writer-NEW-SITE.zip`
   as Update (or swap in the backup copy), and set the Vercel value back to
@@ -625,7 +628,7 @@ written in the build report.
 | `HF_Signed` | `0` | HealthFirst award to the rep at the sign (`signed`). 0 in this promotion | HealthFirst row, Rep sign award |
 | `HF_Manager` | `50` | HealthFirst manager award at the sign (`manager`, R6) | HealthFirst row, Manager award |
 | `ST_Qualified` | `100` | Direct Dental award to the rep when Qualified is Yes and the rep did not pick `Group` (R5). Written as Event `Reached` (`reached_private` in `REP_PAY_PLAN_STAFFING`) | Direct Dental row, Rep award |
-| `ST_Qualified_Group` | `200` (added 11/22) | Direct Dental award to the rep when Qualified is Yes and the Referrals row's `RepPracticeType` is `Group` (R5). Event `Reached` (`reached_group`) | Direct Dental row, Rep group amount |
+| `ST_Qualified_Group` | `200` (added 11/22) | Direct Dental award to the rep when Qualified is Yes, the Referrals row's `RepPracticeType` is `Group` and the case's `OfficeCountConfirmed` is `Yes` (R5). Event `Reached` (`reached_group`) | Direct Dental row, Rep group amount |
 | `ST_Manager` | `50` | Direct Dental manager award at the sign (`manager`, R6) | Direct Dental row, Manager award |
 
 **Amount check, every run.** Each amount is a whole number from 0 to 1000; a blank reads
@@ -810,7 +813,7 @@ K_S, one each (Top Count 1). Keep each row's Status, Disputed, Payout Batch and 
 
 | | HealthFirst | Staffing |
 |---|---|---|
-| Qualified award (A_R, Event `Reached`) | `HF_Qualified` | `ST_Qualified_Group` when the Referrals row's `RepPracticeType` is `Group`, else `ST_Qualified` (R5) |
+| Qualified award (A_R, Event `Reached`) | `HF_Qualified` | `ST_Qualified_Group` when the Referrals row's `RepPracticeType` is `Group` and the case's `OfficeCountConfirmed` is `Yes`, else `ST_Qualified` (R5) |
 | Rep award at the sign (A_S) | `HF_Signed` | 0 |
 | Manager award (A_M) | `HF_Manager` | `ST_Manager` |
 

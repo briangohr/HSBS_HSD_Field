@@ -2,7 +2,7 @@
 // word the answer. Used by /api/partner-save. It never logs the key or a lead.
 
 import { isSubmissionId } from './field-form.mjs';
-import { PartnerFlowError, saveUpdates } from './partner-flow.mjs';
+import { PartnerFlowError, officeCheckEnabled, saveUpdates } from './partner-flow.mjs';
 import { SAVE_WORDS, checkUpdates, isPartnerKey, saveResultWords, savedWords } from './partner-form.mjs';
 
 /**
@@ -23,7 +23,9 @@ export async function partnerSave(raw) {
   }
   try {
     const sent = checked.updates.length;
-    const saved = await saveUpdates(String(b.key), String(b.submissionId), checked.updates);
+    // With the office check off, no answer reaches 7F, so no lead can earn the group amount.
+    const updates = officeCheckEnabled() ? checked.updates : checked.updates.map((u) => ({ ...u, offices: '' }));
+    const saved = await saveUpdates(String(b.key), String(b.submissionId), updates);
     // saveUpdates refuses saved above sent, so the words are never null here.
     const message = saveResultWords(saved, sent) ?? savedWords(saved);
     return { status: 200, body: { ok: true, saved, sent, partial: saved < sent, message } };

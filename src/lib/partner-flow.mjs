@@ -32,6 +32,13 @@ const env = (k) => {
 export const partnerPageEnabled = () => repAppEnabled() && env('PARTNER_PAGE_ENABLED') === 'true';
 
 /**
+ * The office count question (Brian, 11/22/2026): a Direct Dental lead the rep marked Group pays
+ * the group amount only after the partner confirms 3 or more locations. Off unless
+ * PARTNER_OFFICE_CHECK is exactly true: the page then never asks and the save sends no answer.
+ */
+export const officeCheckEnabled = () => partnerPageEnabled() && env('PARTNER_OFFICE_CHECK') === 'true';
+
+/**
  * Why a 7F call did not give leads or a save.
  * kind: 'unknown' (404, bad key, or off), 'expired' (410), 'reload' or 'bad_value' (422,
  * nothing written), 'config' (no URL), 'timeout' or 'failed' (no clear answer).
@@ -130,6 +137,9 @@ export function readLead(raw) {
     meetingDate: date(r.meetingDate),
     nextUpdateDue: date(r.nextUpdateDue),
     missedUpdates: count(r.missedUpdates),
+    // 7F sets it only for a Direct Dental lead whose referral says Group and that is not
+    // qualified yet. Anything but true is no. The page shows it only with the switch on.
+    askOffices: r.askOffices === true && officeCheckEnabled(),
   };
 }
 

@@ -4,12 +4,12 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { PartnerFlowError, listLeads, partnerPageEnabled, readLead, saveUpdates, sortLeads } from './partner-flow.mjs';
+import { PartnerFlowError, listLeads, officeCheckEnabled, partnerPageEnabled, readLead, saveUpdates, sortLeads } from './partner-flow.mjs';
 import { partnerSave } from './partner-save.mjs';
 
 const KEY = 'ab'.repeat(20);
 const SID = '11111111-1111-4111-8111-111111111111';
-const UPDATE = { id: 36, choice: 'meeting', talkedToDoctor: 'Yes', meetingDate: '2026-11-24', signedDate: '', signedProduct: '', closedReason: '', note: '' };
+const UPDATE = { id: 36, choice: 'meeting', talkedToDoctor: 'Yes', meetingDate: '2026-11-24', signedDate: '', signedProduct: '', closedReason: '', note: '', offices: '' };
 const LEAD = {
   id: 36,
   ref: 'HSBS-F90',
@@ -22,6 +22,7 @@ const LEAD = {
   meetingDate: '',
   nextUpdateDue: '2026-11-23',
   missedUpdates: 0,
+  askOffices: false,
 };
 
 let server;
@@ -49,6 +50,7 @@ afterEach(async () => {
   delete process.env.PARTNER_FLOW_URL;
   delete process.env.REP_APP_ENABLED;
   delete process.env.PARTNER_PAGE_ENABLED;
+  delete process.env.PARTNER_OFFICE_CHECK;
 });
 
 const kind = (k) => (err) => err instanceof PartnerFlowError && err.kind === k;
@@ -201,5 +203,47 @@ describe('partnerSave (the save route)', () => {
     assert.equal(over.status, 502);
     assert.equal(over.body.error, 'timeout');
     assert.equal(over.body.ok, undefined);
+  });
+});
+
+describe('office count check (Brian, 11/22/2026)', () => {
+  // The page sends no Talked To Doctor (that marks an old page); the route fills it in.
+  const GROUP = { ...UPDATE, choice: 'qualified', talkedToDoctor: 'Yes', meetingDate: '', offices: 'yes' };
+  const SENT = { ...GROUP, talkedToDoctor: '' };
+  test('the switch is off unless exactly true, and needs the page switch', () => {
+    assert.equal(officeCheckEnabled(), false);
+    process.env.PARTNER_OFFICE_CHECK = 'TRUE';
+    assert.equal(officeCheckEnabled(), false);
+    process.env.PARTNER_OFFICE_CHECK = 'true';
+    assert.equal(officeCheckEnabled(), true);
+    process.env.PARTNER_PAGE_ENABLED = 'false';
+    assert.equal(officeCheckEnabled(), false);
+  });
+  test('askOffices is true only when 7F says exactly true and the switch is on', async () => {
+    assert.equal(readLead({ ...LEAD, askOffices: true })?.askOffices, false);
+    process.env.PARTNER_OFFICE_CHECK = 'true';
+    assert.equal(readLead({ ...LEAD, askOffices: true })?.askOffices, true);
+    for (const v of ['true', 1, 'yes', null, undefined]) assert.equal(readLead({ ...LEAD, askOffices: v })?.askOffices, false, String(v));
+    reply = () => [200, { partner: 'TEST Direct Dental', leads: [{ ...LEAD, askOffices: true }] }];
+    assert.equal((await listLeads(KEY)).leads[0].askOffices, true);
+  });
+  test('switch on: the answer reaches 7F', async () => {
+    process.env.PARTNER_OFFICE_CHECK = 'true';
+    reply = () => [200, { ok: true, saved: 1 }];
+    assert.equal((await partnerSave({ key: KEY, submissionId: SID, updates: [SENT] })).status, 200);
+    assert.deepEqual(posts[0].updates, [GROUP]);
+  });
+  test('switch off: the answer is blanked, so no lead earns the group amount', async () => {
+    reply = () => [200, { ok: true, saved: 1 }];
+    assert.equal((await partnerSave({ key: KEY, submissionId: SID, updates: [SENT] })).status, 200);
+    assert.deepEqual(posts[0].updates, [{ ...GROUP, offices: '' }]);
+  });
+  test('a bad answer is refused before any post', async () => {
+    process.env.PARTNER_OFFICE_CHECK = 'true';
+    for (const offices of ['maybe', 'YES', true, 3]) {
+      const refused = await partnerSave({ key: KEY, submissionId: SID, updates: [{ ...SENT, offices }] });
+      assert.deepEqual(refused, { status: 422, body: { error: 'bad_value', id: 36, field: 'offices' } }, String(offices));
+    }
+    assert.equal(posts.length, 0);
   });
 });

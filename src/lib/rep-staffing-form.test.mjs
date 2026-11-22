@@ -75,7 +75,7 @@ describe('staffing form rules (field two-track spec, section 4)', () => {
   test('the pay line is worded from the plan, and empty with none', () => {
     assert.equal(
       staffingPayLine(PLAN),
-      'You earn $100 for a private practice, or $200 for a group with 3 or more locations, when Direct Dental reaches the customer and confirms the lead qualifies.',
+      'You earn $100 for a private practice, or $200 for a group that Direct Dental confirms has 3 or more locations, when Direct Dental reaches the customer and confirms the lead qualifies.',
     );
     assert.equal(staffingPayLine(null), '');
   });

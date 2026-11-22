@@ -3,11 +3,11 @@
 import assert from 'node:assert/strict';
 import { STAND_CHOICES } from './partner-status-words.mjs';
 import { describe, test } from 'node:test';
-import { CLOSED_REASONS, LEGACY_CLOSED_REASONS, TALKED_CHOICES, TALKED_FOR, checkUpdate, checkUpdates, easternToday, dueLine, isDate, isPartnerKey, noChangeHint, nowLine, saveResultWords, showDate } from './partner-form.mjs';
+import { CLOSED_REASONS, LEGACY_CLOSED_REASONS, QUALIFYING_CHOICES, TALKED_CHOICES, TALKED_FOR, checkUpdate, checkUpdates, easternToday, dueLine, isDate, isPartnerKey, noChangeHint, nowLine, saveResultWords, showDate } from './partner-form.mjs';
 
 const TODAY = '2026-11-20';
 // The new page sends no Talked To Doctor answer; checkUpdate fills it in from the choice.
-const base = { id: 36, choice: 'proposal', talkedToDoctor: '', meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note: '' };
+const base = { id: 36, choice: 'proposal', talkedToDoctor: '', meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note: '', offices: '' };
 const ok = (raw) => {
   const r = checkUpdate(raw, TODAY);
   assert.equal(r.ok, true, JSON.stringify(r));
@@ -178,4 +178,30 @@ test('a save says exactly what saved: full, partial, none; more than sent is no 
   }
   // Partner-facing copy: no em dashes or arrows.
   for (const words of [saveResultWords(1, 2), saveResultWords(0, 1), saveResultWords(0, 2)]) assert.doesNotMatch(String(words), /[\u2014\u2013\u2192]/);
+});
+
+describe('office count answer (Brian, 11/22/2026)', () => {
+  test('kept only on a qualifying choice', () => {
+    for (const choice of QUALIFYING_CHOICES) {
+      const extra = choice === 'meeting' ? { meetingDate: TODAY } : choice === 'signed' ? { signedDate: TODAY } : {};
+      assert.equal(ok({ ...base, choice, offices: 'yes', ...extra }).offices, 'yes', choice);
+      assert.equal(ok({ ...base, choice, offices: 'no', ...extra }).offices, 'no', choice);
+    }
+    for (const choice of ['trying', 'dq_noanswer', 'nochange']) assert.equal(ok({ ...base, choice, offices: 'yes' }).offices, '', choice);
+    assert.equal(ok({ ...base, choice: 'lost', closedReason: 'Price', offices: 'no' }).offices, '');
+  });
+  test('only yes, no or blank; a missing answer is blank', () => {
+    for (const offices of ['maybe', 'Yes', true, 1, ['yes']]) bad({ ...base, choice: 'qualified', offices }, 'offices');
+    const { offices: _drop, ...noField } = base;
+    assert.equal(ok({ ...noField, choice: 'qualified' }).offices, '');
+    assert.equal(ok({ ...noField, choice: 'qualified', offices: null }).offices, '');
+  });
+  test('the page needs an answer on a lead that asks; the route does not', () => {
+    bad({ ...base, choice: 'qualified', askOffices: true }, 'offices');
+    bad({ ...base, choice: 'signed', signedDate: TODAY, askOffices: true }, 'offices');
+    assert.equal(ok({ ...base, choice: 'qualified', askOffices: true, offices: 'no' }).offices, 'no');
+    assert.equal(ok({ ...base, choice: 'trying', askOffices: true }).offices, '');
+    assert.equal(checkUpdate({ ...base, choice: 'qualified', askOffices: true }, null).ok, true);
+    assert.equal('askOffices' in ok({ ...base, choice: 'qualified', askOffices: true, offices: 'yes' }), false, 'never sent');
+  });
 });

@@ -150,7 +150,7 @@ const saved =
 
             <ol class="pu-leads">
               {leads.map((lead) => (
-                <li class="pu-lead" data-id={String(lead.id)} data-ref={lead.ref}>
+                <li class="pu-lead" data-id={String(lead.id)} data-ref={lead.ref} data-ask-offices={lead.askOffices ? 'true' : undefined}>
                   <fieldset class="pu-card" aria-labelledby={`lead-${lead.id}-title`}>
                     <h2 class="pu-ref" id={`lead-${lead.id}-title`}>
                       {lead.ref}: {lead.practice}
@@ -205,6 +205,19 @@ const saved =
                       </span>
                     </label>
 
+                    {lead.askOffices && (
+                      <fieldset class="pu-more pu-q" data-for="qualifying" data-offices hidden>
+                        <legend>The rep marked this practice as a group. Does it have 3 or more locations?</legend>
+                        <label class="pu-opt">
+                          <input type="radio" name={`offices-${lead.id}`} value="yes" />
+                          <span>Yes, 3 or more locations</span>
+                        </label>
+                        <label class="pu-opt">
+                          <input type="radio" name={`offices-${lead.id}`} value="no" />
+                          <span>No, fewer than 3</span>
+                        </label>
+                      </fieldset>
+                    )}
                     <div class="pu-more" data-for="meeting" hidden>
                       <label class="pu-field">
                         <span>Demo date</span>
@@ -302,7 +315,16 @@ const saved =
 
     <script>
       import { CLIENT_WAIT_MS } from '../../lib/field-form.mjs';
-      import { MAX_UPDATES, SAVE_WORDS, checkUpdate, easternToday, fieldWords, reloadWords, saveResultWords } from '../../lib/partner-form.mjs';
+      import {
+        MAX_UPDATES,
+        QUALIFYING_CHOICES,
+        SAVE_WORDS,
+        checkUpdate,
+        easternToday,
+        fieldWords,
+        reloadWords,
+        saveResultWords,
+      } from '../../lib/partner-form.mjs';
 
       const form = document.getElementById('pu-form') as HTMLFormElement | null;
       const button = document.getElementById('pu-save') as HTMLButtonElement | null;
@@ -331,7 +353,7 @@ const saved =
         const showMore = (li: HTMLLIElement) => {
           const choice = field(li, 'choice');
           li.querySelectorAll<HTMLElement>('[data-for]').forEach((el) => {
-            el.hidden = el.dataset.for !== choice;
+            el.hidden = el.dataset.for === 'qualifying' ? !QUALIFYING_CHOICES.includes(choice) : el.dataset.for !== choice;
           });
         };
         leads.forEach((li) => {
@@ -379,6 +401,8 @@ const saved =
                 signedProduct: field(li, 'signedProduct'),
                 closedReason: field(li, 'closedReason'),
                 note: field(li, 'note'),
+                offices: li.dataset.askOffices === 'true' ? field(li, 'offices') : '',
+                askOffices: li.dataset.askOffices === 'true',
               },
               today,
             );
