@@ -93,6 +93,69 @@ Task 1 acceptance: both 10M flows Off, RealPayoutsOn No, no financial row change
 complete, and the baseline accounts for all 33 ledger rows. Every live fact in V1 to V4 is
 builder-recorded (Claude read it; Codex did not).
 
+### V5 Task 2: `RealPayoutsOn` is the 10M hard stop (offline build, 11/22/2026 4:15 to 4:30 PM ET)
+
+Thread "Make real-pay switch block payouts". Built on the stamp thread's generators
+(`history-stamp/build/gen_10m.py` and `test_10m.py`, LastWriter included), not on
+`pay-ledger/build`. Kept in Brian's builder project files under `pay-ledger/proof-v34/task2/`
+(`build/`, `out/`, and the generator before the gate in `rollback/`). Nothing live changed in V5.
+
+The guard, in both 10M flows:
+
+- Ledger Settings is read with `$top=2` and now selects `RealPayoutsOn`. New compose
+  `Real_switch` = exactly one `Live` row **and** `RealPayoutsOn` equals boolean `true`. A blank,
+  `No`, a text value or two `Live` rows all read false. `Real_on` (exactly one `Live` row with
+  LedgerTestOnly No) is kept.
+- New step `Real_gate`, an If on `and(not(variables('isTest')), not(and(outputs('Real_on'),
+  outputs('Real_switch'))))`. When true it writes one Ledger Run Errors row (Title
+  `HSBS 10M real gate` or `HSBS 10M by hand real gate`, Step names the reason), mails Brian the
+  failure notice (subject `HSBS payout: <flow> failed, real pay is off (RealPayoutsOn)`), and
+  ends the run as Failed. It sits before the ledger read (`Get_ledger`), so a stopped Real run
+  reads no ledger row for pay, stamps nothing, sends no list and writes no Paid.
+- Monthly: the gate runs after the payout day check and `Set_batch`, so a normal day still ends
+  quietly with no error row. It replaces the old `Real_off` refusal.
+- By hand: the gate runs after the input checks (`Mode_ok`, `Kind_ok`, `Batch_ok`) and
+  `Set_kind`, for every mode. Real means Kind `Real` for List, and a batch without `-TEST-` for
+  Resend and Paid (a real row only ever gets a `PAY-yyyy-MM` batch, and `Kind_wrong` still
+  refuses a Paid whose rows do not match the batch kind). The old `Real_off_hand` refusal is
+  removed; the gate covers it.
+- A failed Ledger Settings read fails the run before the gate, through the existing failure
+  path: one error row, one failure mail, no list.
+- TEST runs never need the switch.
+- Mode `Forwarded` does not exist yet (plan Task 3 adds it). Today a Forwarded call, TEST or
+  Real, is refused as an unknown mode with no read of the ledger and no write. Because the gate
+  is mode-blind, Task 3's Forwarded is gated the moment it is added.
+- Side effect, by design: a stopped Real run leaves an open Ledger Run Errors row, and an open
+  error row holds every later list (TEST included) until Claude resolves it.
+
+| Package | Before (stamp build) | After (gate) |
+|---|---|---|
+| HSBS 10M Monthly payout (new site) | e4d09170afaf4cd2 | 654ea1592f6706f8 |
+| HSBS 10M Payout by hand (new site) | c29e5a6e1468506b | 81b33a4056a52f82 |
+| HSBS 10 Ledger writer (unchanged, regenerated as a check) | b3a9654adfa77f33 | b3a9654adfa77f33 |
+
+Hash rule: sha256 of `{triggers, actions}` with metadata, description and evaluatedRecurrence
+stripped, first 16 hex (`retries/hash_packages.py`).
+
+Offline tests (`python3 -I test_10m.py <out>`, the sim model, lazy and `SIM_EAGER=1`):
+
+| Suite | Before the gate | After |
+|---|---|---|
+| test_10m.py | 93/110 on the stamp build (16 new gate checks and the reworded H19 fail) | 110/110 lazy, 110/110 eager |
+| test_10.py | 108/108 | 108/108 lazy and eager |
+| test_10d.py | 49/49 | 49/49 lazy and eager |
+| lint_flow.py | 0 problems | 0 problems (10M monthly 142 actions, by hand 208) |
+
+New checks: R1 (by hand Real List, Resend, Forwarded and Paid with RealPayoutsOn No, blank,
+two `Live` rows, and the text `Yes`: no ledger write, no list mail, one error row and one
+failure mail; Forwarded is refused as an unknown mode), R2 (monthly Real list on the payout
+day, same four states), R3 (Ledger Settings read fails, by hand and monthly), R4 (switch No on
+a normal day: monthly still ends quietly), R5 to R9 (switch No: TEST List, TEST Resend and TEST
+Paid still work, TEST Forwarded is an unknown mode, no error row), R10 (switch Yes with one
+`Live` row: Real List runs). H19 now expects the gate (Failed, one error row) for LedgerTestOnly
+Yes. The older Real checks (M2 to M30, H16 to H18, P1 to P6) model a released switch
+(`RealPayoutsOn` Yes) and still pass. N1: nesting stays within the Power Automate limit of 8.
+
 ## Field site refresh (11/21/2026)
 
 Brian, 11/21/2026: "it should show real dollars. What I will need to create is a file for
@@ -128,7 +191,7 @@ packages: project files `pay-ledger/build/gen_10m.py`, `test_10m.py`, `pay-ledge
 |---|---|---|
 | M1 | Flows | "HSBS 10M Monthly payout (new site)": every day 10 AM Eastern (after 10D, which can hold an open catch-up row until about 9 AM). "HSBS 10M Payout by hand (new site)": manual, Mode `List`, `Resend` or `Paid`. Both trigger concurrency 1 |
 | M2 | Payout day | Ledger Settings `PayoutDate` (Text, `YYYY-MM-DD`, the one setting) when it is a real date in the current Eastern month, else the last weekday of the month. November 2026: Mon 11/30. Any other day the scheduled run ends quietly. A `PayoutDate` in another month is ignored, so it never needs clearing |
-| M3 | Real pay gate | A Real list needs exactly one `Live` row with LedgerTestOnly No (fail safe, as 10D). 10M does not read StaffingAwardsOn or RealPayoutsOn. **RealPayoutsOn is retired** with 10B and 10P: it stays No and no flow reads it |
+| M3 | Real pay gate | A Real list needs exactly one `Live` row with LedgerTestOnly No (fail safe, as 10D). 10M does not read StaffingAwardsOn or RealPayoutsOn. **RealPayoutsOn is retired** with 10B and 10P: it stays No and no flow reads it. **Overridden 11/22/2026 by v3.4:** every Real 10M mode also needs RealPayoutsOn Yes (V5) |
 | M4 | Freeze | No list while a Ledger Run Errors row is open (X1). Brian gets one email saying why, nothing is stamped, and the list is made by hand (Mode `List`, Kind `Real`) once the rows are resolved |
 | M5 | Rows | SPIFF Ledger: Status `Waiting`, Disputed not Yes, Sent On blank (Payout Batch blank, or the batch of a row Alexa did not pay, M10), Test = the kind (a Real list never holds a TEST row and a TEST list never a real one, D8), Amount a whole number 1 to 1000, Payer matching Company (X12), Earned On (Eastern date) on or before the cutoff (the run date), and not on X17 (office match tested live as in 10D, unless Office Check is `Cleared`). Each Waiting row held out is named in the email with its reason |
 | M6 | Batch ID | Real: `PAY-<yyyy-MM>`, one per month. A Real list whose batch already has rows is refused (Mode `Resend` sends the list again). TEST: `PAY-<yyyy-MM>-TEST-<ddHHmm>` |
@@ -720,7 +783,7 @@ amount columns in "Amount settings":
 |---|---|---|---|
 | LedgerTestOnly | Yes | HSBS 10 (W7), HSBS 10D (step 1 filter and the lists) | While Yes, HSBS 10 acts only on a TEST case and writes nothing for any other, and 10D posts and lists TEST cases only |
 | StaffingAwardsOn | No | HSBS 10 (W9), HSBS 10D (X5) | While No, HSBS 10 creates no ledger row for a staffing case (F4.4, step W9); rule V still voids or disputes one written while it was on. 10D lists X5 only while it is No. What turns it on: F4.9 |
-| RealPayoutsOn | No | Nobody (retired 11/22/2026 with 10B and 10P) | Stays No. HSBS 10M sends nothing to a payer and does not read it (10M build record, M3) |
+| RealPayoutsOn | No | HSBS 10M, both flows (v3.4 Task 2, V5) | The hard stop for every Real 10M mode. While it is not exactly Yes on exactly one `Live` row, a Real List, Resend or Paid stops with one error row and one failure mail to Brian. Stays No until Brian releases the first real payout in writing |
 | PayoutDate | blank (Text, added 11/22/2026) | HSBS 10M | The payout day, `YYYY-MM-DD`, used only when it is a real date in the current month; else the last weekday of the month (10M build record, M2). Not a pay switch: Claude changes it when Brian gives Alexa's cutoff |
 
 - In this sheet, a switch "true" or "on" means Yes in this row, and "false" or "off" means
