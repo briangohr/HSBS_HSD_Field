@@ -755,4 +755,14 @@ live package: only Get_case and Multi_office.
 - 2:22 PM: patched in page, hash 68e75b34c51600dc (same as the tested build), imported as
   Update onto HSBS 7F Field partner (new site), top SharePoint and Outlook connections. On
   2:23 PM. Flow checker 0 errors, 0 warnings. TEST partner page read 200 on production.
+- 2:25 PM: live HSBS 10 Ledger writer exported, canonical hash (metadata left out) 8f0b4c47ed13649d,
+  the same as `pay-ledger/rollback/offices-before/HSBS-10-Ledger-writer-NEW-SITE.zip` (the
+  multi-office package), which is the undo. Patched in page (Get_case selects
+  `OfficeCountConfirmed`; Multi_office needs it `Yes`), hash 6e8a1c4c20343cad, the same as the
+  tested generator output. Imported as Update 2:26 PM, On 2:28 PM, flow checker 0 and 0.
+- 2:29 PM: Vercel `PARTNER_OFFICE_CHECK=true` (production and preview). Production code
+  reads it only after this PR merges.
 - Undo 7F: import `rollback/HSBS-7F-before-offices.zip` as Update, turn On. The column can stay.
+- Undo HSBS 10: import `pay-ledger/rollback/offices-before/HSBS-10-Ledger-writer-NEW-SITE.zip`
+  as Update, turn On. Quick undo of the question alone: `PARTNER_OFFICE_CHECK` off (then no
+  Group lead earns $200 until it is back on, or HSBS 10 is rolled back).
