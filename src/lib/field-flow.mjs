@@ -20,6 +20,7 @@ import { createHash } from 'node:crypto';
 import { forgetKey } from './flow-cache.mjs';
 import { isReferralKey } from './field-form.mjs';
 import { repAppEnabled } from './register-flow.mjs';
+import { referralHistory } from './status-log.mjs';
 
 /**
  * Lookup, list and earnings. A launch meeting opens its links at once. Under SharePoint
@@ -261,6 +262,8 @@ export async function listReferrals(key) {
  *
  * Fail closed, never a short count: `cases` that is not a list, more than CASE_READ_MAX
  * lines, or a line whose `referralId` matches none of the referrals is a failed read.
+ * Each line's `statusLog` (its case's Status Log text) is read into the referral's
+ * `history`, newest 50 lines kept, and left off the line (status-log.mjs).
  * With `reached`, a referral that carries no `reached` gets it from its lines (a line
  * whose `talkedToDoctor` is "Yes"), as 1F's team loop used to work it out.
  * @param {unknown[]} referrals
@@ -290,13 +293,25 @@ export function attachCases(referrals, cases, opts = {}) {
     const row = /** @type {Record<string, unknown>} */ (r);
     const mine = byId.get(idText(row.id)) ?? [];
     const own = Array.isArray(row.cases) ? row.cases : Array.isArray(row.lines) ? row.lines : [];
-    const out = { ...row, cases: [...own, ...mine] };
+    const all = [...own, ...mine];
+    // G2 (11/22/2026): each line may carry its case's raw Status Log as `statusLog`. It
+    // becomes the referral's `history` (status-log.mjs), unless 1F already sent history.
+    const history = Array.isArray(row.history) && row.history.length ? row.history : referralHistory(all);
+    const out = { ...row, cases: all.map(withoutLog), history };
     delete out.lines;
     if (opts.reached && typeof row.reached !== 'boolean') {
       out.reached = out.cases.some((c) => /** @type {any} */ (c)?.talkedToDoctor === 'Yes');
     }
     return out;
   });
+}
+
+/** A line without its raw Status Log, which is read once into `history`. @param {unknown} line */
+function withoutLog(line) {
+  if (!line || typeof line !== 'object' || Array.isArray(line) || !('statusLog' in line)) return line;
+  const rest = { .../** @type {Record<string, unknown>} */ (line) };
+  delete rest.statusLog;
+  return rest;
 }
 
 /** A Referrals item id as text: a whole number, sent as a number or a string. */

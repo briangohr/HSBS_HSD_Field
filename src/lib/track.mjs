@@ -91,7 +91,7 @@ export function sanitizeReferral(raw) {
   if (!id) return null;
   const source = Array.isArray(row.lines) ? row.lines : Array.isArray(row.cases) ? row.cases : [];
   const lines = source.slice(0, 20).map(sanitizeLine).filter(Boolean);
-  const history = Array.isArray(row.history) ? row.history.slice(0, 50).map(sanitizeHistory).filter(Boolean) : [];
+  const history = Array.isArray(row.history) ? row.history.slice(-50).map(sanitizeHistory).filter(Boolean) : [];
   // The field app has one route: the partner calls first. Anything else is blank.
   const route = row.route === 'Partner' ? 'Partner' : '';
   return {
@@ -139,7 +139,14 @@ function sanitizeHistory(raw) {
   const text = s(row.text, 240);
   if (!text) return null;
   const on = s(row.on, 10);
-  return { on: DATE.test(on) ? on : '', text };
+  /** @type {{ on: string, text: string, company?: string, solutions?: string }} */
+  const out = { on: DATE.test(on) ? on : '', text };
+  // The case the entry came from (status-log.mjs), kept only when sent.
+  const company = s(row.company, 80);
+  const solutions = s(row.solutions, 120);
+  if (company) out.company = company;
+  if (solutions) out.solutions = solutions;
+  return out;
 }
 
 /**
