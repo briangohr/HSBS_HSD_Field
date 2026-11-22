@@ -340,7 +340,12 @@ the same office sends it.
 200 `{ "rows": [ ... ] }`: the person's own SPIFF Ledger rows, Payee Role `Rep`. The site
 reads `referralId`, `practiceName`, `company`, `practiceType`, `event` (`Reached` or
 `Signed`), `amount`, `status` (`Waiting`, `Paid`, `Pending review`, `Void`), `earnedOn`,
-`paidOn`, `voidReason`, `disputed`, `payeeRole`. `/api/earnings` answers 404 while
+`paidOn`, `voidReason`, `disputed`, `payeeRole`. `company` may be the company key
+(`HealthFirst`, `Staffing`), its Solutions value, or its exact screen name (`Direct
+Dental`); blank is HealthFirst and anything else names no company but still counts in the
+totals. Live 1F sends the ledger's Payer here (`Direct Dental` on a staffing row), and the
+site reads it as `Staffing` (LOOPS L2, 11/22/2026). The team answer's ledger rows read the
+same way. `/api/earnings` answers 404 while
 `REP_PAY_ENABLED` is off. The site waits 20 s. More than 5,000 rows is a failed read
 ("Your earnings did not load."), never earnings cut short. 1F's `Get_ledger_rep` needs Top
 Count 5,000 and Pagination on with a threshold of 5,001, for the reason given under list
