@@ -94,7 +94,7 @@ no real row.
 | 1:44 PM | TEST Paid, Paid On 2026-11-22, Not paid blank: Ids 12 and 15 Paid; Id 28 stays Void, Paid On blank, Disputed No, not written. Email "Marked Paid: 2", "Needs a look: 56\|Reached\|Rep (void, left out of the list, not marked Paid ...)" | Restored at 1:44 PM |
 | 1:44 PM | Restored Ids 12, 15, 28 by REST MERGE: Status Waiting, Void Reason, Payout Batch, Sent On and Paid On blank (as before, `pay-ledger/proofP0/ledger_before_2026-11-22_1342ET.txt`). No ledger row holds a batch. No new Ledger Run Errors row | None needed |
 
-Codex P0 on PR 47 (2:50 PM): X13 told Brian to clear Payout Batch on a void row, which would hide it from 10M `Paid` if Alexa paid it anyway. X13's drop-off rule now says nobody clears Payout Batch by hand, and M10 says no flow or hand step does. The 10D exceptions email only lists the row (its text never said to clear it), so no flow changed. `test_10m.py` 76/76 with X13a (batch kept: Paid, Disputed) and X13b (batch cleared: missed, stays Void).
+Codex P0 on PR 47 (1:48 PM): X13 told Brian to clear Payout Batch on a void row, which would hide it from 10M `Paid` if Alexa paid it anyway. X13's drop-off rule now says nobody clears Payout Batch by hand, and M10 says no flow or hand step does. The 10D exceptions email only lists the row (its text never said to clear it), so no flow changed. `test_10m.py` 76/76 with X13a (batch kept: Paid, Disputed) and X13b (batch cleared: missed, stays Void).
 | 1:46 PM | Monthly flow On. First list still Mon 11/30 10 AM | Turn Off |
 
 ## Multi-office build record: HSBS 10 group amount (11/22/2026)
