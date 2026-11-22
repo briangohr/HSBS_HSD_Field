@@ -456,6 +456,24 @@ Salesforce picklist; every stored value is an existing column choice):
 | `lost` | Not moving forward | unchanged, Closed Reason as sent | yes | no |
 | `nochange` | unchanged | unchanged | no | no |
 
+Next Update Due after a save (Brian, 11/22/2026): a lead still in qualification is asked
+every 2 business days, a qualified lead once a week on Friday. `trying`, and `nochange` on a
+lead that is not qualified: today + 2 business days. `qualified`, `proposal`, and `nochange`
+on a qualified lead (Qualified Yes, or Partner Status Reached, Meeting set, Meeting held or
+Proposal or agreement sent): the coming Friday, never today; a Friday on `Holidays` moves to
+the next business day. `meeting`: 1 business day after the demo date, as before. Closing
+choices clear it. 7G (a missed due date) and 7H (an email reply) set the next due date the
+same way: the coming Friday for a qualified lead, 2 business days for the rest. 7G lists an
+overdue qualified lead only on its due day, not on every daily ask.
+
+Four tries close a lead (Brian, 11/22/2026). A `trying` save on a lead that is not qualified
+and already has 3 Status Log lines with ": Trying to reach." (not counting a line carrying
+this save's own tag) is stored as `dq_noanswer`: the row above, with the Status Log line
+"Disqualified, no answer after 4 attempts. Closed on the 4th Not reached yet update." and the
+disqualify hand back through the Outbox. The answer is the same `{"ok":true,"saved":n}`, and
+the lead leaves the page. A resend of the same save finds the tag and writes nothing twice.
+The page's Not reached yet hint says a 4th one closes the lead.
+
 The Status Log line uses the page label ("Qualified", "Disqualified, not interested", "Demo
 set"). Track reads those labels (`stepWords` in `src/lib/rep-lead.mjs`): "HealthFirst
 qualified the lead", "Closed: did not qualify", "Meeting set". A closed lead leaves the

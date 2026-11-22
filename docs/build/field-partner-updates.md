@@ -292,7 +292,7 @@ HTTP trigger, POST, schema from the contract above. No trigger concurrency: Powe
    | Last Touch, Last Partner Update | now |
    | Partner Updated By | Partner Links Title |
    | Missed Updates | 0 |
-   | Next Update Due | `meeting`: 1 business day after the meeting date. `signed`, `lost`, `handback`: cleared. Otherwise: today + `Window_days` business days |
+   | Next Update Due | `meeting`: 1 business day after the meeting date. `signed`, `lost`, `handback`, `dq_*`: cleared. `qualified`, `proposal`, and `nochange` on a qualified lead: the coming Friday (holiday Friday: next business day). Otherwise: today + `Window_days` business days (since 11/22/2026, cadence change) |
    | Status Log | Old text + new line `<today> <partner>: <label>. <note> [s:<submissionId>]` |
 
    Stage, Status and Pipeline Stage are not written.
@@ -326,7 +326,8 @@ below reads only Service Cases with Test on and only Partner Links rows whose Ti
    go-live day every older case gets today, so it is listed today and first missed tomorrow
    (O7), and a case made yesterday keeps its own 2 business days.
 1. **Count misses.** For each open case with Introduced On whose Next Update Due is before
-   today, a write (Writing a case): Missed Updates + 1, Next Update Due = today + `Window_days` business days. A
+   today, a write (Writing a case): Missed Updates + 1, Next Update Due = today + `Window_days` business days,
+   or the coming Friday when the fresh copy is qualified (cadence change, 11/22/2026). A
    partner who never saves therefore gains one miss per missed window: the first business
    day after each due date, about every 2 business days, so 2 misses take about 4 business
    days (O4).
@@ -346,8 +347,8 @@ below reads only Service Cases with Test on and only Partner Links rows whose Ti
      Expires = now + 14 days. Otherwise keep it, so yesterday's link still opens.
    - c. One email. To: Email. CC: CC Email. A TEST partner: To Brian only, no CC, subject
      starts `[TEST] `. Subject: `Field leads due for an update: <n>`. Body: one line on the
-     rhythm ("Please update each lead within 2 business days. One link covers all of
-     them."), the link `<base>/update/<key>`, then a table, overdue
+     rhythm ("Please update leads you have not reached yet within 2 business days, and
+     qualified leads each Friday. One link covers all of them."), the link `<base>/update/<key>`, then a table, overdue
      first: ref, practice, introduced, last status, due date. Brian is not copied (O3).
 4. Brian is copied on nothing else. No rep is emailed.
 
@@ -367,7 +368,7 @@ reads and writes SharePoint. It sends nothing.
    off), as "Its cases" says. Not exactly 1, or not open: Terminate. So the TEST mailbox can
    never touch a real case.
 4. Update the case: Last Partner Update = received time, Missed Updates 0, Next Update Due =
-   today + `Window_days` business days, Partner Updated By = partner Title, Status Log new line
+   today + `Window_days` business days (the coming Friday for a qualified lead), Partner Updated By = partner Title, Status Log new line
    `<today> <partner>: replied by email. [r:<received yyyyMMddHHmmss>]`. A fresh copy that already
    holds that tag is done, so a resubmitted run writes nothing twice. Partner Status is left as it is. The email body is
    not stored.
@@ -597,3 +598,29 @@ Use the TEST rep and the TEST field partner. Mail may go only to Brian.
 ## Decided
 
 - Q1, Brian, 11/20: a partner's email reply to an intro counts as an update (piece D). It reads Brian's inbox and sends nothing.
+
+## Cadence change: Friday for qualified leads, 4 tries close (11/22/2026)
+
+Brian, 11/22/2026 12:17 PM ET: each partner updates its own leads. A lead in qualification is
+asked every 2 business days. Not reached yet stays on that cycle. A qualified lead moves to
+the Friday update and is not asked every 2 business days until it closes won or lost. Four
+Not reached yet updates close the lead right away. "4 times" is read as 4 partner saves that
+say Not reached yet (about 8 business days), matching the page's "Attempts 1 to 3 so far".
+
+- "Qualified" in the flows: Qualified Yes, or Partner Status Reached, Meeting set, Meeting
+  held, or Proposal or agreement sent.
+- "The coming Friday": the first Friday after today (a Friday save goes to next Friday), or
+  the next business day when that Friday is on `Holidays` (11/27, 12/25, 1/1 this season).
+- 7F save: Next Update Due as in the B table above. A `trying` save on an unqualified lead
+  with 3 earlier ": Trying to reach." lines is stored as `dq_noanswer` (the contract, HSBS 7F).
+- 7G: count misses as in C step 1; an overdue qualified lead is listed only when due; the
+  rhythm line names both cycles. 7H: as in D step 4.
+- Demo set keeps 1 business day after the demo, so the first update after a demo is the day
+  after it, then Fridays.
+- Build files: `/mnt/project-files/partner-updates/cadence/` (`patch_7f_cadence.py` on the
+  post-FT-5 7F export, `gen_7g_7h.py`, model tests `test_7f_cadence.py` and
+  `test_7g_7h_cadence.py`). The live change record (what, ET time, undo) is added here when
+  each flow is imported.
+- Next 7F change after this one: Matt's Group office-count check before the $200 (memory
+  GROUP CHECK). Build it on the export taken after this import.
+
