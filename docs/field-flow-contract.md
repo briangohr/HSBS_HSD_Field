@@ -548,8 +548,10 @@ No request or answer in this contract changes. Since 11/22/2026 (FT-2b) 7F write
 disqualify hand back to the Outbox and sends it from there. The `save` answers are the same.
 A failed send still answers 200. A failed Outbox lookup or row create answers 503, which the
 site already treats as no clear answer: the page resends the same `submissionId`, 7F finds
-the case already written, and makes the Outbox row then. FT-2c (7G asks) will add Outbox
-writes inside 7G and updates this note if anything changes.
+the case already written, and makes the Outbox row then. Since 7N v5 (11/22/2026) 7N also
+retries real rows, and a real row may mail only the addresses on 7N's `Real_to` list (Brian
+only today). FT-2c (7G asks) will add Outbox writes inside 7G and updates this note if
+anything changes.
 
 ### HSBS 10M monthly payout (no site change)
 
