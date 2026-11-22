@@ -244,6 +244,11 @@ $50 (plus old TEST row 3 at $25). Ledger Settings `Live` is back to 100 / 0 / 50
 LedgerTestOnly Yes, StaffingAwardsOn No, RealPayoutsOn No. No Ledger Run Errors row is open.
 SPIFF Ledger has no validation formula.
 
+**Earnings agree (11:20 PM).** On the preview of this PR's branch, with a branch-only
+`REP_PAY_ENABLED=true` (production still off), `/api/earnings` for the TEST rep returned
+Total earned $900, Awaiting payment $900, Paid $0, Pending review $0: the same as the ledger
+sum above. The branch-only flag is deleted after this PR.
+
 ## Brian's decisions this sheet rests on (11/13)
 
 **Gate G0: this sheet is not built until PR #121 is merged to `main`.** Decisions 75, 76,
