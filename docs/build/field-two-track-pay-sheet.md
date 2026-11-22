@@ -181,6 +181,74 @@ two text-body checks fail on the old package. `test_10d.py` still passes 49 of 4
 Row 8 (renamed key) and row 9 stay as TEST evidence. Ledger Run Errors 1 to 3 are all
 Resolved Yes.
 
+## P5b record: TEST reconcile, group H live (11/21/2026)
+
+Run by Claude in the thread "Reconcile TEST pay rows", 10:32 to 11:16 PM ET, on TEST rows
+only. Every result matches `sim.py` (`test_10.py` 71 of 71, `test_10d.py` 49 of 49) unless a
+note says otherwise. LedgerTestOnly stayed Yes and `REP_PAY_ENABLED` stayed off in production
+the whole time.
+
+**How.** TEST leads were sent from the TEST rep (Rep Roster `Test Fieldsite`) through the
+preview's `/api/referral`, and partner answers went through the preview's `/api/partner-save`
+with the TEST partner key. Hand edits (the "Brian sets ..." steps) were SharePoint REST writes
+from a page on the field site, which work now. HSBS 10D was run by hand from its flow page.
+Lists were read by REST; the 10D email was read in Brian's mailbox.
+
+**TEST data used.** Referrals 66 to 82 (`TEST P5b Office A` to `S`, JDE 999511 to 999523 and
+999902), Service Cases 45 to 62 (case 60 was the H26 second case, now in the recycle bin),
+ledger rows 10 to 31, Sign Log rows 2 to 9, Ledger Run Errors 4 to 10 (all Resolved Yes).
+Team Roster rows 704 (`brian.gohr+field1118` to `brian.gohr+test.north`, Active Yes) and 705
+(same rep to `brian.gohr+test.south`, Active No) are TEST pairs added for H9 and H29.
+
+| # | Sheet check | Live result |
+|---|---|---|
+| P3-4 | 10D with a blank amount (`HF_Signed` blanked) | Pass, 10:35 PM. 10D run Failed in 12 s, Ledger Run Errors 4 `HSBS 10D settings`, Step `HSBS 10D: Check_settings`. No catch-up row, no post (Pass Log unchanged). The run still mailed Brian. Restored 0 at 10:36 PM, row 4 Resolved |
+| P3-5 | 10D post that HSBS 10 answers with an error | Pass, 10:37 PM. HSBS 10 turned Off. 10D posted cases 42, 43, 44; each answer 400 was recorded (rows 6 to 8, Step `HSBS 10D: post to HSBS 10 answered 400`) and the loop went on to the next case. Catch-up row 5 stayed open; the run Succeeded and the email listed all four rows under X1. HSBS 10 On again 10:38 PM, rows 5 to 8 Resolved |
+| H2 | Qualified Yes by hand with Talked To Doctor blank; Talked To Doctor Yes alone on another | Pass. Case 49: K_R Waiting $100 (row 12). Case 45: no row |
+| H4 | `qualified`, then Qualified No with reason by hand | Pass. Case 46: K_R Waiting (row 13), then Void, `HealthFirst marked this lead as not qualified (No permission to contact)`; no K_M |
+| H8 | Partner Status Signed and a Signed Date by hand with Qualified blank; `signed` through 7F on another | Pass. Case 45: no row, listed X6 (10:51 PM email). Case 48: K_R Waiting $100 and K_M Waiting $50 from one run (rows 14, 15, 3 s apart) |
+| H9 | Sign for the TEST rep with one Active Team Roster row | Pass. Case 48: K_M Waiting $50, Payee `brian.gohr+test.north`, Test Yes, Sign Log Handled. Saving again and the 10:47 PM 10D pass wrote nothing new |
+| H10 (tail) | Pair added after a no-manager sign, case saved | Pass. Case 42 saved after row 704 was added: nothing new (row 6 stays Void) |
+| H11 | Closed Reason `Already a customer` before any award | Pass. Case 47: K_R Void `Already a customer` (row 16); no K_M |
+| H13 | Earlier referral for the JDE naming HealthFirst and staffing, then a rep app case qualified and signed | Pass. Referral 80 (JDE 999523) set to both companies before case 61 existed. Case 61: K_R Void on create (row 17), then K_M Void (row 20), reason `this office was referred to HealthFirst in the last 12 months`. Its sign first hit the H29 roster conflict (row 705 was briefly Active) and wrote its K_M after the fix |
+| H14 | Plan 0 / 150 / 50: H11 again, H13 again, a clean sign | Pass. Case 53 (Already a customer): no K_R. Case 62 (JDE 999523 again, signed): no K_R, K_M Void and K_S Void (rows 23, 24). Case 58 (clean sign): K_M Waiting $50 (row 21) then K_S Waiting $150 (row 22); Sign Log 50 / 150 |
+| H15 | Referral Source changed by hand (to `Internal Jotform`), case signed, then Qualified No | Pass. Case 54: no row either time; 10D does not post it (step 1 keeps `Rep app`) |
+| H17 | Hand back with a note after a Waiting K_R; hand back with no award | Pass. Case 49: K_R still Waiting $100, unchanged. Case 51: no row after the save or the 10D passes. (The batch half waits for 10B in P6) |
+| H26 | Second TEST Service Case on the same referral and company | Pass. Case 60 added (Qualified Yes): no new row; X15 listed cases 46 and 60 (10:51 PM email). Case 46 then marked Qualified No: its K_R Void (H4). Case 60 sent to the recycle bin; X15 None at 11:14 PM |
+| H29 | Two Active Team Roster rows at a sign, then one set Active No and the case saved | Pass. Case 55: K_R Waiting, Sign Log plan 50 / 0, Handled blank, no K_M or K_S, listed X18. After row 705 Active No and a save: K_M Waiting $50 to `brian.gohr+test.north` (row 19), Handled set, X18 None |
+| H33 | Sign handled once | Pass. Case 48 signed under 100 / 0 / 50: one K_M, Sign Log 50 / 0, Handled. With `HF_Signed` 150, case 48 saved: no K_S. With `HF_Manager` 0, case 56 signed: Sign Log 0 / 0 Handled 7 s after start, no K_M; `HF_Manager` back to 50, case saved and the 11:11 PM 10D pass run: still no K_M |
+| H34 | Sign not finished | Pass, with a note. The K_S write was made to fail by a temporary list validation on SPIFF Ledger (`=NOT(AND([Event]="Signed",[Payee Role]="Rep"))`), not a Terminate step, so no designer edit was needed. Case 57 under 0 / 150 / 50: K_M Waiting $50 (row 25), no K_S, Sign Log Handled blank. Validation removed at 11:05 PM: the write succeeded on its next retry, K_S Waiting $150 from the stored Plan Rep Sign (row 26), Handled set, no second K_M |
+
+**Notes.**
+
+- H34: SharePoint's validation refusal reaches the flow as 502 (BadGateway), which the
+  connector's default retry policy retries. The run sat in `Create_K_S` retries for 11
+  minutes and held HSBS 10's one-run queue until the validation was removed, so no Ledger
+  Run Errors row was written and X1 / X20 were not seen live for this case. P2-9 already
+  proved the error-row path live. Not a defect: a real SharePoint outage is the case the
+  retry is for. Cancelling a run from the run page opens a browser confirm box that
+  blocks the page; do it by hand, not from a driven browser.
+- Plan switch: after `HF_Qualified` went back to 100, the next HSBS 10 run for each
+  Qualified Yes case signed under `HF_Qualified` 0 wrote its missing K_R (rows 27, 29, 30,
+  31 for cases 57, 53, 58, 62). That is the rule (the catch-up writes a missing K_R, H35)
+  and why the freeze line says not to change a pay plan while anything is listed.
+- Not run live, with reasons: H16, H18, H28 and H35 were moved to P3; H5, H6, H19 to H25,
+  H27, H30 to H32 and H36 need HSBS 10B and 10P (P6). H17's batch half and H7's batch half
+  wait for 10B too.
+
+**Reconcile (11:16 PM).** SPIFF Ledger has 31 rows, all Test Yes. The TEST rep
+(`brian.gohr+field1118`) has 27 rows: 8 Waiting rep rows totaling $900 (rows 12, 14, 18,
+27, 28, 30 at $100; rows 22 and 26 at $150), no Paid rows, the rest Void. Each Waiting row
+matches its check above. Manager rows Waiting for `brian.gohr+test.north`: 15, 19, 21, 25 at
+$50 (plus old TEST row 3 at $25). Ledger Settings `Live` is back to 100 / 0 / 50 / 100 / 50,
+LedgerTestOnly Yes, StaffingAwardsOn No, RealPayoutsOn No. No Ledger Run Errors row is open.
+SPIFF Ledger has no validation formula.
+
+**Earnings agree (11:20 PM).** On the preview of this PR's branch, with a branch-only
+`REP_PAY_ENABLED=true` (production still off), `/api/earnings` for the TEST rep returned
+Total earned $900, Awaiting payment $900, Paid $0, Pending review $0: the same as the ledger
+sum above. The branch-only flag is deleted after this PR.
+
 ## Brian's decisions this sheet rests on (11/13)
 
 **Gate G0: this sheet is not built until PR #121 is merged to `main`.** Decisions 75, 76,
