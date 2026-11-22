@@ -70,6 +70,21 @@ describe('My Earnings: Pending and Confirmed', () => {
     assert.doesNotMatch(JSON.stringify(s.pendingLines), /HealthFirst/);
   });
 
+  test('a Direct Dental Pending line follows the plan and the practice type the rep picked ($200 group)', () => {
+    const plans = { healthFirst: HF, staffing: parseStaffingPayPlan('reached_private:100,reached_group:200,manager:50') };
+    const refs = [
+      ref('G', stLine({ practiceType: 'Group' })),
+      ref('P', stLine({ practiceType: 'Private practice' })),
+      ref('U', stLine({ practiceType: '' })),
+      ref('H', hfLine()),
+    ];
+    const by = Object.fromEntries(summarizeEarnings([], refs, plans).pendingLines.map((l) => [l.referralId, [l.company, l.status]]));
+    assert.deepEqual(by.G, ['Direct Dental', 'Pending. $200 for a group when Direct Dental reaches the customer and confirms the lead qualifies.']);
+    assert.deepEqual(by.P, ['Direct Dental', 'Pending. $100 for a private practice when Direct Dental reaches the customer and confirms the lead qualifies.']);
+    assert.deepEqual(by.U, ['Direct Dental', 'Pending. $100 for a private practice, or $200 for a group, when Direct Dental reaches the customer and confirms the lead qualifies.']);
+    assert.deepEqual(by.H, ['HealthFirst', 'Pending. $100 when HealthFirst reaches them and confirms the lead qualifies.']);
+  });
+
   test('reached but not yet marked qualified still reads Pending, worded from the Track status', () => {
     const s = summarizeEarnings([], [ref('H2', hfLine({ partnerStatus: 'Meeting set' }))], PLANS);
     assert.equal(s.pendingLines[0].status, 'Pending. $100 when HealthFirst confirms the lead qualifies.');
