@@ -28,7 +28,7 @@ route answers 404 and no flow is called.
 | `REP_APP_COMPANIES` | Which companies Send offers: `HealthFirst`, `Staffing`, comma separated. Unset is HealthFirst only | No |
 | `REP_PAY_ENABLED` | Dollar amounts on screens, exactly `true`. Off until Brian approves pay | No |
 | `REP_PAY_PLAN` | HealthFirst pay plan words (`src/lib/rep-pay-plan.mjs`). Set to `reached:100,manager:50` (promo file) | No |
-| `REP_PAY_PLAN_STAFFING` | Staffing pay plan words. Set 11/21/2026 to `reached_private:100,reached_group:100,manager:50` (flat $100, pay sheet R11), production and preview | No |
+| `REP_PAY_PLAN_STAFFING` | Staffing pay plan words. Set 11/22/2026 to `reached_private:100,reached_group:200,manager:50` ($100, or $200 when the rep picked `Group`, pay sheet R5 and R11), production and preview | No |
 | `REP_ASK_STATE` | The HealthFirst form asks for the practice's state and sends `practiceState`, exactly `true`. Off: no State field and no `practiceState` in the body | No |
 | `REP_CONFIRM_ENABLED` | `/confirm/<token>`, exactly `true`. Off: 404 and no confirm call to 1J. Not used at launch. On: the 1J confirm actions below | No |
 | `FLOW_CACHE_SECONDS` | Track and Earnings cache in seconds, default 45. 0 turns it off. Over 300 is read as 300; unset, empty, negative or not a number is 45. Unlike the other names, read with exact case only | No |
