@@ -102,7 +102,7 @@ describe('S5 done-when 2 and 3: a TEST staffing case reached and qualified shows
     const g = s.lines.find((l) => l.referralId === 'G');
     assert.deepEqual(
       { office: p?.office, amount: p?.amount, company: p?.company, what: p?.what, status: p?.status },
-      { office: 'TEST P', amount: '$100', company: 'Direct Dental, Private practice', what: 'Direct Dental reached the customer', status: 'Earned, awaiting payment' },
+      { office: 'TEST P', amount: '$100', company: 'Direct Dental, Private practice', what: 'Direct Dental reached the customer', status: 'Confirmed, awaiting payment' },
     );
     assert.deepEqual(
       { amount: g?.amount, company: g?.company, what: g?.what },
@@ -245,7 +245,7 @@ describe('S5 done-when 1: Earned, My Earnings and the ledger total agree to the 
     assert.equal(total, 500);
     assert.equal(view.summary.earned, total, 'the Earned tile (Track and My Earnings read the same summary)');
     assert.equal(view.summary.waiting + view.summary.paid, total, 'Earned = Waiting + Paid');
-    const counted = view.summary.lines.filter((l) => l.status === 'Earned, awaiting payment' || /^Paid on /.test(l.status));
+    const counted = view.summary.lines.filter((l) => l.status === 'Confirmed, awaiting payment' || /^Paid on /.test(l.status));
     assert.equal(sum(counted.map((l) => usdNumber(l.amount))), total, 'the lines that count add up to Earned');
     assert.equal(view.summary.lines.length, raw.length, 'one line per ledger row, Void and Pending review included');
     for (const l of view.summary.lines.filter((x) => /^Not paid/.test(x.status))) {
@@ -374,7 +374,7 @@ describe('S5 review: what a Void line says, contact past the first call, a dispu
       assert.equal(l.label, `${l.office}. ${l.company}. ${l.status}`, 'the label is the shown parts, nothing more');
     }
     // A line that pays still reads in full.
-    assert.equal(summarizeEarnings(sanitizeLedger([row('P', { company: 'Staffing', practiceType: 'Group', amount: 200 })]), [], PLANS).lines[0].label, 'Nov 10. TEST P. Direct Dental, Group. Direct Dental reached the customer. $200. Earned, awaiting payment.');
+    assert.equal(summarizeEarnings(sanitizeLedger([row('P', { company: 'Staffing', practiceType: 'Group', amount: 200 })]), [], PLANS).lines[0].label, 'Nov 10. TEST P. Direct Dental, Group. Direct Dental reached the customer. $200. Confirmed, awaiting payment.');
   });
 
   test('every status past first contact counts as reached for the promise, for both companies', () => {

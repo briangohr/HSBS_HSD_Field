@@ -443,6 +443,12 @@ differ, it replaces each promise it worded itself with "Pay terms changed. Reloa
 page to see them." and words no new one. The "Up to" line
 (`summary.upToText`) and the empty My Earnings line (`summary.emptyText`) come worded
 from the server, from the plan that counted the amounts.
+My Earnings shows each lead as Pending or Confirmed (Brian, 11/22/2026). A rep's Waiting
+row reads "Confirmed, awaiting payment" (My Team keeps "Earned, awaiting payment").
+`summary.pendingLines` lists each open HealthFirst or Direct Dental lead with no ledger row
+of any status, newest sent first: no amount, status "Pending." and the same promise the
+Track card words. They come from the 1F `list` read the snapshot already makes (no new
+flow read or field) and never change a total.
 The plan words every promise. It never changes a total: the site counts the ledger
 rows it gets, whatever event or amount they carry. HSBS 10 must write the same amounts.
 No flow email to a rep or manager carries a dollar amount: the flows can't see the plan

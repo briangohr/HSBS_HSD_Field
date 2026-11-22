@@ -910,6 +910,8 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
         emptyText?: string;
         footer?: string;
         lines: { referralId: string; label: string; office?: string; amount?: string; company?: string; what?: string; status?: string }[];
+        /** Open leads with no ledger row yet ("Pending."), after the ledger lines. */
+        pendingLines?: { referralId: string; label: string; office?: string; amount?: string; company?: string; what?: string; status?: string }[];
       };
       money: { lines: Record<string, string>; feed: { on: string; label: string; referralId: string }[] };
       terms?: string;
@@ -1268,14 +1270,16 @@ const staffingId = staffingSend ? submissionId : crypto.randomUUID();
       // The footer names the partners this rep's money follows (server words, slice S5).
       const foot = document.getElementById('rep-earnings-foot');
       if (foot && typeof sm.footer === 'string' && sm.footer) foot.textContent = sm.footer;
-      if (sm.lines.length === 0) {
+      // Confirmed and paid lines first (the ledger), then each open lead still Pending.
+      const shown = [...sm.lines, ...(Array.isArray(sm.pendingLines) ? sm.pendingLines : [])];
+      if (shown.length === 0) {
         status.hidden = false;
         // Worded by the server from the plan that counted the money; the template is only a fallback.
         status.textContent = typeof sm.emptyText === 'string' ? sm.emptyText : ((document.getElementById('rep-empty-earnings') as HTMLTemplateElement).content.textContent ?? '');
         return;
       }
       status.hidden = true;
-      for (const item of sm.lines) {
+      for (const item of shown) {
         const li = document.createElement('li');
         const b = document.createElement('button');
         b.type = 'button';
