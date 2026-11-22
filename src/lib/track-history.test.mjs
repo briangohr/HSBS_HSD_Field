@@ -60,6 +60,42 @@ describe('Track past 200 referrals', () => {
   });
 });
 
+// FT-1 (11/22/2026): 1F read Top Count 100 on its case reads with pagination off. Live 1F runs
+// them once per referral, so that cap is per referral, but the totals must still hold past
+// 100 case lines in all. This is a site test: it fakes 1F's answer, so it proves the totals
+// logic past 100 lines, not 1F's own read. The live proof uses the Test Fieldsite rep.
+/** n referrals, newest first, each with one case line: the first `signed` are Signed. */
+const withCases = (n, signed) =>
+  Array.from({ length: n }, (_, i) => ({
+    id: `C${n - i}`,
+    practiceName: `TEST Office ${n - i}`,
+    sentOn: '2026-11-15',
+    route: 'Partner',
+    lines: [{ company: 'HealthFirst', status: i < signed ? 'Signed' : 'Trying to reach', updatedOn: '2026-11-16' }],
+  }));
+
+describe('Track past 100 case lines', () => {
+  test('110 case lines: In progress and Signed are the true totals', () => {
+    const d = decorateReferrals(withCases(110, 40), TODAY);
+    assert.deepEqual(d.counts, { sent: 110, inProgress: 70, signed: 40, closed: 0 });
+  });
+
+  test('a referral with two lines past line 100 still reads both', () => {
+    const list = withCases(105, 0);
+    list[104].lines.push({ company: 'HS Staffing / Recruiting Services (including GoTu)', status: 'Signed', updatedOn: '2026-11-17' });
+    const d = decorateReferrals(list, TODAY);
+    assert.equal(d.counts.signed, 1);
+    assert.equal(d.counts.inProgress, 104);
+  });
+
+  test('My Team: a member with 110 case lines counts every one', () => {
+    const member = { signedUp: true, name: 'Test Rep', registeredOn: '2026-11-01', referrals: withCases(110, 40), rows: [] };
+    const out = shapeTeam({ team: [member], managerRows: [] }, null, TODAY);
+    assert.equal(out.tiles.referrals, 110);
+    assert.equal(out.tiles.signed, 40);
+  });
+});
+
 describe('1F list read bounds', () => {
   const ENV = ['FIELD_FLOW_URL', 'REP_APP_ENABLED'];
   const saved = Object.fromEntries(ENV.map((k) => [k, process.env[k]]));

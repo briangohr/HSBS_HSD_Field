@@ -96,3 +96,11 @@ describe('findOpenDuplicate', () => {
     assert.ok(!JSON.stringify(dup).includes('001234'));
   });
 });
+
+describe('findOpenDuplicate past 200 referrals', () => {
+  test('a match at referral 250 still warns (the list is read whole, never cut at 200)', () => {
+    const list = Array.from({ length: 250 }, (_, i) => ref({ id: i + 1, title: `HSBS-F${i + 1}`, practice: `TEST Office ${i + 1}` }));
+    const dup = findOpenDuplicate(list, hf('TEST Office 250'), TODAY);
+    assert.equal(dup?.office, 'TEST Office 250');
+  });
+});
