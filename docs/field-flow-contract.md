@@ -251,6 +251,22 @@ because the 3F flows set Status, not Partner Status. Such a line reads "Sent to"
 company ("Sent to Direct Dental"). Only a referral with no line at all reads "Sent to
 HealthFirst".
 
+Every row counts. The site sorts newest sent first and keeps all of them: Sent, In progress
+and Signed are the true totals, and Track draws 50 rows at a time with "Show more". 1F reads
+every referral and case line up to 5,000, and the site fails a read over 5,000. The two
+referral reads (`Get_referrals_list_rep`, `Get_team_refs`) need Top Count 5,000 and
+Pagination on with a threshold of 5,001, because with Pagination off SharePoint stops at the
+Top Count (200 until FT-1) with no error. The threshold is one over the limit on purpose: a
+rep with 5,001 referrals then reaches the site as 5,001 rows and fails the read, where a
+threshold of 5,000 would hand the site a full-looking list of exactly 5,000. The two case reads (`Get_cases_rep`,
+`Get_cases_team`) run once per referral inside the referral loop (live 1F, read 11/22/2026),
+so their Top Count of 100 caps one referral's cases, not the total; they take the same
+settings (Top Count 5,000, threshold 5,001) so no cap is left. Past 5,000 items in a list,
+a filtered read needs its filter column indexed: Referrals `Referring_x0020_Rep_x0020_Email` and Service Cases `Referral`.
+More than 5,000 referrals, or an answer over 4 MB, is a failed read ("Your referrals did not
+load."), never a short list. The same holds for each member's referrals in `team` (inside
+that answer's 2 MB limit).
+
 **`updated` (sheet PU, piece E).** 1F (new site) sends a case's `updated` from Last Partner
 Update, not Modified: `@coalesce(item()?['Last_x0020_Partner_x0020_Update'], '')` in
 `Select_cases_rep` and `Select_cases_team`. Only a partner save (7F) or a partner reply

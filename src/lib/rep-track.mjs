@@ -53,7 +53,7 @@ export function historyKinds(text, company = 'HealthFirst') {
  * @returns {FeedItem[]}
  */
 export function repFeed(list, today = todayInNewYork()) {
-  const rows = (Array.isArray(list) ? list : []).slice(0, 200).map(sanitizeReferral).filter(Boolean);
+  const rows = (Array.isArray(list) ? list : []).map(sanitizeReferral).filter(Boolean);
   const decorated = new Map(decorateReferrals(list, today).referrals.map((r) => [r.id, r]));
   /** @type {FeedItem[]} */
   const items = [];

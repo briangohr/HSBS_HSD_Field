@@ -17,7 +17,6 @@ import { isClosedStatus, isSignedStatus } from './partner-status-words.mjs';
 import { lineKey } from './rep-lead.mjs';
 import { companyName } from './rep-companies.mjs';
 
-const REFERRAL_MAX = 200;
 const COMPANIES = new Set(['HealthFirst', 'Staffing']);
 
 /**
@@ -51,7 +50,8 @@ export function findOpenDuplicate(list, send, today = todayInNewYork()) {
   const name = practiceKey(send?.practiceName);
   const jde = jdeKey(send?.jde);
   if (!company || (!name && !jde)) return null;
-  const raw = (Array.isArray(list) ? list : []).slice(0, REFERRAL_MAX);
+  // The whole list: listReferrals already fails a read over REFERRAL_READ_MAX (FT-1).
+  const raw = Array.isArray(list) ? list : [];
   const buckets = new Map(decorateReferrals(raw, today).referrals.map((r) => [r.id, r]));
   for (const item of raw) {
     const row = sanitizeReferral(item);

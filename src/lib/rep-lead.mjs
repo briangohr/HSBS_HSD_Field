@@ -45,7 +45,6 @@ const isStaffing = (/** @type {string} */ co) => co === STAFFING_NAME;
 /** "Signed and billed" is HealthFirst's, who bills an office as soon as it signs. */
 const signedWords = (/** @type {string} */ co) => (isStaffing(co) ? 'Signed' : SIGNED_WORDS);
 const NO_PERMISSION = 'No permission to contact';
-const REFERRAL_MAX = 200;
 const NEW_KEYS = /** @type {const} */ (['solutions', 'practiceType', 'qualified', 'notQualifiedReason', 'closedReason']);
 
 /** "<partner>: " in front of a Status Log line ("Unitas: Talked with the doctor"). */
@@ -303,7 +302,7 @@ export function nextWords(chip, company) {
  */
 export function leadViews(list, today = todayInNewYork(), opts = {}) {
   const team = opts.team === true;
-  const raw = (Array.isArray(list) ? list : []).slice(0, REFERRAL_MAX);
+  const raw = Array.isArray(list) ? list : [];
   /** @type {Map<string, NonNullable<ReturnType<typeof sanitizeReferral>>>} */
   const byId = new Map();
   for (const r of raw) {

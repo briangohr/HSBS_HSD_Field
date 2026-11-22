@@ -410,7 +410,7 @@ describe('My Team shaping (slice 5, D4, D16, D18)', () => {
     }
   });
 
-  test('over 200 members is a failed load, never a team cut short; 200 referrals per member', () => {
+  test('over 200 members is a failed load, never a team cut short; every referral per member counts', () => {
     const rep = { signedUp: true, name: 'Test Rep', registeredOn: '2026-11-01', referrals: [], rows: [] };
     assert.equal(shapeTeam({ team: Array.from({ length: 200 }, () => rep), managerRows: [] }, null, TODAY).team.length, 200);
     // The 201st rep has paid money: cutting it would undercount Team earned and Team paid.
@@ -421,7 +421,7 @@ describe('My Team shaping (slice 5, D4, D16, D18)', () => {
     }
     const refs = Array.from({ length: 250 }, (_, i) => referral({ id: `R${i}` }));
     const out = shapeTeam({ team: [{ signedUp: true, name: 'Test Rep', registeredOn: '2026-11-01', referrals: refs, rows: [] }], managerRows: [] }, null, TODAY);
-    assert.equal(out.team[0].cards.length, 200);
-    assert.equal(out.tiles.referrals, 200);
+    assert.equal(out.team[0].cards.length, 250);
+    assert.equal(out.tiles.referrals, 250);
   });
 });
