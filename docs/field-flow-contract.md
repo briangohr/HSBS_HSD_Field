@@ -500,6 +500,10 @@ this save's own tag) is stored as `dq_noanswer`: the row above, with the Status 
 disqualify hand back through the Outbox. The answer is the same `{"ok":true,"saved":n}`, and
 the lead leaves the page. A resend of the same save finds the tag and writes nothing twice.
 The page's Not reached yet hint says a 4th one closes the lead.
+A lead closed this way (or saved as `dq_noanswer`) reads on My Earnings as "Not paid:
+HealthFirst marked this lead as not qualified (no answer after 4 attempts)" (Direct Dental
+for a staffing lead): HSBS 10 reads the note when the reason is `Other` (11/22/2026, pay
+sheet rule 3 under W11). 1F and the site pass the void reason through unchanged.
 
 The Status Log line uses the page label ("Qualified", "Disqualified, not interested", "Demo
 set"). Track reads those labels (`stepWords` in `src/lib/rep-lead.mjs`): "HealthFirst
