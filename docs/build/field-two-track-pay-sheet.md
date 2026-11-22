@@ -283,6 +283,70 @@ the multiple office selection in the app". Times ET.
   as Update (or swap in the backup copy), and set the Vercel value back to
   `reached_private:100,reached_group:100,manager:50` and redeploy.
 
+## Writer stamp and pass log reason build record (11/22/2026)
+
+Thread "Stamp writer and pay log reasons" (history check items G1 and G3, from
+`build-desk/HISTORY_2026-11-22.md`). Times ET. Field only, TEST rows only. Pay amounts and rules
+unchanged.
+
+- Problem G1: every flow and every hand REST edit runs as Brian, so SharePoint version history
+  cannot say which flow wrote a SPIFF Ledger or Field Notify Outbox change. A TEST restore by hand
+  looked the same as a 10M Paid write.
+- Problem G3: a Ledger Pass Log row said only `done`, so a case with no award and a case that
+  wrote its rows looked the same.
+- New Text columns: `LastWriter` (shown as Last Writer) on SPIFF Ledger and on Field Notify
+  Outbox; `Reason` on Ledger Pass Log. No flow and no site route reads them.
+- Writer stamp, set on every create or MERGE of those lists:
+  - HSBS 10: `HSBS 10 run <run name>`, plus ` pass <passId>` on a 10D catch-up post
+    (K_R, K_M, K_S creates, Void_row, Dispute_row).
+  - 10M monthly: `HSBS 10M monthly run <run name> batch <batch>` (Stamp_row, Clear_row).
+  - 10M by hand: `HSBS 10M by hand run <run name> batch <batch>` (Clear_row, Return_row,
+    Pay_row, Pay_void_row).
+  - 7F: `HSBS 7F run <run name>` (hand back Outbox create, claim, sent, retry).
+  - 7N: `HSBS 7N run <run name>` (every Outbox state move; Partner Links LastAskSent unchanged).
+  - A Claude hand edit of a ledger or Outbox row sets `hand: <thread title>`.
+- Pass log reason: `Outcome` keeps `done`, `ended` or `failed`, because 10D reads it. `Reason`
+  says what the run wrote or why it wrote nothing, at most 255 characters, for example
+  `No row: not qualified yet (Qualified blank).`, `Wrote the rep qualified row (Waiting).`,
+  `No change: the rep qualified row is already written (Void). No pay: <void reason>.`,
+  `Voided a Waiting row. No pay: ...`, `Sign rows held: 2 or more Active Team Roster rows for
+  this rep.`, `No row: Direct Dental awards are off.`, an ended run's stop (`The referral did
+  not come from the rep app`), or `Failed at <steps>`. A 10S save still writes no pass row.
+- Build: project files `history-stamp/` (generators `gen_10.py`, `gen_10m.py`; in-page patch
+  `patch_stamp_inpage.js` for 7F and 7N). Offline: `test_10.py` 108/108 (18 new), `test_10m.py`
+  78/78 (2 new), `test_10d.py` 49/49, 7F `test_7f_offices.py` 32/32 and `test_stamp.py` 7/7,
+  `test_7n.py` 55/55 and `test_stamp.py` 10/10, lint 0 problems.
+- Hashes (metadata, description and evaluatedRecurrence left out): HSBS 10 `481b5111cb1a78b8`
+  to `b3a9654adfa77f33`; 10M monthly `dea3e7c9e08900a9` to `e4d09170afaf4cd2`; 10M by hand
+  `9944aff52c0a04a8` to `c29e5a6e1468506b`; 7F `c90e37a29cf67af8` to `e3ebd40256a0d84e`; 7N
+  `cd15fcabc042d121` to `ae679592487b3c5d`.
+- 10M: no stamp-only import. The 10M real-pay gate build (thread "Make real-pay switch block
+  payouts") is built on these generators and carries the stamp, so 10M is imported once, there.
+  Both 10M flows are Off since 4:08 to 4:09 PM ET (pay plan v3.4) and stay Off.
+- Live (run in the Claude app browser by thread "Capture pay baseline and pause 10M"):
+  - 4:15 PM: columns added and read back: SPIFF Ledger `LastWriter`, Field Notify Outbox
+    `LastWriter`, Ledger Pass Log `Reason` (Text, 255).
+  - 4:19 PM: 7F live export `c90e37a29cf67af8` patched in page, imported as Update. 4:20 PM On,
+    checker 0 errors, re-export `e3ebd40256a0d84e`.
+  - 4:24 PM: 7N live export `cd15fcabc042d121` patched in page, imported as Update. 4:25 PM On,
+    re-export `ae679592487b3c5d`.
+  - 4:29 PM: HSBS 10 live export `481b5111cb1a78b8` patched to the generator build, imported as
+    Update (Off about 27 seconds). 4:29 PM On, re-export `b3a9654adfa77f33`.
+- TEST proof 4:31 to 4:38 PM, PASS: TEST HealthFirst send from Test Fieldsite (Referrals 702,
+  Service Cases 284, Test Yes); `dq_noanswer` save through production `/api/partner-save` with
+  the TEST partner key. SPIFF Ledger 54 `284|Reached|Rep` Void, LastWriter `HSBS 10 run ...`
+  (so 10S still posts after the import). Outbox 27 Sent to the TEST partner row (Brian),
+  LastWriter `HSBS 7F run ...`. 10D run by hand 4:32 PM: pass `catch-up-20`, Ledger Pass Log 99
+  to 136 all carry Reason (case 284: "No change: the rep qualified row is already written
+  (Void). No pay: HealthFirst marked this lead as not qualified (no answer after 4
+  attempts)."). Open Ledger Run Errors 0. 7N wrote no row in the window (no fault forced), so
+  its stamp is proven by hash and offline tests only. 4:38 PM recycled Referrals 702, Service
+  Cases 284, SPIFF Ledger 54, Outbox 27; Pass Log rows kept. SPIFF Ledger after: 33 rows, all
+  TEST, financial hash equal to the pay baseline taken before the change.
+- Record with run IDs: project files `history-stamp/LIVE_RECORD_2026-11-22.md`.
+- Undo: import the `history-stamp/rollback/` packages (or `pay-ledger/rollback/v34-baseline/`)
+  as Update and turn the flow back to its state before. The columns can stay.
+
 ## No-answer close words build record (11/22/2026)
 
 Thread "Fix no-answer close label on Earnings" (loops finding L1). Times ET. Field only, TEST
@@ -342,7 +406,7 @@ wins for HSBS 10 and 10S.
 | B5 | Forced failures | A failed settings check or a missing Referrals row fails the run on purpose (steps `Check_settings`, `Check_ref`), so it is recorded in Ledger Run Errors before any write |
 | B6 | Trigger | 10S: "When an item is created or modified" on Service Cases, with a trigger condition so only `HealthFirst` and the staffing value start a run. It posts `{"caseId": <ID>}`. The HSBS 10 address is pasted into 10S's HTTP step by Brian, with Secure inputs on |
 | B7 | Run record | Each HSBS 10 run ends with a `Result` step (company, TEST, no-pay reason, sign handled, roster conflict, manager) so a check reads one step |
-| B9 | How 10D knows its posts finished | A 202 says only that HSBS 10 queued the run. So a 10D catch-up post also sends `passId` (`catch-up-<the catch-up row's ID>`). HSBS 10 writes one Ledger Pass Log row (`Pass_x0020_ID`, `Case_x0020_ID`, `Finished_x0020_At`, `Outcome`) at the end of every run that carries a `passId`: `done`, `ended` (an End step: not a company, not rep app, no rep, not TEST, no case) or `failed`. A run without `passId` (a 10S save) writes none. F4.6 step 1 counts these rows |
+| B9 | How 10D knows its posts finished | A 202 says only that HSBS 10 queued the run. So a 10D catch-up post also sends `passId` (`catch-up-<the catch-up row's ID>`). HSBS 10 writes one Ledger Pass Log row (`Pass_x0020_ID`, `Case_x0020_ID`, `Finished_x0020_At`, `Outcome`) at the end of every run that carries a `passId`: `done`, `ended` (an End step: not a company, not rep app, no rep, not TEST, no case) or `failed`. Since 11/22 the row also has `Reason` (what the run wrote, or why it wrote nothing). A run without `passId` (a 10S save) writes none. F4.6 step 1 counts these rows |
 | B8 | Not built in P2 | 10D (P3, see the P3 build record), 10B and 10P (P6), Payout Batches (P6). Rule G and the X lists are not in HSBS 10 |
 
 **Known follow-up for staffing (before `StaffingAwardsOn`).** 1F (new site) sends `Payer` as
@@ -868,6 +932,7 @@ Award Key set to enforce unique values. If it exists, add:
 | Company | Choice (single, drop-down) | `HealthFirst`, `Staffing` | No | none | No |
 | Sent On | Date only | none | No | none | No |
 | Office Check | Choice (single, drop-down) | `Cleared` | No | none | No |
+| LastWriter (shown as Last Writer, added 11/22) | Single line of text | none | No | none | No |
 
 **Two new lists** on the same site, written only by the flows named:
 

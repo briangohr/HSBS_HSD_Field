@@ -392,7 +392,8 @@ Outbox holds each notification so one flow can retry it.
 indexed, unique), NotifyKind (Hand back, Partner ask), CaseId, PartnerRow, MailTo, MailCc,
 MailSubject, MailBody, State (indexed, default Pending: Pending, Sending, Sent, Parked,
 Expired, Cleared), Tries (default 0), NextTry (indexed), LastError, SentOn, Expires, Test
-(default No), ClaimedOn. Partner Links gained a DateTime column LastAskSent.
+(default No), ClaimedOn, LastWriter (added 11/22/2026: the flow and run that last wrote the
+row, `HSBS 7F run ...` or `HSBS 7N run ...`). Partner Links gained a DateTime column LastAskSent.
 
 **Flow "HSBS 7N Field notify retry (new site)".** Recurrence every 30 minutes, 7:00 AM to
 9:30 PM ET, one run at a time. No HTTP trigger. Each run:
