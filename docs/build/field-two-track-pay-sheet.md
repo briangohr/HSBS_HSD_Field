@@ -125,6 +125,7 @@ project files). Where this record and an older line in F4.6 differ, this record 
 | D11 | Lines | List, Referral ID, case ID, company in words, practice name, rep email, then the list's extra. Ledger lines add the Award Key. No amounts; no customer name, phone or email; the X10 note word for word. `TEST ` prefix; while `LedgerTestOnly` the email opens with one line saying only TEST lines are listed |
 | D12 | Failure | Every step sits in one scope. If it fails: a Ledger Run Errors row (Step `HSBS 10D: <steps>`) and a short email to Brian, then the run ends Failed |
 | D13 | Import and HSBS 10 address | Brian imports the package, pastes HSBS 10's address into `Post_case` (copy button on HSBS 10's trigger), saves and turns 10D On, as he did for 10S. Secure inputs are on in the package. The address is never printed or stored |
+| D14 | Text bodies (added 11/21 after the first live run) | Every SharePoint "Send an HTTP request" body is one JSON text with `@{...}` parts, not a JSON object. The new flow designer turns an object body into text when you Save, and then a value written as `"@utcNow()"` goes to SharePoint as the literal words and SharePoint answers 400 (first hand run 9:08 PM, `Create_catchup`). A text body reads the same before and after a Save. P5a moved HSBS 10 and 10S to the same form (see the P5a build record) |
 
 **Offline model.** `test_10d.py` runs 10D with HSBS 10 behind its HTTP step: 47 checks
 covering A3 and A6 for 10D, H16, H18 (X8 part), H28 (freeze line, open catch-up row), H35,
@@ -140,6 +141,45 @@ pass with `if`, `and` and `or` evaluated lazily or eagerly. HSBS 10's 61 checks 
 | P3-3 | Step 3, H28 | The email | One email to Brian, subject `HSBS ledger exceptions <date>`; X1 starts with the freeze line; X10 lists case 44; no amount |
 | P3-4 | A6 | A case saved while the pass posts it | One ledger row only |
 | P3-5 | A3 | A blank amount, then a hand run | Error row `HSBS 10D: Check_settings`, no posts, email still sent; restore, mark resolved |
+
+**P3 live results** (11/21, second hand run 9:24 PM ET; the 9:08 PM run hit the D14 bug and
+left no rows):
+
+- P3-1 pass. `Settings read` matched the Live row, `amountsOk` true; concurrency 1 from the package.
+- P3-2 pass. Catch-up row `catch-up 2026-11-21` created, three Ledger Pass Log rows (cases 42,
+  43, 44, `done`), no new ledger row, catch-up row Resolved Yes. Real cases not posted.
+- P3-3 pass. One email to Brian, TEST-only opening line, X1 starts with the freeze line,
+  X10 lists case 44, no amounts.
+- P3-4 and P3-5 moved to P5b (TEST reconcile). Both are covered offline in `test_10d.py`.
+
+## P5a build record: HSBS 10 and 10S safe to save (11/21/2026)
+
+Built by Claude in the thread "Make pay flows safe to save", from the same generator.
+
+| # | What | Built |
+|---|---|---|
+| T1 | Bodies | All 16 SharePoint write bodies in HSBS 10 and the one in 10S (`Record_post_failure`) are text bodies, as D14. Numbers (case ID, amount, sign log plan amounts) are written bare. Booleans that come from an expression (the ledger row's `Test`) are written as `true` or `false` through `if(...)`, because a boolean turned into text reads `True`, which is not JSON |
+| T2 | Escaping | Text from people (practice name, a partner's not-qualified reason, emails) is escaped for JSON: backslash, double quote, CR, LF and tab. A raw quote or line break would make the whole body invalid and the write would fail. 10D keeps its live form (double quotes dropped) until its next import |
+| T3 | Import | Both re-imported as Update over the same flows. HSBS 10's address did not change (10D's `Post_case` still matches it). 10S got the address again by the copy button, checked by yes/no tests only, and the clipboard was cleared |
+| T4 | Saved in the designer | Both flows were opened and saved in the new designer after the import, then turned On, so the live definitions are the post-Save form |
+| T5 | Rollback | The package before this change is kept in the project files (`pay-ledger/rollback/p5a-generator-before`). Import it as Update to undo, then paste the address into 10S again. Never Save the old package in the designer |
+
+**Offline model.** `test_10.py` now has 71 checks (10 new): every SharePoint body in 10 and
+10S is text with no bare `@` value; a practice name and a not-qualified reason holding a
+quote, backslash, line break and tab are written unchanged; `Test`, `Amount` and the case
+ID land as JSON true and numbers; a real case lands `Test` false; 10S posts the case ID and,
+when HSBS 10 answers 500, writes one error row with the case ID and the answer code. The
+two text-body checks fail on the old package. `test_10d.py` still passes 49 of 49.
+
+**Live checks in P5a** (TEST rows only, 11/21 ET):
+
+| # | What | Result |
+|---|---|---|
+| P5a-1 | 10S error-row step: HSBS 10 turned Off, TEST case 43 saved | Pass, 10:19 PM. 10S run Failed as designed; Ledger Run Errors row `HSBS 10S case 43`, Case ID 43, Step `HSBS 10S: post to HSBS 10 answered 400`, Resolved No. Marked Resolved Yes, HSBS 10 turned On again |
+| P5a-2 | Write after a designer Save: TEST ledger row 8's Award Key renamed `44\|Reached\|Rep\|old-P5a` so the next save writes a fresh row, then TEST case 44 saved | Pass, 10:23 PM. 10S and HSBS 10 runs Succeeded; new ledger row `44\|Reached\|Rep`: Void, reason `HealthFirst marked this lead as not qualified (Other)`, Amount 100, Test Yes, Disputed No, case ID 44, Company and Payer HealthFirst. Same values as row 8 |
+
+Row 8 (renamed key) and row 9 stay as TEST evidence. Ledger Run Errors 1 to 3 are all
+Resolved Yes.
 
 ## Brian's decisions this sheet rests on (11/13)
 
