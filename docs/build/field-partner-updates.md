@@ -749,20 +749,20 @@ live package: only Get_case and Multi_office.
 
 ### Live change record (Sun 11/22/2026, ET)
 
-- 2:20 PM: Service Cases column `OfficeCountConfirmed` (Text, 10) added on the field site.
-- 2:21 PM: live 7F exported in Browser 1 (378c6cd4), hash 86b2c0fa67a77dc7 (the cadence
+- About 2:15 PM: Service Cases column `OfficeCountConfirmed` (Text, 10) added on the field site.
+- 2:19 PM: live 7F exported in Browser 1 (378c6cd4), hash 86b2c0fa67a77dc7 (the cadence
   build). Undo package `partner-updates/offices/rollback/HSBS-7F-before-offices.zip`.
-- 2:22 PM: patched in page, hash 68e75b34c51600dc (same as the tested build), imported as
+- 2:21 PM: patched in page, hash 68e75b34c51600dc (same as the tested build), imported as
   Update onto HSBS 7F Field partner (new site), top SharePoint and Outlook connections. On
-  2:23 PM. Flow checker 0 errors, 0 warnings. TEST partner page read 200 on production.
-- 2:25 PM: live HSBS 10 Ledger writer exported, canonical hash (metadata left out) 8f0b4c47ed13649d,
+  2:22 PM. Flow checker 0 errors, 0 warnings. TEST partner page read 200 on production.
+- 2:24 PM: live HSBS 10 Ledger writer exported, canonical hash (metadata left out) 8f0b4c47ed13649d,
   the same as `pay-ledger/rollback/offices-before/HSBS-10-Ledger-writer-NEW-SITE.zip` (the
   multi-office package), which is the undo. Patched in page (Get_case selects
   `OfficeCountConfirmed`; Multi_office needs it `Yes`), hash 6e8a1c4c20343cad, the same as the
-  tested generator output. Imported as Update 2:26 PM, On 2:28 PM, flow checker 0 and 0.
-- 2:29 PM: Vercel `PARTNER_OFFICE_CHECK=true` (production and preview). Production code
+  tested generator output. Imported as Update 2:26 PM, On 2:27 PM, flow checker 0 and 0.
+- 2:28 PM: Vercel `PARTNER_OFFICE_CHECK=true` (production and preview). Production code
   reads it only after this PR merges.
-- TEST proof, PASS (2:33 to 2:38 PM): two TEST Direct Dental sends from Test Fieldsite through
+- TEST proof, PASS (2:29 to 2:31 PM): two TEST Direct Dental sends from Test Fieldsite through
   production `/api/referral`, both `Group` (F697, F698; 3F sent each `[TEST]` intro to Brian
   only). On the TEST partner page (PR 49 preview, switch on), both leads came back with
   `askOffices` true and no other lead did. Picking Reached the customer showed the question;
@@ -771,7 +771,7 @@ live package: only Get_case and Multi_office.
   281: Qualified Yes, Reached, `OfficeCountConfirmed` Yes and No. SPIFF Ledger 47
   `280|Reached|Rep` $200 and 48 `281|Reached|Rep` $100, both Waiting, Staffing, Direct
   Dental, Test Yes. No new Ledger Run Errors.
-- 2:40 PM: recycled ledger 47 and 48, cases 280 and 281, referrals 697 and 698 (site recycle
+- 2:32 PM: recycled ledger 47 and 48, cases 280 and 281, referrals 697 and 698 (site recycle
   bin).
 - Undo 7F: import `rollback/HSBS-7F-before-offices.zip` as Update, turn On. The column can stay.
 - Undo HSBS 10: import `pay-ledger/rollback/offices-before/HSBS-10-Ledger-writer-NEW-SITE.zip`
