@@ -59,6 +59,12 @@ export const REFERRAL_READ_MAX = 5000;
  * REFERRAL_READ_MAX. More is a failed read, never a short list: a cut would drop money.
  */
 export const LEDGER_READ_MAX = 5000;
+/**
+ * The most Service Case lines one read may hold: a rep's own (list) or one team member's
+ * (team), sent once beside the referrals (FT-4). The same SharePoint limit as
+ * REFERRAL_READ_MAX. More is a failed read, never a line cut short.
+ */
+export const CASE_READ_MAX = 5000;
 /** The most text a list or earnings answer may hold. Over it is a failed read. */
 const READ_MAX_CHARS = 4_000_000;
 /** Same cap as TEAM_MAX in rep-team.mjs. */
@@ -243,7 +249,61 @@ export async function listReferrals(key) {
   }
   if (!body || typeof body !== 'object' || !Array.isArray(body.referrals)) throw new ReferralAppWriteError(200);
   if (body.referrals.length > REFERRAL_READ_MAX) throw new ReferralAppWriteError(200);
-  return body.referrals;
+  return attachCases(body.referrals, body.cases);
+}
+
+/**
+ * FT-4 (11/22/2026): 1F reads a rep's Service Cases once and sends them beside the
+ * referrals as `cases`, each line with its `referralId` (the Referrals item id), instead
+ * of one case read per referral. This puts each line back on its referral as `cases`, so
+ * everything after this sees the same shape as before. An answer with no top-level
+ * `cases` is the older shape (lines already on each referral) and is returned unchanged.
+ *
+ * Fail closed, never a short count: `cases` that is not a list, more than CASE_READ_MAX
+ * lines, or a line whose `referralId` matches none of the referrals is a failed read.
+ * With `reached`, a referral that carries no `reached` gets it from its lines (a line
+ * whose `talkedToDoctor` is "Yes"), as 1F's team loop used to work it out.
+ * @param {unknown[]} referrals
+ * @param {unknown} cases
+ * @param {{ reached?: boolean }} [opts]
+ * @returns {unknown[]}
+ */
+export function attachCases(referrals, cases, opts = {}) {
+  if (cases === undefined) return referrals;
+  if (!Array.isArray(cases) || cases.length > CASE_READ_MAX) throw new ReferralAppWriteError(200);
+  /** @type {Map<string, unknown[]>} */
+  const byId = new Map();
+  for (const r of referrals) {
+    if (!r || typeof r !== 'object' || Array.isArray(r)) continue;
+    const id = idText(/** @type {any} */ (r).id);
+    if (id && !byId.has(id)) byId.set(id, []);
+  }
+  for (const line of cases) {
+    const id = line && typeof line === 'object' && !Array.isArray(line) ? idText(/** @type {any} */ (line).referralId) : '';
+    const group = id ? byId.get(id) : undefined;
+    // A line for no referral in this answer would vanish from every count. Fail the read.
+    if (!group) throw new ReferralAppWriteError(200);
+    group.push(line);
+  }
+  return referrals.map((r) => {
+    if (!r || typeof r !== 'object' || Array.isArray(r)) return r;
+    const row = /** @type {Record<string, unknown>} */ (r);
+    const mine = byId.get(idText(row.id)) ?? [];
+    const own = Array.isArray(row.cases) ? row.cases : Array.isArray(row.lines) ? row.lines : [];
+    const out = { ...row, cases: [...own, ...mine] };
+    delete out.lines;
+    if (opts.reached && typeof row.reached !== 'boolean') {
+      out.reached = out.cases.some((c) => /** @type {any} */ (c)?.talkedToDoctor === 'Yes');
+    }
+    return out;
+  });
+}
+
+/** A Referrals item id as text: a whole number, sent as a number or a string. */
+function idText(v) {
+  if (typeof v === 'number' && Number.isInteger(v) && v > 0) return String(v);
+  if (typeof v === 'string' && /^[1-9][0-9]{0,9}$/.test(v.trim())) return v.trim();
+  return '';
 }
 
 /**
@@ -313,7 +373,15 @@ export async function listTeam(key) {
   if (body.team.length > TEAM_MAX_MEMBERS) throw new ReferralAppWriteError(200);
   // The same for the manager's own ledger rows: a cut would drop the manager's pay (FT-1b).
   if (body.managerRows.length > LEDGER_READ_MAX) throw new ReferralAppWriteError(200);
-  return body;
+  // FT-4: a signed-up member's case lines come once beside their referrals. Put them back
+  // on each referral, with `reached` worked out from them (see attachCases).
+  const team = body.team.map((m) => {
+    if (!m || typeof m !== 'object' || Array.isArray(m) || m.cases === undefined) return m;
+    if (!Array.isArray(m.referrals)) throw new ReferralAppWriteError(200);
+    const { cases, ...rest } = m;
+    return { ...rest, referrals: attachCases(m.referrals, cases, { reached: true }) };
+  });
+  return { ...body, team };
 }
 
 /** The whole body, under the request's timeout. A body that stalls is a timeout. */
