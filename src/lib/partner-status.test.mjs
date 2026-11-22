@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { decorateReferrals } from './track.mjs';
-import { STAND_WORDS, choiceGroupsFor, displayStatus, isHandedBackStatus, isQualifiedStatus } from './partner-status-words.mjs';
+import { STAND_CHOICES, STAND_WORDS, choiceGroupsFor, displayStatus, isHandedBackStatus, isQualifiedStatus } from './partner-status-words.mjs';
 
 test('status words are the same stored values everywhere, and old values still display', () => {
   assert.deepEqual(STAND_WORDS, [
@@ -69,4 +69,10 @@ test('once qualified, the Qualifying group is frozen and only the later steps ar
     assert.deepEqual(codes(qualified), ['meeting', 'proposal', 'signed', 'lost'], qualified);
     assert.deepEqual(choiceGroupsFor(qualified).map((g) => g.done), ['Reached the customer', ''], qualified);
   }
+});
+
+test('Not reached yet tells the partner a 4th one closes the lead (7F closes it, 11/22/2026)', () => {
+  const trying = STAND_CHOICES.find((c) => c.code === 'trying');
+  assert.match(trying.hint, /A 4th Not reached yet closes the lead\./);
+  assert.doesNotMatch(trying.hint, /[\u2014\u2192]/);
 });

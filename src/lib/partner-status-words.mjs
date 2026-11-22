@@ -21,7 +21,7 @@ export const STAND_WORDS = [
  */
 export const STAND_CHOICES = [
   { code: 'qualified', label: 'Reached the customer', hint: 'Knows you will follow up and wants a demo', group: 'qualify' },
-  { code: 'trying', label: 'Not reached yet', hint: 'Attempts 1 to 3 so far. Need help reaching them? Reply to the intro email.', group: 'qualify' },
+  { code: 'trying', label: 'Not reached yet', hint: 'Attempts 1 to 3 so far. A 4th Not reached yet closes the lead. Need help reaching them? Reply to the intro email.', group: 'qualify' },
   { code: 'dq_noanswer', label: 'Disqualified: no answer after 4 attempts', hint: '', group: 'qualify' },
   { code: 'meeting', label: 'Demo set', hint: '', group: 'deal' },
   { code: 'proposal', label: 'Proposal or agreement sent', hint: '', group: 'deal' },

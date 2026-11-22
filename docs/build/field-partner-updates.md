@@ -292,7 +292,7 @@ HTTP trigger, POST, schema from the contract above. No trigger concurrency: Powe
    | Last Touch, Last Partner Update | now |
    | Partner Updated By | Partner Links Title |
    | Missed Updates | 0 |
-   | Next Update Due | `meeting`: 1 business day after the meeting date. `signed`, `lost`, `handback`: cleared. Otherwise: today + `Window_days` business days |
+   | Next Update Due | `meeting`: 1 business day after the meeting date. `signed`, `lost`, `handback`, `dq_*`: cleared. `qualified`, `proposal`, and `nochange` on a qualified lead: the coming Friday (holiday Friday: next business day). Otherwise: today + `Window_days` business days (since 11/22/2026, cadence change) |
    | Status Log | Old text + new line `<today> <partner>: <label>. <note> [s:<submissionId>]` |
 
    Stage, Status and Pipeline Stage are not written.
@@ -326,7 +326,8 @@ below reads only Service Cases with Test on and only Partner Links rows whose Ti
    go-live day every older case gets today, so it is listed today and first missed tomorrow
    (O7), and a case made yesterday keeps its own 2 business days.
 1. **Count misses.** For each open case with Introduced On whose Next Update Due is before
-   today, a write (Writing a case): Missed Updates + 1, Next Update Due = today + `Window_days` business days. A
+   today, a write (Writing a case): Missed Updates + 1, Next Update Due = today + `Window_days` business days,
+   or the coming Friday when the fresh copy is qualified (cadence change, 11/22/2026). A
    partner who never saves therefore gains one miss per missed window: the first business
    day after each due date, about every 2 business days, so 2 misses take about 4 business
    days (O4).
@@ -339,15 +340,17 @@ below reads only Service Cases with Test on and only Partner Links rows whose Ti
    Update and so the key, so the same case can escalate again after 2 more misses. Nothing to
    list: no email.
 3. **For each Active Partner Links row:**
-   - a. Its cases that are open and due, or have Missed Updates above 0. None: skip the
-     row. No email.
+   - a. Its cases that are open and due, or not qualified with Missed Updates above 0. A
+     qualified lead (cadence change, 11/22/2026) is listed only when it is due, so a missed
+     Friday shows once on its next Friday, not on every daily ask. None: skip the row. No
+     email.
    - b. Key: when Link Key is blank or Key Expires is less than 3 days away, write a new key
      (`substring(concat(replace(guid(),'-',''), replace(guid(),'-','')), 0, 40)`) and Key
      Expires = now + 14 days. Otherwise keep it, so yesterday's link still opens.
    - c. One email. To: Email. CC: CC Email. A TEST partner: To Brian only, no CC, subject
      starts `[TEST] `. Subject: `Field leads due for an update: <n>`. Body: one line on the
-     rhythm ("Please update each lead within 2 business days. One link covers all of
-     them."), the link `<base>/update/<key>`, then a table, overdue
+     rhythm ("Please update leads you have not reached yet within 2 business days, and
+     qualified leads each Friday. One link covers all of them."), the link `<base>/update/<key>`, then a table, overdue
      first: ref, practice, introduced, last status, due date. Brian is not copied (O3).
 4. Brian is copied on nothing else. No rep is emailed.
 
@@ -367,7 +370,7 @@ reads and writes SharePoint. It sends nothing.
    off), as "Its cases" says. Not exactly 1, or not open: Terminate. So the TEST mailbox can
    never touch a real case.
 4. Update the case: Last Partner Update = received time, Missed Updates 0, Next Update Due =
-   today + `Window_days` business days, Partner Updated By = partner Title, Status Log new line
+   today + `Window_days` business days (the coming Friday for a qualified lead), Partner Updated By = partner Title, Status Log new line
    `<today> <partner>: replied by email. [r:<received yyyyMMddHHmmss>]`. A fresh copy that already
    holds that tag is done, so a resubmitted run writes nothing twice. Partner Status is left as it is. The email body is
    not stored.
@@ -659,3 +662,56 @@ Use the TEST rep and the TEST field partner. Mail may go only to Brian.
 ## Decided
 
 - Q1, Brian, 11/20: a partner's email reply to an intro counts as an update (piece D). It reads Brian's inbox and sends nothing.
+
+## Cadence change: Friday for qualified leads, 4 tries close (11/22/2026)
+
+Brian, 11/22/2026 12:17 PM ET: each partner updates its own leads. A lead in qualification is
+asked every 2 business days. Not reached yet stays on that cycle. A qualified lead moves to
+the Friday update and is not asked every 2 business days until it closes won or lost. Four
+Not reached yet updates close the lead right away. "4 times" is read as 4 partner saves that
+say Not reached yet (about 8 business days), matching the page's "Attempts 1 to 3 so far".
+
+- "Qualified" in the flows: Qualified Yes, or Partner Status Reached, Meeting set, Meeting
+  held, or Proposal or agreement sent.
+- "The coming Friday": the first Friday after today (a Friday save goes to next Friday), or
+  the next business day when that Friday is on `Holidays` (11/27, 12/25, 1/1 this season).
+- 7F save: Next Update Due as in the B table above. A `trying` save on an unqualified lead
+  with 3 earlier ": Trying to reach." lines is stored as `dq_noanswer` (the contract, HSBS 7F).
+- 7G: count misses as in C step 1; an overdue qualified lead is listed only when due; the
+  rhythm line names both cycles. 7H: as in D step 4.
+- Demo set keeps 1 business day after the demo, so the first update after a demo is the day
+  after it, then Fridays.
+- "Qualified Yes" is read from the Qualified choice column. 7F and 7G read cases with the
+  SharePoint connector, which gives a choice as `{"Value": ...}`, so they read
+  `Qualified?['Value']`; 7H reads the case by REST, which gives plain text.
+- Build files: `/mnt/project-files/partner-updates/cadence/`. 7F: `p4/patch_cadence_inpage.js`
+  (the same code runs in node through `p4/build_cadence.mjs` and in the export page), rebuilt
+  on the FT-5 part 4 shape: the per-lead work is three Selects before the write loop, none in
+  it (`C_qual`, `C_close`, `Eff_updates`), and every later step reads `Eff_updates` instead
+  of the posted updates, so the auto close reaches the hand back loop on the server whatever
+  the page offers. Model tests `p4/test_7f_cadence_p4.py` and the FT-5 part 4 suite. 7G and
+  7H: `gen_7g_7h.py`, model test `test_7g_7h_cadence.py`.
+- Next 7F change after this one: Matt's Group office-count check before the $200 (memory
+  GROUP CHECK). Build it on the export taken after this import (7F hash 86b2c0fa67a77dc7).
+
+### Live change record (Sun 11/22/2026, ET)
+
+| Time | What |
+|---|---|
+| 1:12 PM | Exported live 7F: canonical hash e520b115c1295412 (FT-5 part 4), matches the part 4 build. Rollback `cadence/rollback/HSBS-7F-before-cadence.zip` (that definition). |
+| 1:13 PM | Patched in the export page with `p4/patch_cadence_inpage.js`: 86b2c0fa67a77dc7, the same hash as the model-tested node build. Model tests: cadence 38 of 38; FT-5 part 4 suite old vs new differs only in the intended qualified due date (11/25 to 11/30) and the meaningless "reads cut" line. |
+| 1:16 PM | Imported as Update onto HSBS 7F Field partner (new site), top SharePoint and top Outlook connections. 1:19 PM turned On. Flow checker 0 errors, 0 warnings. |
+| 1:20 PM | TEST proof on 4 TEST cases (270 to 273, TEST field partner key, prod `/api/partner-save`), one save: 200 saved 4 in 16 s. Case 270 (3 earlier tries, unqualified) `trying`: Not moving forward, Qualified No, Closed Reason Not qualified, due cleared, line "Disqualified, no answer after 4 attempts. Closed on the 4th Not reached yet update."; Outbox row `dq:270:<sid>` Sent, To Brian only, subject `[TEST] Field lead disqualified: ...`. Case 271 `qualified`: Reached, due Mon 11/30 (Friday 11/27 is a holiday, rolled). Case 272 `trying`: due Tue 11/24 (2 business days). Case 273 (Qualified Yes, status Trying to reach, 3 earlier tries) `trying`: stays open, due 11/24, so the Qualified choice read works live. |
+| 1:21 PM | Resend of the same save: 200 saved 4, no case modified, Outbox unchanged. A `nochange` save on 271 (qualified): due 11/30; on 272: due 11/24. |
+| 1:23 PM | Ledger: the qualified TEST saves wrote only TEST rows (SPIFF Ledger 37, 38, 39, all Test Yes: 273 and 271 Waiting $100, 270 Void "not qualified"). Ledger Run Errors and Sign Log unchanged. Recycled the 3 TEST ledger rows, 4 TEST cases and 4 TEST referrals; remaining 0. Cases 64 and 65 untouched. |
+| 1:30 PM | Exported live 7H: same as the old generator output except Power Automate's own `@string('')` to `""` rewrite. Rollback `cadence/rollback/HSBS-7H-before-cadence.zip`. |
+| 1:33 PM | 7H patched in page to the new generator's actions (hash 59ec6b268769c4a1 = new build with that same rewrite), imported as Update, top connections. 1:35 PM turned On. Flow checker 0 errors, 0 warnings. Live 7H proof waits for a real or TEST partner reply; the model test covers it (Reached and Meeting set to 11/30, Trying to reach to 11/25). |
+
+7G is not changed yet. It imports after the Monday 11/23 8 AM ET run is read back, never
+between 7:45 and 8:30 AM ET, and never runs by hand. The 7G generator now reads
+`Qualified?['Value']` from the connector (fixed 11/22 1:28 PM ET; tests 13 of 13).
+
+Undo: 7F, import `rollback/HSBS-7F-before-cadence.zip` as Update onto 7F, turn On, read TEST
+leads. 7H, import `rollback/HSBS-7H-before-cadence.zip` as Update onto 7H, turn On. Site:
+revert the hint line in `src/lib/partner-status-words.mjs`.
+
