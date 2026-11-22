@@ -242,6 +242,19 @@ export function closeWordsFor(row) {
   return notQualifiedWords(line) || closedReasonWords(line);
 }
 
+/**
+ * The partner one history entry speaks for: its own case's company when the entry names one
+ * (status-log.mjs), else the referral's main partner. The not-qualified close words belong
+ * to the main line, so an entry from another case never gets them.
+ * @param {{ company?: string, solutions?: string }} h
+ * @param {NonNullable<ReturnType<typeof sanitizeReferral>>} row
+ * @param {string} main the main line's company
+ */
+export function entryCompany(h, row, main) {
+  const company = h.company ? lineCompany({ company: h.company, solutions: h.solutions }) : main;
+  return { company, closeWords: company === main ? closeWordsFor(row) : '' };
+}
+
 /** @param {string} company */
 export const isStaffingCompany = (company) => isStaffing(company);
 
@@ -324,7 +337,8 @@ export function leadViews(list, today = todayInNewYork(), opts = {}) {
     const steps = [{ on: row.sentOn ? shortDate(row.sentOn) : '', label: `Sent to ${company}` }];
     const history = [...row.history].sort((a, b) => (a.on < b.on ? -1 : a.on > b.on ? 1 : 0));
     for (const h of history) {
-      let words = historySteps(h.text, company, closeWordsFor(row));
+      const { company: hc, closeWords } = entryCompany(h, row, company);
+      let words = historySteps(h.text, hc, closeWords);
       if (words.length === 0 && !team) words = [displayStatusText(h.text).replace(/[.\s]+$/, '')];
       for (const w of words) if (w) steps.push({ on: h.on ? shortDate(h.on) : '', label: w });
     }

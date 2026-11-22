@@ -115,3 +115,26 @@ describe('Track with Status Log lines from 1F', () => {
     assert.ok(!/\[s:|escalated/.test(text), text);
   });
 });
+
+describe('two partners on one referral (Codex P1 on PR 52)', () => {
+  const ref = { id: 70, title: 'HSBS-F70', practice: 'TEST Two Partner Dental', doctor: 'TEST Contact', created: '2026-11-19T15:00:00Z' };
+  const cases = [
+    { referralId: 70, company: 'HealthFirst', partnerStatus: 'Trying to reach', updated: '2026-11-20', statusLog: '2026-11-20 HealthFirst: Trying to reach [s:a]' },
+    { referralId: 70, company: 'Direct Dental', solutions: 'Staffing', partnerStatus: 'Qualified', updated: '2026-11-22', statusLog: '2026-11-22 Direct Dental: Qualified [s:b]' },
+  ];
+
+  test("each entry keeps its own case's partner", () => {
+    const [row] = attachCases([ref], cases);
+    assert.deepEqual(row.history.map((h) => h.company), ['HealthFirst', 'Direct Dental']);
+  });
+
+  test("the timeline and feed credit Direct Dental's step to Direct Dental", () => {
+    const [lead] = leadViews(attachCases([ref], cases), '2026-11-22');
+    const labels = lead.steps.map((s) => s.label);
+    assert.ok(labels.includes('Direct Dental qualified the lead'), JSON.stringify(labels));
+    assert.ok(!labels.includes('HealthFirst qualified the lead'), JSON.stringify(labels));
+    const feed = repFeed(attachCases([ref], cases), '2026-11-22').map((f) => f.label).join(' | ');
+    assert.ok(/Direct Dental qualified the lead/.test(feed), feed);
+    assert.ok(!/HealthFirst qualified the lead/.test(feed), feed);
+  });
+});

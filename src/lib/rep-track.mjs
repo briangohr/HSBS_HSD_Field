@@ -6,7 +6,7 @@
 
 import { decorateReferrals, officeName, sanitizeReferral, shortDate, todayInNewYork } from './track.mjs';
 import { displayStatus } from './partner-status-words.mjs';
-import { historyWords, labelSentences, lineCompany, mainLine, closeWordsFor, isStaffingCompany } from './rep-lead.mjs';
+import { historyWords, labelSentences, lineCompany, mainLine, entryCompany, isStaffingCompany } from './rep-lead.mjs';
 
 export const FEED_MAX = 50;
 
@@ -62,10 +62,11 @@ export function repFeed(list, today = todayInNewYork()) {
     const company = lineCompany(mainLine(row));
     for (const h of row.history) {
       if (!h.on) continue;
-      const words = historyWords(h.text, company, closeWordsFor(row));
+      const { company: hc, closeWords } = entryCompany(h, row, company);
+      const words = historyWords(h.text, hc, closeWords);
       // Every feed line ends with a period, like the stale lines: "Nov 14. North Side Dental: Signed and billed."
       const label = `${shortDate(h.on)}. ${place}: ${words}`;
-      items.push({ on: h.on, label: /[.!?]$/.test(label) ? label : `${label}.`, referralId: row.id, kinds: historyKinds(h.text, company) });
+      items.push({ on: h.on, label: /[.!?]$/.test(label) ? label : `${label}.`, referralId: row.id, kinds: historyKinds(h.text, hc) });
     }
     const stale = decorated.get(row.id)?.staleText;
     if (stale) items.push({ on: today, label: `${shortDate(today)}. ${stale} on ${place}.`, referralId: row.id, kinds: ['stale'] });

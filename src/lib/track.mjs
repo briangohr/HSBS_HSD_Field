@@ -139,7 +139,14 @@ function sanitizeHistory(raw) {
   const text = s(row.text, 240);
   if (!text) return null;
   const on = s(row.on, 10);
-  return { on: DATE.test(on) ? on : '', text };
+  /** @type {{ on: string, text: string, company?: string, solutions?: string }} */
+  const out = { on: DATE.test(on) ? on : '', text };
+  // The case the entry came from (status-log.mjs), kept only when sent.
+  const company = s(row.company, 80);
+  const solutions = s(row.solutions, 120);
+  if (company) out.company = company;
+  if (solutions) out.solutions = solutions;
+  return out;
 }
 
 /**

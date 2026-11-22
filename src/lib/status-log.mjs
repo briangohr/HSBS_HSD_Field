@@ -73,17 +73,24 @@ export function statusLogHistory(log) {
 
 /**
  * The history of a referral from all its lines' Status Logs, oldest first, newest
- * HISTORY_MAX kept. Lines with no date stay where their log put them, before dated ones
+ * HISTORY_MAX kept. Each entry carries its line's `company` (and `solutions`). Lines with no date stay where their log put them, before dated ones
  * from other cases. The sort is stable, so one day's lines keep their log order.
  * @param {unknown[]} lines
  */
 export function referralHistory(lines) {
-  /** @type {{ on: string, text: string, i: number }[]} */
+  /** @type {{ on: string, text: string, company?: string, solutions?: string, i: number }[]} */
   const all = [];
   for (const line of lines) {
     if (!line || typeof line !== 'object' || Array.isArray(line)) continue;
-    for (const h of statusLogHistory(/** @type {any} */ (line).statusLog)) all.push({ ...h, i: all.length });
+    const l = /** @type {Record<string, unknown>} */ (line);
+    // Each entry keeps its own case's partner, so one partner's step is never read as
+    // another's on a referral with two cases (Codex P1 on PR 52).
+    /** @type {{ company?: string, solutions?: string }} */
+    const source = {};
+    if (typeof l.company === 'string' && l.company.trim()) source.company = l.company.trim();
+    if (typeof l.solutions === 'string' && l.solutions.trim()) source.solutions = l.solutions.trim();
+    for (const h of statusLogHistory(l.statusLog)) all.push({ ...h, ...source, i: all.length });
   }
   all.sort((a, b) => (a.on < b.on ? -1 : a.on > b.on ? 1 : a.i - b.i));
-  return all.slice(-HISTORY_MAX).map(({ on, text }) => ({ on, text }));
+  return all.slice(-HISTORY_MAX).map(({ i, ...h }) => h);
 }

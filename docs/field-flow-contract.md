@@ -302,7 +302,9 @@ leaves it off the line:
   (7G escalation) are removed.
 - An escalation line (`<date> escalated to Brian [esc:...]`) is dropped. It is HSBS's own
   follow-up, never the partner's.
-- A referral with two cases merges their entries by date. One day keeps log order.
+- A referral with two cases merges their entries by date. One day keeps log order. Each
+  entry keeps its own case's `company` (and `solutions`), so one partner's step never reads
+  as the other partner's.
 - The newest 50 entries per referral are kept.
 
 When 1F sends a non-empty `history` on a referral itself, that wins and `statusLog` is not
