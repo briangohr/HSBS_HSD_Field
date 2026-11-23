@@ -593,7 +593,9 @@ The v3.4 Task 3 build (offline, not live; pay sheet, V7) makes each list one fro
 manifest: Resend sends the same frozen list, a new hand mode Forwarded records that Brian
 forwarded that exact version, and Paid needs the Manifest ID, version, line count, total and a
 Confirmation ID. It adds a `PayoutManifest` column to SPIFF Ledger. No request or answer in this
-contract changes.
+contract changes. Live since 11/23/2026 (pay sheet, V8): the column and lists exist, both 10M
+flows carry the Task 3 build (by hand with the 11/23 Paid fix), both stay Off, and
+`RealPayoutsOn` stays No until Brian releases the first real payout.
 
 ## What must stay true
 
