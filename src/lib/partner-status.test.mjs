@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { decorateReferrals } from './track.mjs';
 import { QUALIFYING_CHOICES } from './partner-form.mjs';
-import { QUALIFIES_HINT, STAND_CHOICES, STAND_WORDS, choiceGroupsFor, displayStatus, isHandedBackStatus, isQualifiedStatus } from './partner-status-words.mjs';
+import { QUALIFIES_LINE, STAND_CHOICES, STAND_GROUPS, STAND_WORDS, choiceGroupsFor, displayStatus, isHandedBackStatus, isQualifiedStatus } from './partner-status-words.mjs';
 
 test('status words are the same stored values everywhere, and old values still display', () => {
   assert.deepEqual(STAND_WORDS, [
@@ -78,15 +78,15 @@ test('Not reached yet tells the partner a 4th one closes the lead (7F closes it,
   assert.doesNotMatch(trying.hint, /[\u2014\u2192]/);
 });
 
-test('every deal stage that qualifies the lead says so (Brian, 11/23/2026)', () => {
-  assert.equal(QUALIFIES_HINT, 'Counts as reached and qualified');
-  assert.doesNotMatch(QUALIFIES_HINT, /[\u2014\u2192]/);
-  for (const c of STAND_CHOICES.filter((x) => x.group === 'deal')) {
-    const qualifies = QUALIFYING_CHOICES.includes(c.code);
-    assert.equal(c.hint === QUALIFIES_HINT, qualifies, c.code);
-  }
-  assert.deepEqual(
-    STAND_CHOICES.filter((c) => c.hint === QUALIFIES_HINT).map((c) => c.code),
-    ['meeting', 'proposal', 'signed'],
-  );
+test('the qualifying rule is said once, under After qualified (Brian, 11/23/2026 Release A)', () => {
+  assert.equal(QUALIFIES_LINE, 'Demo set, Proposal, and Signed count as reached and qualified.');
+  assert.doesNotMatch(QUALIFIES_LINE, /[\u2014\u2192]/);
+  assert.deepEqual(STAND_GROUPS.map((g) => g.note), ['', QUALIFIES_LINE]);
+  // No per-stage repeat: no deal stage carries a hint.
+  assert.deepEqual(STAND_CHOICES.filter((c) => c.group === 'deal' && c.hint).map((c) => c.code), []);
+  // The line names exactly the deal stages that qualify the lead (7F sets Qualified Yes).
+  const named = STAND_CHOICES.filter((c) => c.group === 'deal' && QUALIFYING_CHOICES.includes(c.code)).map((c) => c.code);
+  assert.deepEqual(named, ['meeting', 'proposal', 'signed']);
+  // No payout words for partners.
+  assert.doesNotMatch(QUALIFIES_LINE, /\$|pay/i);
 });

@@ -348,6 +348,139 @@ await check('No change sends no Talked To Doctor, so the stored answer stays', a
   await page.close();
 });
 
+// Release A (Brian, 11/23/2026): one qualifying line, a sticky Save with a live count, a
+// complete card folds to "Selected: X" with Change, a navy focus ring. The 7F body is unchanged.
+const label = async (page) => (await page.textContent('#pu-save')).trim();
+const isFolded = (page, id) => page.isVisible(`li[data-id="${id}"] [data-picked]`);
+
+await check('Release A: one qualifying line per lead, no repeated hints, no pay words', async () => {
+  const page = await phone.newPage();
+  await open(page);
+  for (const id of [36, 37, 38, 39]) {
+    const t = await page.textContent(`li[data-id="${id}"]`);
+    assert.equal((t.match(/Demo set, Proposal, and Signed count as reached and qualified\./g) ?? []).length, 1, `lead ${id}`);
+  }
+  const all = await page.textContent('#pu-form');
+  assert.doesNotMatch(all, /Counts as reached and qualified/);
+  assert.doesNotMatch(all, /\$\d/);
+  await page.close();
+});
+
+await check('Release A: Save counts complete leads; a card folds when you move on; Change keeps every value', async () => {
+  bodies.length = 0;
+  const page = await phone.newPage();
+  await open(page);
+  assert.equal(await label(page), 'Save');
+  assert.equal(await page.isDisabled('#pu-save'), true, 'nothing picked: Save is off');
+  // Demo set needs its date: not complete, not counted, not folded, but Save turns on.
+  await page.check('input[name="choice-36"][value="meeting"]');
+  assert.equal(await label(page), 'Save');
+  assert.equal(await page.isEnabled('#pu-save'), true);
+  await page.fill('input[name="meetingDate-36"]', TOMORROW);
+  assert.equal(await label(page), 'Save 1 update');
+  await page.fill('input[name="note-36"]', 'TEST fold note');
+  assert.equal(await isFolded(page, 36), false, 'no fold while still in the card');
+  // Moving on to another lead folds 36.
+  await page.check('input[name="choice-38"][value="trying"]');
+  assert.equal(await isFolded(page, 36), true);
+  assert.equal(await page.isVisible('input[name="note-36"]'), false);
+  assert.equal((await page.textContent('li[data-id="36"] [data-picked-words]')).trim(), 'Selected: Demo set');
+  assert.equal(await label(page), 'Save 2 updates');
+  // Changing an answer counts the lead once.
+  await page.check('input[name="choice-38"][value="qualified"]');
+  assert.equal(await label(page), 'Save 2 updates');
+  assert.equal(await isFolded(page, 38), false);
+  // Direct Dental group lead: qualifying is not complete until the office answer.
+  await page.check('input[name="choice-39"][value="qualified"]');
+  assert.equal(await isFolded(page, 38), true);
+  assert.equal(await label(page), 'Save 2 updates');
+  assert.equal(await isFolded(page, 39), false);
+  await page.check('input[name="offices-39"][value="yes"]');
+  assert.equal(await label(page), 'Save 3 updates');
+  // Change restores the card with every value.
+  await page.click('li[data-id="36"] [data-change]');
+  assert.equal(await isFolded(page, 36), false);
+  assert.equal(await page.isChecked('input[name="choice-36"][value="meeting"]'), true);
+  assert.equal(await page.inputValue('input[name="meetingDate-36"]'), TOMORROW);
+  assert.equal(await page.inputValue('input[name="note-36"]'), 'TEST fold note');
+  assert.equal(await isFolded(page, 39), true);
+  assert.equal((await page.textContent('li[data-id="39"] [data-picked-words]')).trim(), 'Selected: Reached the customer');
+  // Clearing an answer takes the lead out of the count.
+  await page.check('input[name="nochange-37"]');
+  assert.equal(await label(page), 'Save 4 updates');
+  await page.uncheck('input[name="nochange-37"]');
+  assert.equal(await label(page), 'Save 3 updates');
+  // Folded cards save exactly what they hold.
+  await Promise.all([page.waitForURL(/saved=3&of=3/), page.click('#pu-save')]);
+  const sent = [...saves()[0].updates].sort((a, b) => a.id - b.id);
+  assert.deepEqual(sent, [
+    { id: 36, choice: 'meeting', talkedToDoctor: 'Yes', meetingDate: TOMORROW, signedDate: '', signedProduct: '', closedReason: '', note: 'TEST fold note', offices: '' },
+    { id: 38, choice: 'qualified', talkedToDoctor: 'Yes', meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note: '', offices: '' },
+    { id: 39, choice: 'qualified', talkedToDoctor: 'Yes', meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note: '', offices: 'yes' },
+  ]);
+  await page.close();
+});
+
+await check('Release A: keys never fold early, Tab out folds, focus ring is navy', async () => {
+  const page = await phone.newPage();
+  await open(page);
+  await page.focus('input[name="choice-38"][value="qualified"]');
+  await page.keyboard.press('Space');
+  await page.keyboard.press('ArrowDown');
+  assert.equal(await page.isChecked('input[name="choice-38"][value="trying"]'), true);
+  assert.equal(await isFolded(page, 38), false, 'arrowing through stages must not fold');
+  const ring = await page.$eval('input[name="choice-38"][value="trying"]', (el) => getComputedStyle(el).outlineColor);
+  assert.equal(ring, 'rgb(0, 47, 109)');
+  for (let i = 0; i < 8; i += 1) {
+    const inside = await page.evaluate(() => document.activeElement?.closest('li')?.dataset.id === '38');
+    if (!inside) break;
+    await page.keyboard.press('Tab');
+  }
+  assert.equal(await isFolded(page, 38), true, 'Tab out of a complete card folds it');
+  // Back to the Change button by keyboard: it shows the same ring and reopens the card.
+  await page.keyboard.press('Shift+Tab');
+  const change = await page.evaluate(() => document.activeElement?.matches('[data-change]'));
+  assert.equal(change, true, 'Shift+Tab lands on Change');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.activeElement).outlineColor), 'rgb(0, 47, 109)');
+  await page.keyboard.press('Enter');
+  assert.equal(await isFolded(page, 38), false);
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('value')), 'trying');
+  await page.close();
+});
+
+await check('Release A: sticky Save at 390x844 and desktop, never over the last card or an error', async () => {
+  for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 800 }]) {
+    const page = await browser.newPage({ viewport });
+    await open(page);
+    const tall = await page.evaluate(() => document.documentElement.scrollHeight > window.innerHeight + 10);
+    if (tall) {
+      const bottom = await page.$eval('.pu-savebar', (el) => el.getBoundingClientRect().bottom);
+      assert.ok(Math.abs(bottom - viewport.height) <= 1, `${viewport.width}: bar pinned to the bottom (${bottom})`);
+    }
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const end = await page.evaluate(() => ({
+      last: document.querySelector('.pu-lead:last-child').getBoundingClientRect().bottom,
+      bar: document.querySelector('.pu-savebar').getBoundingClientRect().top,
+    }));
+    assert.ok(end.last <= end.bar + 0.5, `${viewport.width}: last card ends ${end.last}, bar starts ${end.bar}`);
+    // An error on the last lead scrolls clear of the bar.
+    await page.check('.pu-lead:last-child input[value="signed"]');
+    await page.click('#pu-save');
+    await page.waitForTimeout(200);
+    // The page puts the error in view itself (smooth scroll: give it time).
+    await page.waitForTimeout(800);
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('name')?.startsWith('signedDate-')), true, 'focus on the missing field');
+    const err = await page.evaluate(() => ({
+      err: document.querySelector('.pu-lead:last-child .pu-err').getBoundingClientRect().bottom,
+      bar: document.querySelector('.pu-savebar').getBoundingClientRect().top,
+    }));
+    assert.ok(err.err <= err.bar + 0.5, `${viewport.width}: error ends ${err.err}, bar starts ${err.bar}`);
+    const wide = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    assert.ok(wide <= 0, `${viewport.width}: page is ${wide}px too wide`);
+    await page.close();
+  }
+});
+
 await check('a 422 reload names the lead and keeps typed answers', async () => {
   bodies.length = 0;
   saveReplies.push([422, { error: 'reload', id: 37 }]);

@@ -86,6 +86,22 @@ export const SAVE_WORDS = {
 export const savedWords = (n) => `Saved ${n} ${n === 1 ? 'update' : 'updates'}.`;
 
 /**
+ * The sticky Save button's words: how many leads have a complete answer right now. Each lead
+ * counts once, however often its answer changes. 0 is the plain "Save".
+ * @param {number} n
+ */
+export const saveLabel = (n) => (Number.isSafeInteger(n) && n > 0 ? `Save ${n} ${n === 1 ? 'update' : 'updates'}` : 'Save');
+
+/**
+ * What a collapsed lead card shows: the answer it will save.
+ * @param {string} choice a choice code, or 'nochange'
+ */
+export function pickedWords(choice) {
+  const c = STAND_CHOICES.find((x) => x.code === choice);
+  return c ? `Selected: ${c.label}` : '';
+}
+
+/**
  * Words for a save that 7F answered with 200 {"ok":true,"saved":n}, given how many updates
  * were sent. 7F skips a lead that closed or moved between its check and its write, so
  * `saved` can be below `sent`; the page must say so (Codex FT-3). `saved` above `sent`, or
