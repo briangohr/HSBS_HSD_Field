@@ -233,6 +233,52 @@ until Task 5 and Task 6 require a complete 10D pass; a row that changes while a 
 invalidates that version instead of being skipped. All V7 results are builder-recorded offline
 model results.
 
+### V8 Task 3 live: lists, imports, TEST proof and a Paid fix (11/23/2026, times ET)
+
+Under Brian's v3.4 cut (11/23 11:10 AM), Task 3 went live directly; Task 4, 6 and 7 are dropped.
+Field site only, TEST rows only, `RealPayoutsOn` No throughout, every mail to Brian only.
+Builder project files: `pay-ledger/proof-v34/task3/live/` (`LIVE_RECORD_2026-11-23.md`,
+`LIVE_RESULTS_2026-11-23.md`, `OVERLAP_NOTE_2026-11-23.md`, `fix-set-batch/`, `fix-paid/`).
+
+V8.1 Records and imports (11:18 to 11:37 AM). SPIFF Ledger `PayoutManifest` (indexed text) and
+the three V7.1 lists created; read-back matched the schemas. Monthly 7845d830d479680e imported as
+Update. By hand b9be7eec6391ae0a was refused by Power Automate ("Self reference is not supported
+when updating the value of variable 'batch'", action Set_batch_in). Fix: Set_batch_in became an
+If (Mode not List) holding Set_batch_from_input; lint now flags any variable action that reads
+its own variable. By hand c961e152ffdd52e8 imported. Both Off.
+
+V8.2 TEST proof (3:38 to 4:00 PM), rows 12 and 14 of one TEST rep, $200:
+
+| Check | Result |
+|---|---|
+| Step 0: one Live row, switch No, 0 open errors, 0 manifest rows, financial hash 2a50e4116865c4f0 | PASS |
+| List TEST: v1 Frozen then Delivered, 2 lines, $200, both rows stamped, one list mail with CSVs | PASS |
+| Same List again: "nothing to pay", no second version | PASS |
+| Resend v1: same frozen list mail, no ledger change | PASS |
+| Forwarded v1, then the same again: Forwarded once, the repeat a no-op, no mail | PASS |
+| Paid refused, nothing written: wrong Manifest ID, Version 2, Lines 3 | PASS |
+| Paid v1 (first run) | FAIL: header closed Paid, 0 rows marked Paid (V8.3) |
+| Paid retry with the same Confirmation ID on the fixed build: both rows Paid, one confirmation | PASS |
+| Paid repeat: no row change. A second Confirmation ID on the list: refused | PASS |
+| Real List, Resend and Paid with the switch No: each Failed at Real_gate, one error row each, no ledger change | PASS |
+| Cleanup: error rows resolved, rows back to Waiting with blank batch fields, financial hash 2a50e4116865c4f0 | PASS |
+
+V8.3 The Paid fix. Action Act read `contains(body('Np_sorted'), ...)`. Np_sorted is a Compose,
+and a Compose has no body, so Power Automate passed null and Act failed in every loop turn.
+Final_status then ran after the failed loop (it ran after any status), so the list closed Paid
+while every row stayed Waiting and the run Succeeded. The offline sim returned the Compose value
+for body(), which hid it. Fix: Act reads outputs('Np_sorted'); a new Pay_loop_failed step fails
+the run when the line loop fails (one error row, one failure mail, retry with the same
+Confirmation ID); Final_status runs only after the loop succeeds; the paid mail is skipped when
+the close was skipped. The sim now returns null for body() of a Compose and lint flags it. 10M
+model 149/149 lazy and eager (new P1 to P3); the c961e152 build fails 19 of them. HSBS 10 108/108,
+10D 49/49. By hand a4cbb3fe53d19272 imported as Update 3:55 PM, read back equal. Monthly unchanged.
+
+V8.4 Live now. By hand a4cbb3fe53d19272, monthly 7845d830d479680e, both Off, `RealPayoutsOn` No.
+The TEST manifest, its 2 lines and confirmation `TEST-CONF-1123-1` stay (Kind TEST). Two threads
+drove the by hand flow at once from 3:39 to 3:45 PM, so some steps ran twice; each repeat was a
+designed no-op or refusal. All V8 live facts are builder-recorded.
+
 ## Field site refresh (11/21/2026)
 
 Brian, 11/21/2026: "it should show real dollars. What I will need to create is a file for
