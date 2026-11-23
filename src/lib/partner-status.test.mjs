@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { decorateReferrals } from './track.mjs';
-import { STAND_CHOICES, STAND_WORDS, choiceGroupsFor, displayStatus, isHandedBackStatus, isQualifiedStatus } from './partner-status-words.mjs';
+import { QUALIFYING_CHOICES } from './partner-form.mjs';
+import { QUALIFIES_HINT, STAND_CHOICES, STAND_WORDS, choiceGroupsFor, displayStatus, isHandedBackStatus, isQualifiedStatus } from './partner-status-words.mjs';
 
 test('status words are the same stored values everywhere, and old values still display', () => {
   assert.deepEqual(STAND_WORDS, [
@@ -75,4 +76,17 @@ test('Not reached yet tells the partner a 4th one closes the lead (7F closes it,
   const trying = STAND_CHOICES.find((c) => c.code === 'trying');
   assert.match(trying.hint, /A 4th Not reached yet closes the lead\./);
   assert.doesNotMatch(trying.hint, /[\u2014\u2192]/);
+});
+
+test('every deal stage that qualifies the lead says so (Brian, 11/23/2026)', () => {
+  assert.equal(QUALIFIES_HINT, 'Counts as reached and qualified');
+  assert.doesNotMatch(QUALIFIES_HINT, /[\u2014\u2192]/);
+  for (const c of STAND_CHOICES.filter((x) => x.group === 'deal')) {
+    const qualifies = QUALIFYING_CHOICES.includes(c.code);
+    assert.equal(c.hint === QUALIFIES_HINT, qualifies, c.code);
+  }
+  assert.deepEqual(
+    STAND_CHOICES.filter((c) => c.hint === QUALIFIES_HINT).map((c) => c.code),
+    ['meeting', 'proposal', 'signed'],
+  );
 });
