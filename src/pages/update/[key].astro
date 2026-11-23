@@ -155,6 +155,15 @@ const saved =
                     <h2 class="pu-ref" id={`lead-${lead.id}-title`}>
                       {lead.ref}: {lead.practice}
                     </h2>
+                    {/* A lead with a complete answer folds to this line. Every input stays in the
+                        form, hidden, so Save sends it exactly as before (Release A). */}
+                    <div class="pu-picked" data-picked hidden>
+                      <p class="pu-picked-words" id={`picked-${lead.id}`} data-picked-words />
+                      <button type="button" class="pu-change" data-change aria-describedby={`picked-${lead.id} lead-${lead.id}-title`}>
+                        Change
+                      </button>
+                    </div>
+                    <div class="pu-open" data-open>
                     <dl class="pu-facts">
                       <div>
                         <dt>Contact</dt>
@@ -183,6 +192,7 @@ const saved =
                       {choiceGroupsFor(lead.status).map((g) => (
                         <div class="pu-group">
                           {g.heading && <p class="pu-group-h">{g.heading}</p>}
+                          {g.note && <p class="pu-group-note">{g.note}</p>}
                           {g.done && <p class="pu-done" data-done={g.group}>{g.done} (done)</p>}
                           {g.choices.map((c) => (
                             <label class="pu-opt">
@@ -250,15 +260,18 @@ const saved =
                       <input type="text" name={`note-${lead.id}`} maxlength={NOTE_MAX} autocomplete="off" />
                     </label>
                     <p class="pu-err" role="alert" hidden />
+                    </div>
                   </fieldset>
                 </li>
               ))}
             </ol>
 
             {leads.length > 0 && (
-              <button type="submit" id="pu-save" class="pu-save" disabled>
-                Save
-              </button>
+              <div class="pu-savebar">
+                <button type="submit" id="pu-save" class="pu-save" disabled>
+                  Save
+                </button>
+              </div>
             )}
           </form>
         )
@@ -303,13 +316,30 @@ const saved =
       .pu-more[hidden], .pu-err[hidden] { display: none; }
       .pu-err { color: var(--btn-red); font-weight: 600; margin: 0.6rem 0 0; overflow-wrap: anywhere; }
       .pu-card:disabled { opacity: 0.75; }
+      /* Sticky Save (Release A). It sits in the form's flow at the end, so it never covers the
+         last card; scroll-padding keeps a focused field or error clear of it mid-list. */
+      html:has(body.pu) { scroll-padding-bottom: 6rem; }
+      .pu-savebar {
+        position: sticky; bottom: 0; z-index: 2; margin: 0.4rem 0 0;
+        padding: 0.6rem 0 calc(0.6rem + env(safe-area-inset-bottom));
+        background: var(--bg-accent); box-shadow: 0 -8px 12px -10px rgba(0, 47, 109, 0.35);
+      }
+      .pu-group-note { margin: 0.15rem 0 0.1rem; font-size: 0.9rem; color: var(--muted); }
+      .pu-picked { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin: 0.4rem 0 0; }
+      .pu-picked[hidden], .pu-open[hidden] { display: none; }
+      .pu-picked-words { margin: 0; font-weight: 600; flex: 1 1 12rem; overflow-wrap: anywhere; }
+      .pu-change {
+        min-height: 44px; min-width: 44px; padding: 0 1rem; font: inherit; font-weight: 600; color: var(--hs-navy);
+        background: #fff; border: 1px solid var(--hs-navy); border-radius: 8px; cursor: pointer;
+      }
       .pu-save {
         min-height: 48px; width: 100%; font: inherit; font-weight: 700; font-size: 1.05rem; border: 0; border-radius: 10px;
         background: var(--hs-blue); color: #fff; cursor: pointer;
       }
       .pu-save:disabled { opacity: 0.6; cursor: default; }
-      .pu-save:focus-visible, .pu-opt input:focus-visible, .pu-field input:focus-visible, .pu-field select:focus-visible {
-        outline: 3px solid var(--hs-sky); outline-offset: 2px;
+      /* Navy focus ring: 13:1 on white (sky was 2.65:1, under the 3:1 floor). */
+      .pu-save:focus-visible, .pu-change:focus-visible, .pu-opt input:focus-visible, .pu-field input:focus-visible, .pu-field select:focus-visible {
+        outline: 3px solid var(--hs-navy); outline-offset: 2px;
       }
     </style>
 
@@ -322,7 +352,9 @@ const saved =
         checkUpdate,
         easternToday,
         fieldWords,
+        pickedWords,
         reloadWords,
+        saveLabel,
         saveResultWords,
       } from '../../lib/partner-form.mjs';
 
@@ -335,6 +367,8 @@ const saved =
         // A save with no clear answer keeps its id and its exact body, so Save resends it.
         let pending: { submissionId: string; updates: Record<string, unknown>[] } | null = null;
         let busy = false;
+        // True from pointer down until just after pointer up (see focusout below).
+        let pressing = false;
 
         const noChange = (li: HTMLLIElement) => li.querySelector<HTMLInputElement>('input[data-nochange]');
         const stageInputs = (li: HTMLLIElement) => [...li.querySelectorAll<HTMLInputElement>(`input[name="choice-${li.dataset.id}"]`)];
@@ -349,6 +383,49 @@ const saved =
         const card = (li: HTMLLIElement) => li.querySelector('fieldset.pu-card') as HTMLFieldSetElement;
         const errorLine = (li: HTMLLIElement) => li.querySelector('.pu-err') as HTMLElement;
         const touched = (li: HTMLLIElement) => Boolean(field(li, 'choice') || field(li, 'note'));
+        // One lead's answer as checkUpdate reads it. Save and the live count both use this.
+        const answer = (li: HTMLLIElement) => ({
+          id: Number(li.dataset.id),
+          choice: field(li, 'choice'),
+          meetingDate: field(li, 'meetingDate'),
+          signedDate: field(li, 'signedDate'),
+          signedProduct: field(li, 'signedProduct'),
+          closedReason: field(li, 'closedReason'),
+          note: field(li, 'note'),
+          offices: li.dataset.askOffices === 'true' ? field(li, 'offices') : '',
+          askOffices: li.dataset.askOffices === 'true',
+        });
+        // Complete: an answer Save would send as it stands, follow-up fields included.
+        const complete = (li: HTMLLIElement) => touched(li) && checkUpdate(answer(li), easternToday()).ok;
+
+        // Release A: the sticky Save counts complete leads (each once), and a complete lead
+        // folds to "Selected: <answer>" with Change. Folding only hides; every value stays in
+        // the form, so collect() and the 7F body are unchanged.
+        const openPart = (li: HTMLLIElement) => li.querySelector('[data-open]') as HTMLElement;
+        const pickedPart = (li: HTMLLIElement) => li.querySelector('[data-picked]') as HTMLElement;
+        const folded = (li: HTMLLIElement) => openPart(li).hidden;
+        const refresh = () => {
+          button.textContent = saveLabel(leads.filter(complete).length);
+          // Nothing picked: Save stays off. Something picked but not complete: Save stays on,
+          // so pressing it names what is missing. A pending resend keeps Save on.
+          if (!busy && !pending) button.disabled = !leads.some(touched);
+        };
+        const fold = (li: HTMLLIElement) => {
+          if (busy || folded(li) || !complete(li)) return;
+          const had = li.contains(document.activeElement);
+          (li.querySelector('[data-picked-words]') as HTMLElement).textContent = pickedWords(field(li, 'choice'));
+          openPart(li).hidden = true;
+          pickedPart(li).hidden = false;
+          if (had) li.querySelector<HTMLButtonElement>('[data-change]')?.focus();
+        };
+        const unfold = (li: HTMLLIElement, focusAnswer: boolean) => {
+          if (!folded(li)) return;
+          openPart(li).hidden = false;
+          pickedPart(li).hidden = true;
+          if (!focusAnswer) return;
+          const checked = li.querySelector<HTMLInputElement>('input[type="radio"]:checked:not([name^="offices-"]), input[data-nochange]:checked');
+          (checked ?? li.querySelector<HTMLInputElement>('input:not([disabled])'))?.focus();
+        };
 
         const showMore = (li: HTMLLIElement) => {
           const choice = field(li, 'choice');
@@ -358,6 +435,18 @@ const saved =
         };
         leads.forEach((li) => {
           showMore(li);
+          // A complete card folds once the partner moves on: Tab out of it, or click or tap
+          // anywhere else (below). Never on the pick itself, so arrowing through the stages or
+          // changing your mind inside the card costs nothing.
+          li.addEventListener('input', refresh);
+          li.addEventListener('focusout', (event) => {
+            // A press moves focus on pointer down; folding then would shift the page under the
+            // pointer and lose the click (Save at the end of the page). The click handler folds.
+            if (pressing) return;
+            const next = (event as FocusEvent).relatedTarget as Node | null;
+            if (next && !li.contains(next)) fold(li);
+          });
+          li.querySelector('[data-change]')?.addEventListener('click', () => unfold(li, true));
           li.addEventListener('change', (event) => {
             const box = noChange(li);
             if (box && event.target === box) {
@@ -368,7 +457,16 @@ const saved =
               }
             }
             showMore(li);
+            refresh();
           });
+        });
+        // After a click lands (not on press, so nothing moves under a finger mid-tap), fold every
+        // other complete card. Safari does not focus a clicked radio, so focusout alone misses it.
+        document.addEventListener('pointerdown', () => (pressing = true), true);
+        document.addEventListener('pointerup', () => setTimeout(() => (pressing = false)), true);
+        document.addEventListener('pointercancel', () => (pressing = false), true);
+        document.addEventListener('click', (event) => {
+          for (const li of leads) if (!li.contains(event.target as Node)) fold(li);
         });
 
         const clearErrors = () =>
@@ -378,6 +476,7 @@ const saved =
             line.textContent = '';
           });
         const flag = (li: HTMLLIElement, words: string) => {
+          unfold(li, false);
           const line = errorLine(li);
           line.textContent = words;
           line.hidden = false;
@@ -388,24 +487,11 @@ const saved =
         const collect = () => {
           const today = easternToday();
           const updates: Record<string, unknown>[] = [];
-          let first: { li: HTMLLIElement; words: string } | null = null;
+          let first: { li: HTMLLIElement; words: string; field: string } | null = null;
           for (const li of leads) {
             if (!touched(li)) continue;
             const ref = li.dataset.ref ?? '';
-            const result = checkUpdate(
-              {
-                id: Number(li.dataset.id),
-                choice: field(li, 'choice'),
-                meetingDate: field(li, 'meetingDate'),
-                signedDate: field(li, 'signedDate'),
-                signedProduct: field(li, 'signedProduct'),
-                closedReason: field(li, 'closedReason'),
-                note: field(li, 'note'),
-                offices: li.dataset.askOffices === 'true' ? field(li, 'offices') : '',
-                askOffices: li.dataset.askOffices === 'true',
-              },
-              today,
-            );
+            const result = checkUpdate(answer(li), today);
             if (result.ok) {
               // The server fills in Talked To Doctor from the choice. Sending one marks an
               // old page (docs/field-flow-contract.md, 7F), so the new page leaves it out.
@@ -415,7 +501,7 @@ const saved =
             } else {
               const words = fieldWords(ref, result.field);
               flag(li, words);
-              first ??= { li, words };
+              first ??= { li, words, field: result.field };
             }
           }
           return { updates, first };
@@ -491,7 +577,11 @@ const saved =
           const { updates, first } = collect();
           if (first) {
             status.textContent = first.words;
-            first.li.querySelector<HTMLElement>('input, select')?.focus();
+            // Focus the field that is missing, next to its error, and keep the error clear of the
+            // sticky Save (scroll-padding-bottom).
+            const named = first.li.querySelector<HTMLElement>(`[name="${first.field}-${first.li.dataset.id}"]`);
+            (named ?? first.li.querySelector<HTMLElement>('input, select'))?.focus();
+            errorLine(first.li).scrollIntoView({ block: 'nearest' });
             return;
           }
           if (updates.length === 0) {
@@ -505,7 +595,7 @@ const saved =
           void send(crypto.randomUUID(), updates);
         });
 
-        button.disabled = false;
+        refresh();
         // A saved message shows once; a refresh does not repeat it.
         if (location.search.includes('saved=')) history.replaceState(null, '', location.pathname);
       }

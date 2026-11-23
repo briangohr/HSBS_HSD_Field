@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { STAND_CHOICES } from './partner-status-words.mjs';
 import { describe, test } from 'node:test';
-import { CLOSED_REASONS, LEGACY_CLOSED_REASONS, QUALIFYING_CHOICES, TALKED_CHOICES, TALKED_FOR, checkUpdate, checkUpdates, easternToday, dueLine, isDate, isPartnerKey, noChangeHint, nowLine, saveResultWords, showDate } from './partner-form.mjs';
+import { CLOSED_REASONS, LEGACY_CLOSED_REASONS, QUALIFYING_CHOICES, TALKED_CHOICES, TALKED_FOR, checkUpdate, checkUpdates, easternToday, dueLine, isDate, isPartnerKey, noChangeHint, nowLine, pickedWords, saveLabel, saveResultWords, showDate } from './partner-form.mjs';
 
 const TODAY = '2026-11-20';
 // The new page sends no Talked To Doctor answer; checkUpdate fills it in from the choice.
@@ -204,4 +204,21 @@ describe('office count answer (Brian, 11/22/2026)', () => {
     assert.equal(checkUpdate({ ...base, choice: 'qualified', askOffices: true }, null).ok, true);
     assert.equal('askOffices' in ok({ ...base, choice: 'qualified', askOffices: true, offices: 'yes' }), false, 'never sent');
   });
+});
+
+test('the sticky Save says how many leads will save (Brian, 11/23/2026 Release A)', () => {
+  assert.equal(saveLabel(0), 'Save');
+  assert.equal(saveLabel(1), 'Save 1 update');
+  assert.equal(saveLabel(2), 'Save 2 updates');
+  assert.equal(saveLabel(10), 'Save 10 updates');
+  for (const bad of [-1, 1.5, NaN, undefined]) assert.equal(saveLabel(bad), 'Save');
+});
+
+test('a collapsed card names the answer it will save', () => {
+  assert.equal(pickedWords('qualified'), 'Selected: Reached the customer');
+  assert.equal(pickedWords('meeting'), 'Selected: Demo set');
+  assert.equal(pickedWords('nochange'), 'Selected: No change this week');
+  assert.equal(pickedWords(''), '');
+  assert.equal(pickedWords('bogus'), '');
+  for (const c of STAND_CHOICES) assert.doesNotMatch(pickedWords(c.code), /[—→]/);
 });

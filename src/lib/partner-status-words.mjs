@@ -13,11 +13,11 @@ export const STAND_WORDS = [
 ];
 
 /**
- * The hint under every deal stage that also qualifies the lead. A partner picks one stage,
- * the furthest, so a first update of Demo set alone records Qualified Yes too (Brian,
- * 11/23/2026: picking Demo set looked like it dropped qualified).
+ * One line under the After qualified heading. A partner picks one stage, the furthest, so a
+ * first update of Demo set alone records Qualified Yes too (Brian, 11/23/2026: picking Demo
+ * set looked like it dropped qualified). Said once, not under each stage (Release A).
  */
-export const QUALIFIES_HINT = 'Counts as reached and qualified';
+export const QUALIFIES_LINE = 'Demo set, Proposal, and Signed count as reached and qualified.';
 
 /**
  * "Where does it stand?" on the partner page, one list (Brian, 11/20/2026, after the
@@ -30,9 +30,9 @@ export const STAND_CHOICES = [
   { code: 'qualified', label: 'Reached the customer', hint: 'Knows you will follow up and wants a demo', group: 'qualify' },
   { code: 'trying', label: 'Not reached yet', hint: 'Attempts 1 to 3 so far. A 4th Not reached yet closes the lead. Need help reaching them? Reply to the intro email.', group: 'qualify' },
   { code: 'dq_noanswer', label: 'Disqualified: no answer after 4 attempts', hint: '', group: 'qualify' },
-  { code: 'meeting', label: 'Demo set', hint: QUALIFIES_HINT, group: 'deal' },
-  { code: 'proposal', label: 'Proposal or agreement sent', hint: QUALIFIES_HINT, group: 'deal' },
-  { code: 'signed', label: 'Signed (Closed won)', hint: QUALIFIES_HINT, group: 'deal' },
+  { code: 'meeting', label: 'Demo set', hint: '', group: 'deal' },
+  { code: 'proposal', label: 'Proposal or agreement sent', hint: '', group: 'deal' },
+  { code: 'signed', label: 'Signed (Closed won)', hint: '', group: 'deal' },
   { code: 'lost', label: 'Not moving forward (Closed lost)', hint: '', group: 'deal' },
   // Not a stage: a weekly check-in at any step (a demo set 2 weeks out has a week with no
   // change). The page shows it as its own tick box under the stage list.
@@ -48,8 +48,8 @@ export const RETIRED_CHOICE_CODES = ['dq_notinterested'];
 
 /** The headings over each group of STAND_CHOICES, in page order. */
 export const STAND_GROUPS = [
-  { group: 'qualify', heading: 'Qualifying' },
-  { group: 'deal', heading: 'After qualified' },
+  { group: 'qualify', heading: 'Qualifying', note: '' },
+  { group: 'deal', heading: 'After qualified', note: QUALIFIES_LINE },
 ];
 
 /**
