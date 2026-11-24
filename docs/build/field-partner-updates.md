@@ -579,6 +579,67 @@ referrals went to the recycle bin after each part.
 **Next 7F change.** The Friday cadence patch (PR 43) must be rebuilt on a fresh export of
 this 7F, not on an older package.
 
+## G. 7F leads read: fewer steps in a row (11/24/2026)
+
+**Why.** Tue 11/24 the partner page timed out once at 8:04 AM ET (site log "update page: flow
+timeout", the 20 s `LEADS_TIMEOUT_MS`). The 7F run history for 8:03 to 8:05 AM ET showed three
+`leads` reads, all on the TEST partner link with 3 to 5 TEST leads: 25 s, 15 s and 48 s (the
+48 s run failed at `Respond_leads` with ActionResponseTimedOut). At 8:11 AM the same read took
+7 s. No real partner read ran in that window. Lead count was not the cost. Power Automate waits
+a little before each step, and in the 8 AM rush (7G asks go out then) the wait was about 1 s
+per step. The old answer waited on about 45 steps in a row: 33 top-level steps one after the
+other, then the `Each_lead` loop (5 steps per lead, the slowest lead sets the pace), then
+`Leads_done`.
+
+**What changed in 7F (no site change, no answer change).**
+
+1. Top level: steps that do not need each other run side by side. The constants, the three
+   variables, `Key_text` and the Friday date steps start at the trigger. The key check chain
+   keeps its order (`Key_shape_bad`, `Get_partner`, `Partner_read`, `Partner_count`,
+   `Partner`). Then `Partner_title`, `Key_expired` and `Services` run side by side, and
+   `Get_cases` waits for all of them, so an expired key still never reads cases.
+   `Mine` is folded into `Open_mine` (the same two filters in one Query). `Action_switch`
+   waits for every top-level step it reads. Only `runAfter` changed outside the leads branch;
+   the save branch is byte for byte the same.
+2. Leads branch: no loop. `Ref_pairs` and `Ref_map` turn the one Referrals read into a map by
+   item id (string() of a row is its JSON). Beside it, `L_d0`, `L_n1`, `L_n2` work out the
+   2nd business day after each case's Created date (ET), the same 15-day window and holiday
+   list as before. `L_idx` keeps the leads with exactly one Referrals row that has
+   Introduced On (the old skip rule), and `L_out` builds the same lead fields as
+   `Append_lead`. `Leads_done` answers 503 "read failed" if any of these steps fails or the
+   Referrals read hits 5000.
+
+The answer waits on about 20 steps in a row now, whatever the lead count. Built by
+`partner-updates/leadspeed/patch_7f_leads.py` (in-page copy `patch_leadspeed_inpage.js`) from
+the live export. Offline model test `test_7f_leads.py`, old 7F against new: 32 of 32 pass
+(same leads answer on base, holiday, date-form, Direct Dental office, escaping, missing
+referral and 300-lead worlds; 12 shuffled step orders; 8 saves with the same answer and writes;
+the 404 and 410 gates; a failed Select is 503; every step waits on the steps it reads; longest
+expression 3,554 characters).
+
+**Live change record (Tue 11/24/2026, ET).**
+
+| When | What | Result |
+|---|---|---|
+| About 8:37 AM | Live 7F exported in Browser 1 | Hash c561e37634bbac05, the same as the model's base |
+| About 8:39 AM | Patched in page | Hash b44f813897040ba8, the same as the tested build; zip round trip checked |
+| 8:43 AM | Imported as Update onto HSBS 7F Field partner (new site), top SharePoint and Outlook connections | Import succeeded; flow arrived Off |
+| 8:44 AM | Turned On | Status On |
+| 8:45 to 8:47 AM | TEST partner page on production, 4 reads | 200 in 3.1 to 3.2 s, 3 TEST leads (F65, F68, F71); the old 8:04 AM read also answered 3, starting with F65 |
+| About 8:48 AM | Real partner pages, read only (no save) | HealthFirst 200 in 3.3 s, 11 leads (the 10 asked plus F703, due 11/25). Direct Dental 200 in 3.6 s, 6 leads. Both match the 8:35 AM read-back |
+| About 8:48 AM | Save on the TEST link for a case that is not the partner's (id 999999) | 422 `reload` in 10.0 s, nothing written |
+
+Before the change, an off-peak read took 6.7 to 8.2 s (11/22 records). Not proven yet: the
+8 AM rush itself. The next 7G run (Wed 11/25 8 AM) is the first one on this build.
+
+**Undo.** Import `partner-updates/leadspeed/rollback/HSBS-7F-before-leadspeed.zip` (hash
+c561e37634bbac05) as Update onto HSBS 7F Field partner (new site), turn it On, then one TEST
+leads read.
+
+**Next 7F change.** Build on a fresh export (now b44f813897040ba8). The leads branch has no
+`Each_lead` or `Append_lead` now; per-lead work goes in Selects over `Open_mine` and joins by
+index (`body('Open_mine')[item()]`).
+
 ## What the site, 1F and 3F keep
 
 - 3F HealthFirst and 3F Staffing: no change. The site: no change (fact 1).
