@@ -54,7 +54,11 @@ Status: built and tested offline. Nothing is live, no mail went to anyone. The l
 - A real row of kind `Rep thanks` may mail the one address it names when that address is on the Rep Roster
   and is not a Test row, has no `test` in it, and the Cc is empty or on `Real_to` (Brian). Any other kind,
   any TEST row and any second address stays under the old rule: To must be on `Real_to`.
-- A failed Rep Roster read leaves the row Pending and flags the run, so nothing sends by mistake.
+- Send-time switch: before it sends a real `Rep thanks` row, 7N reads Ledger Settings `Live` and sends only when
+  exactly one Live row has `WinEmailOn` Yes. While it says No, or the row is missing, the row waits Pending
+  (not parked, no tries used) and goes Expired after its 7 days. Turning the switch back on sends what is
+  still queued. TEST rows to Brian and every other kind of mail ignore the switch.
+- A failed Rep Roster or Ledger Settings read leaves the row Pending and flags the run, so nothing sends by mistake.
 - 7N still writes no content. It sends the stored To, Cc, Subject and Body. The 11/22 writer stamp on the
   Outbox writes is kept (the generator now applies it, same 7 steps as live).
 - Turning this on is the new real recipient decision: Brian's written OK is needed before `WinEmailOn`
@@ -79,8 +83,8 @@ Status: built and tested offline. Nothing is live, no mail went to anyone. The l
 - HSBS 10: 129 of 129 (the earlier 108 plus 21 for these mails: TEST and real, WinEmailOn and WinEmailFrom,
   older rows, void and repeat office, Direct Dental, the Group amount, a signed amount above 0, hostile
   values, and a mail failure that never blocks the ledger row). 10D 49 of 49.
-- HSBS 7N: 67 of 67 (12 new: real rep, not on the roster, Test rep, other kinds, bad Cc, two addresses,
-  TEST row, read failure).
+- HSBS 7N: 73 of 73 (18 new: real rep, not on the roster, Test rep, other kinds, bad Cc, two addresses,
+  TEST row, read failure, and the send-time switch held, released, missing, expired, TEST and other mail).
 - Flow lint: 0 problems in both. Generators and tests live in the project files under `win-email/build` and
   `partner-updates/build`, not in this repo.
 
@@ -96,7 +100,8 @@ Status: built and tested offline. Nothing is live, no mail went to anyone. The l
 
 ## Undo
 
-- Quick: `WinEmailOn` No. Real mail stops at once. Rows already Pending to a rep can be set to Cleared.
+- Quick: `WinEmailOn` No. New rows stop at once and 7N holds every queued real rep row (the send-time switch above),
+  so no real rep mail goes out. Queued rows can also be set to Cleared.
 - Full: import the saved HSBS 10 and 7N packages as Update. The Outbox rows stay as a record.
 
 ## Not built yet

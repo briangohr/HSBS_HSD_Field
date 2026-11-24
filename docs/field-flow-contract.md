@@ -603,7 +603,7 @@ The site never calls the rep thank-you mails. HSBS 10 writes one Field Notify Ou
 `Rep thanks` when a rep's lead qualifies and again when it signs, and HSBS 7N sends it (build sheet RT,
 `docs/build/field-rep-thanks-mail.md`, 11/24/2026). The mail names the doctor, the practice, the account
 number and the stage amount, and carries no app key or link. It can reach a rep only when Ledger
-Settings `WinEmailOn` is Yes, only for a rep on the Rep Roster, and never for a TEST case, which mails Brian
+Settings `WinEmailOn` is Yes (HSBS 10 checks it when it makes the row and 7N checks it again before it sends), only for a rep on the Rep Roster, and never for a TEST case, which mails Brian
 only. The stage amount is the ledger amount, so the mail agrees with My Earnings (Awaiting payment).
 `public/logos/hsbs-email-logo.png` is the mail logo. Nothing in `earnings`, `list` or `team` changes.
 
