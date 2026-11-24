@@ -52,3 +52,4 @@ How to read them:
 | Go-live runbook | `field-two-track-go-live.md` |
 | What remains after launch | `field-two-track-remaining-work.md` |
 | PU, partner updates on the new site (11/20) | `field-partner-updates.md` |
+| RT, rep thank-you mails and the sharp partner intro (11/24) | `field-rep-thanks-mail.md` |
