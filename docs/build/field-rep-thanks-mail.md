@@ -1,4 +1,4 @@
-# RT: rep thank-you mails and the sharp partner intro (built 11/24/2026, not live)
+# RT: rep thank-you mails and the sharp partner intro (live 11/24/2026, WinEmailOn No)
 
 Brian, 11/24/2026 3:15 to 3:46 PM ET: a rep who refers a lead gets a thank-you mail when the lead qualifies
 and again when it signs, and the intro the partner gets uses the same sharper layout. Mockup approved:
@@ -72,13 +72,14 @@ Status: built and tested offline. Nothing is live, no mail went to anyone. The l
   number: `New <Partner> referral: <Practice> (JDE <jde>)`.
 - The body is two Composes, `Intro_a` and `Intro_b`, because one expression is capped at 8192 characters.
   The send action reads `concat(outputs('Intro_a'), outputs('Intro_b'))`.
-- The expressions read the live 3F column names. The Field copy's live `Send_intro` was not read for this
-  build, so the first live step reads it, changes any source that differs (the generator keeps them in one
-  table) and regenerates before the swap.
+- The expressions read the live 3F column names. Both live `Send_intro` actions were read from fresh exports on
+  11/24 and the generator has one source table each: HealthFirst (greeting `Hello HealthFirst team`, State row)
+  and Staffing (greeting `Hi <routed contact>`, no State row, routed address in the TEST banner). Kept from
+  the old mail: the Unitas "PPO fees AND HSRA" note line and the `NOT SENT, forward manually: ` subject prefix.
 
 ## Tests (offline, all pass)
 
-- Mail shell: 39 checks (subjects, amounts, $0 stage, promo line, blank JDE, Direct Dental wording, HTML
+- Mail shell: 44 checks (subjects, amounts, $0 stage, promo line, blank JDE, Direct Dental wording, HTML
   encoding, balanced markup, intro banners, no em dash or arrow, no HSPA, HSRA or NumbersIQ).
 - HSBS 10: 129 of 129 (the earlier 108 plus 21 for these mails: TEST and real, WinEmailOn and WinEmailFrom,
   older rows, void and repeat office, Direct Dental, the Group amount, a signed amount above 0, hostile
@@ -97,6 +98,20 @@ Status: built and tested offline. Nothing is live, no mail went to anyone. The l
    a sign each make one `[TEST]` mail with the right stage and amount. Save twice and see no second mail.
 5. Read the Field copy's `Send_intro`, apply the intro, send one TEST intro to Brian, compare with the mockup.
 6. Brian's go (written), then set `WinEmailFrom` to that moment and `WinEmailOn` to Yes.
+
+## Live record (11/24/2026, ET)
+
+- 4:00 PM SharePoint: Ledger Settings `WinEmailOn` (No), `WinEmailFrom`, `PromoName`; Outbox choice `Rep thanks`.
+- 4:11 PM HSBS 10 imported as Update (On 4:12 PM). 4:17 PM HSBS 7N imported as Update (On 4:18 PM).
+- TEST proof, all mail to Brian only, `WinEmailOn` No: HealthFirst qualify, a second save with no second row,
+  signed, and a Direct Dental Group qualify each made one `[TEST]` mail with the right stage and amount.
+- 4:43 PM HSBS 3F Staffing (new site) and 4:47 PM HSBS 3F HealthFirst (new site) imported as Update (On 4:44 and
+  about 4:48 PM). Change: new Composes `Intro_a` and `Intro_b`, `Intro_body` joins them, `Send_intro` Subject
+  replaced. TEST referrals 706 and 707 each made one `[TEST]` intro to Brian only at 4:49 PM.
+- Undo for the intro: delete `Intro_a` and `Intro_b`, restore the old `Intro_body` and Subject text (saved with
+  an exact hash in the project files under `win-email/intro/rollback`), or import an export taken before.
+- Not proven live yet: a real-looking case with `WinEmailOn` No (offline tests cover it; the next real qualify
+  shows a ledger row and no thanks row).
 
 ## Undo
 
