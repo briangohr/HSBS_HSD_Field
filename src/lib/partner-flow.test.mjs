@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { PartnerFlowError, listLeads, officeCheckEnabled, partnerPageEnabled, readLead, saveUpdates, sortLeads } from './partner-flow.mjs';
+import { PartnerFlowError, dealValueEnabled, listLeads, officeCheckEnabled, partnerPageEnabled, readLead, saveUpdates, sortLeads } from './partner-flow.mjs';
 import { partnerSave } from './partner-save.mjs';
 
 const KEY = 'ab'.repeat(20);
@@ -243,6 +243,61 @@ describe('office count check (Brian, 11/22/2026)', () => {
     for (const offices of ['maybe', 'YES', true, 3]) {
       const refused = await partnerSave({ key: KEY, submissionId: SID, updates: [{ ...SENT, offices }] });
       assert.deepEqual(refused, { status: 422, body: { error: 'bad_value', id: 36, field: 'offices' } }, String(offices));
+    }
+    assert.equal(posts.length, 0);
+  });
+});
+
+describe('Year 1 deal value (Brian, 11/25/2026)', () => {
+  const SENT = { ...UPDATE, choice: 'proposal', talkedToDoctor: '', meetingDate: '', dealValue: '25000' };
+  const off = () => delete process.env.PARTNER_DEAL_VALUE_ENABLED;
+  afterEach(off);
+  test('the switch is off unless exactly true, and needs the page switch', () => {
+    assert.equal(dealValueEnabled(), false);
+    process.env.PARTNER_DEAL_VALUE_ENABLED = 'TRUE';
+    assert.equal(dealValueEnabled(), false);
+    process.env.PARTNER_DEAL_VALUE_ENABLED = 'true';
+    assert.equal(dealValueEnabled(), true);
+    process.env.PARTNER_PAGE_ENABLED = 'false';
+    assert.equal(dealValueEnabled(), false);
+  });
+  test('switch off: the lead is exactly as before, dealValue dropped', async () => {
+    reply = () => [200, { partner: 'HealthFirst', leads: [{ ...LEAD, dealValue: '25000' }] }];
+    assert.deepEqual((await listLeads(KEY)).leads, [LEAD]);
+  });
+  test('switch on: the stored value is read as digits, anything else blank', async () => {
+    process.env.PARTNER_DEAL_VALUE_ENABLED = 'true';
+    reply = () => [200, { partner: 'HealthFirst', leads: [{ ...LEAD, dealValue: '25000' }] }];
+    assert.deepEqual((await listLeads(KEY)).leads, [{ ...LEAD, dealValue: '25000' }]);
+    for (const [v, want] of [['', ''], [undefined, ''], [null, ''], [40000, '40000'], ['12.5', ''], ['abc', ''], ['10000000', ''], [-1, '']]) {
+      assert.equal(readLead({ ...LEAD, dealValue: v })?.dealValue, want, String(v));
+    }
+  });
+  test('switch off: a sent dealValue is ignored and the 7F body matches main', async () => {
+    reply = () => [200, { ok: true, saved: 1 }];
+    for (const dealValue of ['25000', 'junk']) {
+      posts.length = 0;
+      assert.equal((await partnerSave({ key: KEY, submissionId: SID, updates: [{ ...SENT, dealValue }] })).status, 200);
+      assert.deepEqual(posts[0].updates, [{ ...UPDATE, choice: 'proposal', meetingDate: '' }]);
+      assert.equal('dealValue' in posts[0].updates[0], false);
+    }
+  });
+  test('switch on: the value reaches 7F; blank and an old page send blank', async () => {
+    process.env.PARTNER_DEAL_VALUE_ENABLED = 'true';
+    reply = () => [200, { ok: true, saved: 1 }];
+    await partnerSave({ key: KEY, submissionId: SID, updates: [SENT] });
+    assert.deepEqual(posts[0].updates, [{ ...UPDATE, choice: 'proposal', meetingDate: '', dealValue: '25000' }]);
+    const { dealValue: _none, ...oldPage } = SENT;
+    await partnerSave({ key: KEY, submissionId: SID, updates: [oldPage] });
+    assert.equal(posts[1].updates[0].dealValue, '');
+    await partnerSave({ key: KEY, submissionId: SID, updates: [{ ...SENT, choice: 'trying' }] });
+    assert.equal(posts[2].updates[0].dealValue, '');
+  });
+  test('switch on: bad input is refused before any post', async () => {
+    process.env.PARTNER_DEAL_VALUE_ENABLED = 'true';
+    for (const dealValue of ['10000000', '25.5', 'abc', '$25,000']) {
+      const refused = await partnerSave({ key: KEY, submissionId: SID, updates: [{ ...SENT, dealValue }] });
+      assert.deepEqual(refused, { status: 422, body: { error: 'bad_value', id: 36, field: 'dealValue' } }, dealValue);
     }
     assert.equal(posts.length, 0);
   });

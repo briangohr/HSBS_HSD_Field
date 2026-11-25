@@ -26,6 +26,7 @@ route answers 404 and no flow is called.
 | `PARTNER_PAGE_ENABLED` | `/update/<key>` and `/api/partner-save`, exactly `true` (and `REP_APP_ENABLED`). Off: 404 and no 7F call | No |
 | `PARTNER_FLOW_URL` | HSBS 7F Field partner (new site) trigger URL, `https` only | Yes |
 | `PARTNER_OFFICE_CHECK` | The partner page asks the office count on a Direct Dental Group lead (7F, below), exactly `true` (and `PARTNER_PAGE_ENABLED`). Off: no question, and `/api/partner-save` sends every `offices` blank, so no lead earns the group amount | No |
+| `PARTNER_DEAL_VALUE_ENABLED` | The partner page asks an optional Year 1 deal value on Demo set, Proposal and Signed, and the 7F save sends `dealValue` (7F, below), exactly `true` (and `PARTNER_PAGE_ENABLED`). Off: no field, `readLead` drops `dealValue`, and the save body has no `dealValue` key, exactly as before | No |
 | `REP_APP_COMPANIES` | Which companies Send offers: `HealthFirst`, `Staffing`, comma separated. Unset is HealthFirst only | No |
 | `REP_PAY_ENABLED` | Dollar amounts on screens, exactly `true`. Off until Brian approves pay | No |
 | `REP_PAY_PLAN` | HealthFirst pay plan words (`src/lib/rep-pay-plan.mjs`). Set to `reached:100,manager:50` (promo file) | No |
@@ -431,7 +432,7 @@ to 7F. Waits: 20 s for `leads`, 55 s for `save`.
 Cases item id), `ref` (the Referrals Title: `HSBS-F<n>`, or `HSBS-A<n>` for the 12 moved
 from the old site), `practice`, `contact`, `company`, `introducedOn`,
 `status` (Partner Status), `talkedToDoctor`, `meetingDate`, `nextUpdateDue`,
-`missedUpdates`, `askOffices`. Dates are `yyyy-MM-dd`. The site keeps only these (`readLead`); anything
+`missedUpdates`, `askOffices`, `dealValue`. Dates are `yyyy-MM-dd`. The site keeps only these (`readLead`); anything
 else, a phone, email or JDE included, is dropped. A lead with a bad `id` or `ref` is
 dropped. More than 500 leads is a failed read. The page sorts overdue (Missed Updates above
 0) first, then by due date.
@@ -442,6 +443,12 @@ dropped. More than 500 leads is a failed read. The page sorts overdue (Missed Up
 not Reached, Meeting set, Meeting held or Proposal or agreement sent). The site reads only an
 exact `true`, and only with `PARTNER_OFFICE_CHECK` on; anything else is `false`.
 
+`dealValue` (since 11/25/2026) is the case's stored `Deal Value Year 1` as a string of whole
+dollars (`"25000"`), or `""` when it is blank. `readLead` keeps it only with
+`PARTNER_DEAL_VALUE_ENABLED` on (then always, blank when 7F sent nothing, a number that is
+not whole, or more than 9,999,999); off, the lead has no `dealValue` key. The page pre-fills
+the field from it.
+
 ### save
 
 ```json
@@ -451,10 +458,14 @@ exact `true`, and only with `PARTNER_OFFICE_CHECK` on; anything else is `false`.
   "submissionId": "<uuid>",
   "updates": [
     { "id": 36, "choice": "meeting", "talkedToDoctor": "Yes", "meetingDate": "2026-11-24",
-      "signedDate": "", "signedProduct": "", "closedReason": "", "note": "", "offices": "" }
+      "signedDate": "", "signedProduct": "", "closedReason": "", "note": "", "offices": "",
+      "dealValue": "25000" }
   ]
 }
 ```
+
+`dealValue` is in every update only while `PARTNER_DEAL_VALUE_ENABLED` is on; off, the key is
+absent and the body is exactly as before.
 
 1 to 50 updates, each lead once, only the leads the partner touched. `choice` is one of
 `trying`, `qualified`, `dq_noanswer`, `dq_notinterested`, `meeting`, `proposal`, `signed`,
@@ -486,6 +497,20 @@ only when `RepPracticeType` is `Group` and `OfficeCountConfirmed` is `Yes`; othe
 private practice amount. HSBS 10 writes the qualified award once, so an answer must come
 on the save that qualifies the lead; a later one changes nothing. A page or 7F older than
 this change never sends or writes `offices`.
+
+Year 1 deal value (Brian, 11/25/2026, so emails and the Field Board carry a real number).
+`dealValue` is whole dollars as digits, `0` to `9999999`, or blank. The page asks "Year 1
+deal value in dollars, your best guess (optional)" on `meeting`, `proposal` and `signed`,
+pre-filled with the stored value, and is never required. The page drops `$`, commas and
+spaces before the check, and sends blank when the partner leaves the stored value as it is,
+so a resave does not restamp the date. The site (`checkUpdate`, with the switch on) sends it
+only on those three choices, blank on the rest; anything but digits in range on one of them
+is 422 `bad_value` with field `dealValue`, nothing posted. With the switch off a sent
+`dealValue` is ignored and none reaches 7F. Blank means "leave the stored value as it is",
+never "clear it". When it is not blank, 7F writes Service Cases `Deal Value Year 1`
+(Currency, 0 decimal places) and stamps `Deal Value Year 1 Updated` (Date and Time, now) in
+the same write as the rest of the update. A missing `dealValue` (an older page) is blank.
+7F older than this change ignores the key.
 
 A page loaded before 11/20/2026 still sends its own `talkedToDoctor` answer. An update that
 carries one gets the old rules, so an open tab or a retry of a partly written save still

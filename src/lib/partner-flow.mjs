@@ -9,7 +9,7 @@
 // that is not 40 hex characters, nothing is posted. This module never logs the key, the
 // URL or a lead. Contract: docs/field-flow-contract.md, "HSBS 7F".
 
-import { isDate, isLeadId, isPartnerKey } from './partner-form.mjs';
+import { dealValueOf, isDate, isLeadId, isPartnerKey } from './partner-form.mjs';
 import { oneLine } from './one-line.mjs';
 import { repAppEnabled } from './register-flow.mjs';
 
@@ -37,6 +37,13 @@ export const partnerPageEnabled = () => repAppEnabled() && env('PARTNER_PAGE_ENA
  * PARTNER_OFFICE_CHECK is exactly true: the page then never asks and the save sends no answer.
  */
 export const officeCheckEnabled = () => partnerPageEnabled() && env('PARTNER_OFFICE_CHECK') === 'true';
+
+/**
+ * Year 1 deal value (Brian, 11/25/2026): the page asks an optional whole-dollar value on Demo
+ * set, Proposal and Signed, and the save sends it. Off unless PARTNER_DEAL_VALUE_ENABLED is
+ * exactly true: the page and the 7F save body are then exactly as before.
+ */
+export const dealValueEnabled = () => partnerPageEnabled() && env('PARTNER_DEAL_VALUE_ENABLED') === 'true';
 
 /**
  * Why a 7F call did not give leads or a save.
@@ -125,7 +132,7 @@ export function readLead(raw) {
   const ref = oneLine(r.ref, 40);
   // New-site referrals are HSBS-F<n>; the 12 moved from the old site keep HSBS-A<n>.
   if (!/^HSBS-[A-Z]{1,3}\d{1,9}$/.test(ref)) return null;
-  return {
+  const lead = {
     id: /** @type {number} */ (r.id),
     ref,
     practice: oneLine(r.practice, 160),
@@ -141,6 +148,10 @@ export function readLead(raw) {
     // qualified yet. Anything but true is no. The page shows it only with the switch on.
     askOffices: r.askOffices === true && officeCheckEnabled(),
   };
+  // The case's stored Year 1 deal value, digits or blank. Kept only with the switch on, so
+  // the lead is exactly as before with it off.
+  if (dealValueEnabled()) return { ...lead, dealValue: dealValueOf(r.dealValue) ?? '' };
+  return lead;
 }
 
 /**

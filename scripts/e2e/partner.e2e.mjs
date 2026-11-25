@@ -15,6 +15,10 @@
 // - A missing answer names the lead and posts nothing. A 422 reload names the lead and keeps
 //   every typed answer. A save with no clear answer is resent with the same submissionId and
 //   the same updates.
+// - With PARTNER_DEAL_VALUE_ENABLED off, the page has no deal value field and the save body is
+//   exactly as before, even when 7F sends a stored value. On, the field shows only on Demo
+//   set, Proposal and Signed, pre-filled; "$25,000" is sent as 25000; the stored value left
+//   as it is is sent blank; bad input names the lead and posts nothing.
 
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
@@ -66,6 +70,7 @@ const LEADS = [
     nextUpdateDue: eastern(-1),
     missedUpdates: 1,
     doctorEmail: 'doctor@example.com',
+    dealValue: '25000',
   },
   {
     // Moved on from a meeting: the case still holds the old Meeting Date.
@@ -233,6 +238,11 @@ await check('page lists leads overdue first, no private fields, no analytics, no
 });
 
 const phone = await browser.newContext({ ...devices['iPhone 13'], viewport: { width: 375, height: 812 } });
+
+await check('deal value switch off: no field, no attribute, even with a stored value', async () => {
+  const html = await (await fetch(`${BASE}/update/${KEY}`)).text();
+  assert.doesNotMatch(html, /dealValue-|data-deal-value|Year 1 deal value/);
+});
 
 await check('375px: no sideways scroll', async () => {
   const page = await phone.newPage();
@@ -604,6 +614,102 @@ await check('the save API leaves the day rules to 7F, so a resend after midnight
   assert.equal(saves().length, 1);
   assert.equal(TODAY.length, 10);
 });
+
+if (process.env.PARTNER_SHOTS) {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  await open(page);
+  await page.addStyleTag({ content: '.pu-savebar { display: none !important; }' });
+  await page.check('input[name="choice-37"][value="proposal"]');
+  await page.locator('li[data-id="37"]').screenshot({ path: `${process.env.PARTNER_SHOTS}/deal-value-off.png` });
+  await page.close();
+}
+
+killDev(dev);
+
+// 3. Year 1 deal value on (Brian, 11/25/2026).
+dev = await startDev({
+  REP_APP_ENABLED: 'true',
+  PARTNER_PAGE_ENABLED: 'true',
+  PARTNER_OFFICE_CHECK: 'true',
+  PARTNER_DEAL_VALUE_ENABLED: 'true',
+  PARTNER_FLOW_URL: FLOW_URL,
+});
+const DEAL = 'input[name="dealValue-36"]';
+
+await check('deal value: shown only on Demo set, Proposal and Signed, pre-filled from 7F', async () => {
+  const page = await phone.newPage();
+  await open(page);
+  assert.equal(await page.isVisible(DEAL), false, 'hidden before a pick');
+  for (const choice of ['trying', 'qualified', 'dq_noanswer', 'lost']) {
+    await page.check(`input[name="choice-36"][value="${choice}"]`);
+    assert.equal(await page.isVisible(DEAL), false, choice);
+  }
+  for (const choice of ['meeting', 'proposal', 'signed']) {
+    await page.check(`input[name="choice-36"][value="${choice}"]`);
+    assert.equal(await page.isVisible(DEAL), true, choice);
+  }
+  await page.check('input[name="nochange-36"]');
+  assert.equal(await page.isVisible(DEAL), false, 'nochange');
+  assert.match(await page.textContent('li[data-id="36"]'), /Year 1 deal value in dollars, your best guess \(optional\)/);
+  assert.equal(await page.inputValue(DEAL), '');
+  assert.equal(await page.inputValue('input[name="dealValue-37"]'), '25000');
+  assert.equal(await page.getAttribute(DEAL, 'inputmode'), 'numeric');
+  const wide = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  assert.ok(wide <= 0, `page is ${wide}px too wide`);
+  await page.close();
+});
+
+await check('deal value: "$25,000" is sent as 25000; the stored value untouched is sent blank', async () => {
+  bodies.length = 0;
+  const page = await phone.newPage();
+  await open(page);
+  await page.check('input[name="choice-36"][value="proposal"]');
+  await page.fill(DEAL, '$25,000');
+  await page.check('input[name="choice-37"][value="proposal"]');
+  await page.check('input[name="choice-38"][value="meeting"]');
+  await page.fill('input[name="meetingDate-38"]', TOMORROW);
+  await page.fill('input[name="dealValue-38"]', '8000');
+  await page.check('input[name="choice-38"][value="trying"]');
+  await Promise.all([page.waitForURL(/saved=3&of=3/), page.click('#pu-save')]);
+  const sent = [...saves()[0].updates].sort((a, b) => a.id - b.id);
+  const blank = { talkedToDoctor: 'Yes', meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note: '', offices: '' };
+  assert.deepEqual(sent, [
+    { id: 36, choice: 'proposal', ...blank, dealValue: '25000' },
+    { id: 37, choice: 'proposal', ...blank, dealValue: '' },
+    { id: 38, choice: 'trying', ...blank, talkedToDoctor: 'Not yet, still trying', dealValue: '' },
+  ]);
+  await page.close();
+});
+
+await check('deal value: a changed stored value is sent; bad input names the lead and posts nothing', async () => {
+  bodies.length = 0;
+  const page = await phone.newPage();
+  await open(page);
+  await page.check('input[name="choice-37"][value="signed"]');
+  await page.fill('input[name="signedDate-37"]', TODAY);
+  await page.fill('input[name="dealValue-37"]', '25k');
+  assert.equal(await label(page), 'Save', 'bad value is not complete');
+  await page.click('#pu-save');
+  await page.waitForTimeout(300);
+  assert.match(await page.textContent('#pu-status'), /Lead HSBS-F91: check Year 1 deal value\./);
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('name')), 'dealValue-37');
+  assert.equal(saves().length, 0);
+  await page.fill('input[name="dealValue-37"]', '30000');
+  await Promise.all([page.waitForURL(/saved=1/), page.click('#pu-save')]);
+  assert.equal(saves()[0].updates[0].dealValue, '30000');
+  assert.equal(saves()[0].updates[0].signedDate, TODAY);
+  await page.close();
+});
+
+if (process.env.PARTNER_SHOTS) {
+  // Local screenshots for the wording review (not a test): PARTNER_SHOTS=<folder> npm run e2e.
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  await open(page);
+  await page.addStyleTag({ content: '.pu-savebar { display: none !important; }' });
+  await page.check('input[name="choice-37"][value="proposal"]');
+  await page.locator('li[data-id="37"]').screenshot({ path: `${process.env.PARTNER_SHOTS}/deal-value-on.png` });
+  await page.close();
+}
 
 killDev(dev);
 await browser.close();

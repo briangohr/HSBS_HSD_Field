@@ -2,7 +2,7 @@
 // word the answer. Used by /api/partner-save. It never logs the key or a lead.
 
 import { isSubmissionId } from './field-form.mjs';
-import { PartnerFlowError, officeCheckEnabled, saveUpdates } from './partner-flow.mjs';
+import { PartnerFlowError, dealValueEnabled, officeCheckEnabled, saveUpdates } from './partner-flow.mjs';
 import { SAVE_WORDS, checkUpdates, isPartnerKey, saveResultWords, savedWords } from './partner-form.mjs';
 
 /**
@@ -15,7 +15,8 @@ export async function partnerSave(raw) {
   const b = raw && typeof raw === 'object' && !Array.isArray(raw) ? /** @type {Record<string, unknown>} */ (raw) : {};
   if (!isPartnerKey(b.key)) return { status: 404, body: { error: SAVE_WORDS.badLink } };
   if (!isSubmissionId(b.submissionId)) return { status: 400, body: { error: 'bad_value', id: null, field: 'submissionId' } };
-  const checked = checkUpdates(b.updates, null);
+  // With the deal value switch off, a sent dealValue is ignored and none reaches 7F.
+  const checked = checkUpdates(b.updates, null, { dealValue: dealValueEnabled() });
   if (!checked.ok) {
     if (checked.field === 'none') return { status: 400, body: { error: 'none', message: SAVE_WORDS.nothing } };
     if (checked.field === 'tooMany') return { status: 400, body: { error: 'tooMany', message: SAVE_WORDS.tooMany } };
