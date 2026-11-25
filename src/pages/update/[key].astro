@@ -6,9 +6,11 @@
 // true. No analytics. Contract: docs/field-flow-contract.md, "HSBS 7F".
 import '../../styles/global.css';
 import { clientIp, journeyLimited, secretUrlNotFound } from '../../lib/http';
-import { PartnerFlowError, listLeads, partnerPageEnabled } from '../../lib/partner-flow.mjs';
+import { PartnerFlowError, dealValueEnabled, listLeads, partnerPageEnabled } from '../../lib/partner-flow.mjs';
 import {
   CLOSED_REASONS,
+  DEAL_VALUE_INPUT_MAX,
+  DEAL_VALUE_LABEL,
   MAX_UPDATES,
   NOTE_MAX,
   PRODUCT_MAX,
@@ -65,6 +67,10 @@ Astro.response.headers.set('X-Robots-Tag', 'noindex, nofollow');
 Astro.response.status = { invalid: 404, expired: 410, busy: 429, unavailable: 503, ready: 200 }[state];
 
 const today = easternToday();
+// Year 1 deal value (PARTNER_DEAL_VALUE_ENABLED). Off: no field, no data attribute, and the
+// save body is exactly as before.
+const dealOn = dealValueEnabled();
+const storedDeal = (lead: (typeof leads)[number]) => ('dealValue' in lead ? lead.dealValue : '');
 // After a save the page reloads with ?saved=<n>&of=<sent>, so a partial or zero save keeps
 // its words. A page opened before `of` existed sends ?saved=<n> alone: a full save.
 const params = Astro.url.searchParams;
@@ -136,7 +142,7 @@ const saved =
 
       {
         state === 'ready' && (
-          <form id="pu-form" class="pu-form" data-key={key} novalidate>
+          <form id="pu-form" class="pu-form" data-key={key} data-deal-value={dealOn ? 'on' : undefined} novalidate>
             <h1 class="pu-h1">{partner ? `Lead updates for ${partner}` : 'Lead updates'}</h1>
             <p class="pu-intro">
               Please update each lead within 2 business days. Answer only the leads that changed, then press Save once.
@@ -150,7 +156,7 @@ const saved =
 
             <ol class="pu-leads">
               {leads.map((lead) => (
-                <li class="pu-lead" data-id={String(lead.id)} data-ref={lead.ref} data-ask-offices={lead.askOffices ? 'true' : undefined}>
+                <li class="pu-lead" data-id={String(lead.id)} data-ref={lead.ref} data-ask-offices={lead.askOffices ? 'true' : undefined} data-deal-value={dealOn ? storedDeal(lead) : undefined}>
                   <fieldset class="pu-card" aria-labelledby={`lead-${lead.id}-title`}>
                     <h2 class="pu-ref" id={`lead-${lead.id}-title`}>
                       {lead.ref}: {lead.practice}
@@ -244,6 +250,21 @@ const saved =
                         <input type="text" name={`signedProduct-${lead.id}`} maxlength={PRODUCT_MAX} autocomplete="off" />
                       </label>
                     </div>
+                    {dealOn && (
+                      <div class="pu-more" data-for="deal" hidden>
+                        <label class="pu-field">
+                          <span>{DEAL_VALUE_LABEL}</span>
+                          <input
+                            type="text"
+                            inputmode="numeric"
+                            name={`dealValue-${lead.id}`}
+                            maxlength={DEAL_VALUE_INPUT_MAX}
+                            autocomplete="off"
+                            value={storedDeal(lead)}
+                          />
+                        </label>
+                      </div>
+                    )}
                     <div class="pu-more" data-for="lost" hidden>
                       <label class="pu-field">
                         <span>Reason</span>
@@ -346,10 +367,13 @@ const saved =
     <script>
       import { CLIENT_WAIT_MS } from '../../lib/field-form.mjs';
       import {
+        DEAL_VALUE_CHOICES,
         MAX_UPDATES,
         QUALIFYING_CHOICES,
         SAVE_WORDS,
         checkUpdate,
+        dealValueDigits,
+        dealValueOf,
         easternToday,
         fieldWords,
         pickedWords,
@@ -363,6 +387,9 @@ const saved =
       const status = document.getElementById('pu-status');
       if (form && button && status) {
         const key = form.dataset.key ?? '';
+        // Year 1 deal value switch, set by the server. Off: no dealValue is read or sent.
+        const dealOn = form.dataset.dealValue === 'on';
+        const checkOpts = { dealValue: dealOn };
         const leads = [...form.querySelectorAll<HTMLLIElement>('.pu-lead')];
         // A save with no clear answer keeps its id and its exact body, so Save resends it.
         let pending: { submissionId: string; updates: Record<string, unknown>[] } | null = null;
@@ -383,6 +410,12 @@ const saved =
         const card = (li: HTMLLIElement) => li.querySelector('fieldset.pu-card') as HTMLFieldSetElement;
         const errorLine = (li: HTMLLIElement) => li.querySelector('.pu-err') as HTMLElement;
         const touched = (li: HTMLLIElement) => Boolean(field(li, 'choice') || field(li, 'note'));
+        // The deal value to send: what the partner typed, $ and commas dropped. The stored value
+        // left as it is goes blank, so a resave keeps it and does not restamp its date.
+        const dealSent = (li: HTMLLIElement) => {
+          const typed = dealValueDigits(field(li, 'dealValue'));
+          return typed !== '' && dealValueOf(typed) === (li.dataset.dealValue ?? '') ? '' : typed;
+        };
         // One lead's answer as checkUpdate reads it. Save and the live count both use this.
         const answer = (li: HTMLLIElement) => ({
           id: Number(li.dataset.id),
@@ -394,9 +427,10 @@ const saved =
           note: field(li, 'note'),
           offices: li.dataset.askOffices === 'true' ? field(li, 'offices') : '',
           askOffices: li.dataset.askOffices === 'true',
+          ...(dealOn ? { dealValue: dealSent(li) } : {}),
         });
         // Complete: an answer Save would send as it stands, follow-up fields included.
-        const complete = (li: HTMLLIElement) => touched(li) && checkUpdate(answer(li), easternToday()).ok;
+        const complete = (li: HTMLLIElement) => touched(li) && checkUpdate(answer(li), easternToday(), checkOpts).ok;
 
         // Release A: the sticky Save counts complete leads (each once), and a complete lead
         // folds to "Selected: <answer>" with Change. Folding only hides; every value stays in
@@ -430,7 +464,8 @@ const saved =
         const showMore = (li: HTMLLIElement) => {
           const choice = field(li, 'choice');
           li.querySelectorAll<HTMLElement>('[data-for]').forEach((el) => {
-            el.hidden = el.dataset.for === 'qualifying' ? !QUALIFYING_CHOICES.includes(choice) : el.dataset.for !== choice;
+            const f = el.dataset.for;
+            el.hidden = f === 'qualifying' ? !QUALIFYING_CHOICES.includes(choice) : f === 'deal' ? !DEAL_VALUE_CHOICES.includes(choice) : f !== choice;
           });
         };
         leads.forEach((li) => {
@@ -491,7 +526,7 @@ const saved =
           for (const li of leads) {
             if (!touched(li)) continue;
             const ref = li.dataset.ref ?? '';
-            const result = checkUpdate(answer(li), today);
+            const result = checkUpdate(answer(li), today, checkOpts);
             if (result.ok) {
               // The server fills in Talked To Doctor from the choice. Sending one marks an
               // old page (docs/field-flow-contract.md, 7F), so the new page leaves it out.

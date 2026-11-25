@@ -60,6 +60,36 @@ export const QUALIFYING_CHOICES = ['qualified', 'meeting', 'proposal', 'signed']
 /** The office count answers: yes, 3 or more locations; no, fewer. */
 export const OFFICE_ANSWERS = ['yes', 'no'];
 
+/**
+ * Year 1 deal value (Brian, 11/25/2026): an optional whole-dollar guess on the stages where a
+ * deal is moving. Behind PARTNER_DEAL_VALUE_ENABLED. Blank means "leave the stored value as
+ * it is", never "clear it".
+ */
+export const DEAL_VALUE_CHOICES = ['meeting', 'proposal', 'signed'];
+export const DEAL_VALUE_MAX = 9_999_999;
+/** Room for "$9,999,999" as typed; the page strips $, commas and spaces before the check. */
+export const DEAL_VALUE_INPUT_MAX = 12;
+export const DEAL_VALUE_LABEL = 'Year 1 deal value in dollars, your best guess (optional)';
+
+/**
+ * What a partner typed, as the digits the check reads: "$25,000" is "25000". Anything else
+ * stays as typed, so the check refuses it.
+ * @param {string} typed
+ */
+export const dealValueDigits = (typed) => (typeof typed === 'string' ? typed.replace(/[$,\s]/g, '') : '');
+
+/**
+ * A deal value as 7F stores and sends it: whole dollars from 0 to 9,999,999 written as plain
+ * digits ("25000", no leading zeros), or null.
+ * @param {unknown} value
+ */
+export function dealValueOf(value) {
+  if (typeof value === 'number') return Number.isSafeInteger(value) && value >= 0 && value <= DEAL_VALUE_MAX ? String(value) : null;
+  if (typeof value !== 'string' || !/^\d{1,12}$/.test(value)) return null;
+  const n = Number(value);
+  return n <= DEAL_VALUE_MAX ? String(n) : null;
+}
+
 /** What the page names when a field is missing or wrong. */
 export const FIELD_WORDS = {
   choice: 'Where does it stand?',
@@ -70,6 +100,7 @@ export const FIELD_WORDS = {
   closedReason: 'Reason',
   note: 'Note',
   offices: 'Office count',
+  dealValue: 'Year 1 deal value',
 };
 
 export const SAVE_WORDS = {
@@ -163,11 +194,17 @@ const text = (v) => (typeof v === 'string' ? v : '');
  * `offices` is kept only on a qualifying choice and must be yes, no or blank. The page also
  * passes `askOffices` (never sent): then a qualifying choice needs an answer. The route
  * cannot tell which leads ask, so it takes a blank one; 7F writes it only on a Group lead.
+ *
+ * `dealValue` is read only with `opts.dealValue` (PARTNER_DEAL_VALUE_ENABLED). Off, it is
+ * ignored and the update has no dealValue key, exactly as before. On, the update always has
+ * one: digits on a deal choice (meeting, proposal, signed), blank on the rest. Blank keeps
+ * the stored value.
  * @param {unknown} raw
  * @param {string | null} today yyyy-MM-dd, Eastern, or null to skip the day rules
+ * @param {{ dealValue?: boolean }} [opts]
  * @returns {{ ok: true, update: Record<string, unknown> } | { ok: false, id: number | null, field: string }}
  */
-export function checkUpdate(raw, today) {
+export function checkUpdate(raw, today, opts = {}) {
   const u = raw && typeof raw === 'object' && !Array.isArray(raw) ? /** @type {Record<string, unknown>} */ (raw) : {};
   const id = isLeadId(u.id) ? /** @type {number} */ (u.id) : null;
   if (id === null) return { ok: false, id: null, field: 'id' };
@@ -197,6 +234,16 @@ export function checkUpdate(raw, today) {
     note,
     offices: qualifying ? /** @type {string} */ (offices) : '',
   };
+  if (opts.dealValue === true) {
+    const sent = u.dealValue === undefined || u.dealValue === null ? '' : u.dealValue;
+    let deal = '';
+    if (DEAL_VALUE_CHOICES.includes(choice) && sent !== '') {
+      const digits = dealValueOf(sent);
+      if (digits === null) return bad('dealValue');
+      deal = digits;
+    }
+    update.dealValue = deal;
+  }
   if (choice === 'meeting') {
     const date = text(u.meetingDate);
     if (!isDate(date) || (today !== null && date < today)) return bad('meetingDate');
@@ -222,15 +269,16 @@ export function checkUpdate(raw, today) {
  * Check a whole save: 1 to 50 updates, each lead once.
  * @param {unknown} updates
  * @param {string | null} today as checkUpdate
+ * @param {{ dealValue?: boolean }} [opts] as checkUpdate
  * @returns {{ ok: true, updates: Record<string, unknown>[] } | { ok: false, id: number | null, field: string }}
  */
-export function checkUpdates(updates, today) {
+export function checkUpdates(updates, today, opts = {}) {
   if (!Array.isArray(updates) || updates.length === 0) return { ok: false, id: null, field: 'none' };
   if (updates.length > MAX_UPDATES) return { ok: false, id: null, field: 'tooMany' };
   const seen = new Set();
   const clean = [];
   for (const raw of updates) {
-    const result = checkUpdate(raw, today);
+    const result = checkUpdate(raw, today, opts);
     if (!result.ok) return result;
     const id = /** @type {number} */ (result.update.id);
     if (seen.has(id)) return { ok: false, id, field: 'id' };

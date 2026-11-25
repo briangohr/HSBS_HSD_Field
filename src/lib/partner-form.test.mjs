@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { STAND_CHOICES } from './partner-status-words.mjs';
 import { describe, test } from 'node:test';
-import { CLOSED_REASONS, LEGACY_CLOSED_REASONS, QUALIFYING_CHOICES, TALKED_CHOICES, TALKED_FOR, checkUpdate, checkUpdates, easternToday, dueLine, isDate, isPartnerKey, noChangeHint, nowLine, pickedWords, saveLabel, saveResultWords, showDate } from './partner-form.mjs';
+import { CLOSED_REASONS, DEAL_VALUE_CHOICES, DEAL_VALUE_INPUT_MAX, DEAL_VALUE_LABEL, DEAL_VALUE_MAX, LEGACY_CLOSED_REASONS, QUALIFYING_CHOICES, TALKED_CHOICES, TALKED_FOR, checkUpdate, checkUpdates, dealValueDigits, dealValueOf, easternToday, dueLine, isDate, isPartnerKey, noChangeHint, nowLine, pickedWords, saveLabel, saveResultWords, showDate } from './partner-form.mjs';
 
 const TODAY = '2026-11-20';
 // The new page sends no Talked To Doctor answer; checkUpdate fills it in from the choice.
@@ -221,4 +221,68 @@ test('a collapsed card names the answer it will save', () => {
   assert.equal(pickedWords(''), '');
   assert.equal(pickedWords('bogus'), '');
   for (const c of STAND_CHOICES) assert.doesNotMatch(pickedWords(c.code), /[—→]/);
+});
+
+describe('Year 1 deal value (Brian, 11/25/2026)', () => {
+  const on = { dealValue: true };
+  const okOn = (raw) => {
+    const r = checkUpdate(raw, TODAY, on);
+    assert.equal(r.ok, true, JSON.stringify(r));
+    return r.update;
+  };
+  const deal = { meeting: { meetingDate: '2026-11-24' }, proposal: {}, signed: { signedDate: TODAY } };
+  test('switch off: ignored, and the update has no dealValue key (parity with main)', () => {
+    for (const opts of [undefined, {}, { dealValue: false }]) {
+      const r = checkUpdate({ ...base, choice: 'proposal', dealValue: 'not a number' }, TODAY, opts);
+      assert.equal(r.ok, true);
+      assert.equal('dealValue' in r.update, false);
+      assert.deepEqual(r.update, ok({ ...base, choice: 'proposal' }));
+    }
+  });
+  test('switch on: digits are sent on Demo set, Proposal and Signed', () => {
+    assert.deepEqual(DEAL_VALUE_CHOICES, ['meeting', 'proposal', 'signed']);
+    for (const [choice, more] of Object.entries(deal)) {
+      assert.equal(okOn({ ...base, choice, ...more, dealValue: '25000' }).dealValue, '25000', choice);
+    }
+    assert.equal(okOn({ ...base, choice: 'proposal', dealValue: '0' }).dealValue, '0');
+    assert.equal(okOn({ ...base, choice: 'proposal', dealValue: '0042' }).dealValue, '42');
+    assert.equal(okOn({ ...base, choice: 'proposal', dealValue: String(DEAL_VALUE_MAX) }).dealValue, '9999999');
+  });
+  test('switch on: blank is sent blank, which keeps the stored value', () => {
+    for (const dealValue of ['', undefined, null]) assert.equal(okOn({ ...base, choice: 'signed', signedDate: TODAY, dealValue }).dealValue, '');
+    const { dealValue: _none, ...rest } = { ...base, choice: 'proposal' };
+    assert.equal(okOn(rest).dealValue, '');
+  });
+  test('switch on: bad input is refused', () => {
+    for (const dealValue of ['10000000', '25,000', '$25000', '25000.50', '-5', 'abc', ' 25', '1e5', '1'.repeat(13), true, 25000.5, -1]) {
+      assert.deepEqual(checkUpdate({ ...base, choice: 'proposal', dealValue }, TODAY, on), { ok: false, id: 36, field: 'dealValue' }, String(dealValue));
+    }
+    // A whole number from an older client is read as digits.
+    assert.equal(okOn({ ...base, choice: 'proposal', dealValue: 25000 }).dealValue, '25000');
+  });
+  test('switch on: sent blank for every choice that does not take it', () => {
+    for (const choice of ['trying', 'qualified', 'dq_noanswer', 'dq_notinterested', 'nochange']) {
+      assert.equal(okOn({ ...base, choice, dealValue: '25000' }).dealValue, '', choice);
+      assert.equal(okOn({ ...base, choice, dealValue: 'junk' }).dealValue, '', `${choice} ignores junk`);
+    }
+    assert.equal(okOn({ ...base, choice: 'lost', closedReason: 'Price', dealValue: '25000' }).dealValue, '');
+  });
+  test('the page reads "$25,000" as 25000; the check reads only digits', () => {
+    assert.equal(dealValueDigits('$25,000'), '25000');
+    assert.equal(dealValueDigits(' 1 250 000 '), '1250000');
+    assert.equal(dealValueDigits('25k'), '25k');
+    assert.equal(dealValueDigits(undefined), '');
+    assert.equal(dealValueOf('25000'), '25000');
+    assert.equal(dealValueOf('10000000'), null);
+    assert.equal(dealValueOf(''), null);
+    assert.equal(DEAL_VALUE_INPUT_MAX, 12);
+    assert.doesNotMatch(DEAL_VALUE_LABEL, /[—→]|HSPA|HSRA|NumbersIQ/);
+  });
+  test('checkUpdates passes the switch to every update', () => {
+    const r = checkUpdates([{ ...base, choice: 'proposal', dealValue: '500' }, { ...base, id: 37, choice: 'trying', dealValue: '9' }], null, on);
+    assert.equal(r.ok, true);
+    assert.deepEqual(r.updates.map((u) => u.dealValue), ['500', '']);
+    const off = checkUpdates([{ ...base, choice: 'proposal', dealValue: '500' }], null);
+    assert.equal('dealValue' in off.updates[0], false);
+  });
 });
