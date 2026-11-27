@@ -296,6 +296,19 @@ describe('review findings: starvation, alert delivery, held maybe', () => {
     assert.equal(alerts(store).filter((m) => m.subject.includes('still open')).length, 1);
   });
 
+  test('window and batch rotation do not lock out a valid referral behind 26 unresolved ones', async () => {
+    const stuck = Array.from({ length: 2000 }, (_, i) => ({ ...REFERRAL, Title: `HSBS-S${i}`, Solutions: ['Nobody Inc'] }));
+    stuck.splice(25, 0, { ...REFERRAL, Title: 'HSBS-VALID' });
+    const dead = Array.from({ length: 100 }, (_, i) => ({ ...REFERRAL, Title: `HSBS-X${i}`, Intro_x0020_Tries: 3 }));
+    const store = createFakeStore({
+      lists: { 'Field Settings': SETTINGS, Routing: ROUTING, Referrals: [...stuck, ...dead], 'Service Cases': [], 'Field Send Log': [], 'Rep Roster': [] },
+    });
+    // A full cycle is 80 batches of 25 over 10 windows, about 800 runs. Stop as soon as it is mailed.
+    const mailed = () => introMails(store).filter((m) => m.html.includes('HSBS-VALID')).length;
+    for (let i = 0; i < 1000 && mailed() === 0; i += 1) await runIntro({ store, now: at(i * 2) });
+    assert.equal(mailed(), 1);
+  });
+
   test('two requests racing for a missing lock: one runs, one case, one mail', async () => {
     const store = world();
     const [a, b] = await Promise.all([runIntro({ store, now: at(0) }), runIntro({ store, now: at(0) })]);

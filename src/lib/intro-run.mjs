@@ -181,7 +181,9 @@ export async function runIntro({ store, now = new Date(), dryRun = false, clock 
       .sort((a, b) => a.row.id - b.row.id);
     // Rows that stay unresolved (unknown company, a maybe) must not crowd out later ones. The
     // window start moves one slot every run, so every row is reached within a few runs.
-    const start = candidates.length > MAX_REFERRALS_PER_RUN ? (slot * MAX_REFERRALS_PER_RUN) % candidates.length : 0;
+    // The batch moves once per full turn of the read windows, so a window is revisited with a new batch.
+    const turn = Math.floor(slot / WINDOWS);
+    const start = candidates.length > MAX_REFERRALS_PER_RUN ? (turn * MAX_REFERRALS_PER_RUN) % candidates.length : 0;
     const batch = [...candidates.slice(start), ...candidates.slice(0, start)].slice(0, MAX_REFERRALS_PER_RUN);
 
     for (const { row, ref } of batch) {
