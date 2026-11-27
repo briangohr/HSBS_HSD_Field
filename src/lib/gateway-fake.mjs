@@ -56,13 +56,17 @@ export function createFakeStore({ lists = {}, faults = [], allowRecipients } = {
     return out;
   }
 
-  const matches = (fields, where) =>
-    where.every((c) => (c.op === 'eq' ? (fields[c.column] ?? null) === c.value : (fields[c.column] ?? null) !== c.value));
+  // The column `ID` is the row id, like the real gateway.
+  const matches = (row, where) =>
+    where.every((c) => {
+      const v = c.column === 'ID' ? row.id : (row.fields[c.column] ?? null);
+      return c.op === 'eq' ? v === c.value : v !== c.value;
+    });
 
   return {
     read: async ({ list, select = [], where = [], top = 100, skip = 0 }) =>
       run('read', list, () => {
-        const hits = rowsOf(list).filter((r) => matches(r.fields, where));
+        const hits = rowsOf(list).filter((r) => matches(r, where));
         const page = hits.slice(skip, skip + top);
         const items = page.map((r) => ({
           id: r.id,
