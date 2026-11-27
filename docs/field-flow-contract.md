@@ -28,6 +28,9 @@ route answers 404 and no flow is called.
 | `GATEWAY_ENABLED` | Code that reads, writes or sends through HSBS GW (below), exactly `true` (and `REP_APP_ENABLED`). Off: nothing is posted to the gateway | No |
 | `GATEWAY_FLOW_URL` | HSBS GW Field gateway (new site) trigger URL, `https` only | Yes |
 | `GATEWAY_SECRET` | Sent as header `X-GW-Secret`. The flow refuses a call without it. At least 16 characters | Yes |
+| `INTRO_CODE_ENABLED` | The intro job `POST /api/jobs/intro` (below), exactly `true` (and `REP_APP_ENABLED` and `GATEWAY_ENABLED`). Off: 404, nothing read, written or sent | No |
+| `INTRO_CODE_DRY_RUN` | Exactly `true`: the intro job reads and plans but writes and sends nothing | No |
+| `JOB_SECRET` | Sent by a timer flow as header `X-Job-Secret`. At least 16 characters. A wrong or missing one is 401 | Yes |
 | `PARTNER_OFFICE_CHECK` | The partner page asks the office count on a Direct Dental Group lead (7F, below), exactly `true` (and `PARTNER_PAGE_ENABLED`). Off: no question, and `/api/partner-save` sends every `offices` blank, so no lead earns the group amount | No |
 | `PARTNER_DEAL_VALUE_ENABLED` | The partner page asks an optional Year 1 deal value on Demo set, Proposal and Signed, and the 7F save sends `dealValue` (7F, below), exactly `true` (and `PARTNER_PAGE_ENABLED`). Off: no field, `readLead` drops `dealValue`, and the save body has no `dealValue` key, exactly as before | No |
 | `PARTNER_PARKED_ENABLED` | The partner page offers "Set aside for later (Parked)" with a revisit date, a reason and the saver's name, and "Pick it back up" on a parked lead; the 7F save sends `parkDate`, `parkReason` and `parkedBy` (7F, below), exactly `true` (and `PARTNER_PAGE_ENABLED`). Off: no choice, no field, `readLead` drops `parkedUntil`, `parked` and `unpark` are 422 `bad_value` field `choice`, and the save body has none of the three keys, exactly as before | No |
@@ -700,12 +703,12 @@ Waits: 20 s read, 55 s create and patch, 30 s send.
 
 | op | Body | 200 answer |
 |---|---|---|
-| `read` | `list`, `select` (column names, blank for all), `where` (up to 10 clauses `{column, op: "eq" or "ne", value}`, all must match), `top` (1 to 500), `skip` | `{"ok":true,"items":[{"id":n,"etag":"...","fields":{...}}],"next":n or null}`. More than 500 rows is a failed read |
+| `read` | `list`, `select` (column names, blank for all), `where` (up to 10 clauses `{column, op: "eq" or "ne", value}`, all must match, plus `{column: "ID", op: "gt", value: n}` with a whole number), `top` (1 to 500), `skip` | `{"ok":true,"items":[{"id":n,"etag":"...","fields":{...}}],"next":n or null}`. More than 500 rows is a failed read |
 | `create` | `list`, `fields` | `{"ok":true,"id":n,"etag":"..."}` |
 | `patch` | `list`, `id`, `etag`, `fields` | `{"ok":true,"etag":"..."}` |
 | `send` | `to[]`, `cc[]`, `replyTo`, `subject` (one line), `html`, `importance` | `{"ok":true}` |
 
-`read` and `patch` use SharePoint internal column names as keys. The flow answers choice columns as plain
+A `where` clause may name the column `ID`, the row id. Rows come in ascending `ID` order. `read` and `patch` use SharePoint internal column names as keys. The flow answers choice columns as plain
 text and multi choice columns as lists of text, so the code never sees a `{"Value":...}` object.
 
 Other answers: 401 wrong or missing secret (the site reads it as config), 403 `not_allowed`
@@ -726,6 +729,33 @@ The client refuses before posting: a list off the allowlist, `top` over 500, a f
 `eq` or `ne`, empty or nested `fields`, a bad id or etag, a mail with no recipient, an invalid
 address, more than 20 addresses, or a subject with a line break. `src/lib/gateway-fake.mjs` is the
 in-memory store with the same four operations and fault injection that job tests use.
+
+### Intro job (`POST /api/jobs/intro`, lean rebuild U1)
+
+A timer flow posts here every 2 minutes with header `X-Job-Secret` and no body. It replaces the
+two 3F intro flows once Brian switches it on (not before Fri 12/4). Everything goes through
+`src/lib/gateway.mjs`. The site still sends no mail itself.
+
+- Reads new Referrals (Source Rep app, Route Direct to partner, Introduced On blank, at least 120
+  seconds old), the Routing rows and Field Settings.
+- Per partner name, in this order: create the Service Case, claim a Field Send Log row, send the
+  mail, mark the case Sent. The referral is stamped last, and only when every known name is done.
+  A retry does only the missing step.
+- A send with no clear answer is logged Maybe, is never sent again, and raises one alert. A failed
+  send is tried again after 5 minutes, and alerts at the third try.
+- A company with no Routing row gets no case and no mail, and one alert a day. An unroutable
+  partner gets a Held case and a "NOT SENT, forward manually" mail to MailOwner.
+- The tail stops starting new referrals 25 seconds into the run, and no referral starts after 40
+  seconds (the function limit is 60). The rest count as `deferred`. The next run picks them up.
+- Each run works at most 25 referrals in two passes, each one page read with `ID gt` a cursor kept
+  on the lock row. The sweep goes first, with up to 5 referrals and 10 seconds from when it starts, over older open
+  referrals from `Tries` up to the head `CaseId`, then wraps to the top. The tail then takes new
+  referrals after `CaseId` with the rest of the run. So a failed send is still retried, or a maybe
+  still alerted, however fast new ones arrive. Spent rows are stepped past at no cost.
+- A lock row `lock:intro` in Field Send Log stops overlap and frees itself after 4 minutes.
+- Answers: 404 flags off, 401 bad secret, 200 `{ok, skipped?, scanned, introduced, held, retried,
+  alerts, deferred, dryRun, plan}` (counts only, never a name, address or id), 503 `{ok:false, error}` with
+  `settings` or `failed`.
 
 ## What must stay true
 

@@ -84,6 +84,9 @@ describe('what is refused before anything is posted', () => {
     await assert.rejects(readRows({ list: 'Routing', top: 501 }), kind('bad_request'));
     await assert.rejects(readRows({ list: 'Routing', skip: -1 }), kind('bad_request'));
     await assert.rejects(readRows({ list: 'Routing', where: [{ column: 'Title', op: 'startswith', value: 'x' }] }), kind('bad_request'));
+    await assert.rejects(readRows({ list: 'Routing', where: [{ column: 'Title', op: 'gt', value: 1 }] }), kind('bad_request'));
+    await assert.rejects(readRows({ list: 'Routing', where: [{ column: 'ID', op: 'gt', value: 'x' }] }), kind('bad_request'));
+    await assert.rejects(readRows({ list: 'Routing', where: [{ column: 'ID', op: 'gt', value: -1 }] }), kind('bad_request'));
     await assert.rejects(createRow({ list: 'Routing', fields: {} }), kind('bad_request'));
     await assert.rejects(createRow({ list: 'Routing', fields: { A: { nested: 1 } } }), kind('bad_request'));
     await assert.rejects(patchRow({ list: 'Routing', id: 0, etag: '"1"', fields: { A: 1 } }), kind('bad_request'));
@@ -196,6 +199,8 @@ describe('the fake store', () => {
     const store = setup();
     const one = await store.read({ list: 'Routing', where: [{ column: 'Verified', op: 'eq', value: true }], select: ['Title'] });
     assert.deepEqual(one.items.map((r) => r.fields), [{ Title: 'HealthFirst' }]);
+    const after = await store.read({ list: 'Routing', where: [{ column: 'ID', op: 'gt', value: 1 }] });
+    assert.ok(after.items.every((r) => r.id > 1), 'gt on ID keeps later rows only');
     const page = await store.read({ list: 'Routing', top: 1 });
     assert.equal(page.next, 1);
     assert.equal((await store.read({ list: 'Routing', top: 1, skip: 1 })).next, null);
