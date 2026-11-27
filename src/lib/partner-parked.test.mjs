@@ -89,13 +89,18 @@ describe('park rules (switch on)', () => {
     for (const n of [0, NaN, -1, 3, 1.5]) assert.equal(withParkWords('Saved 2 updates.', 2, 2, n), 'Saved 2 updates.', String(n));
     assert.equal(withParkWords('', 1, 1, 1), '');
   });
-  test('the revisit date must be a real date after today', () => {
+  test('the revisit date must be a real business day after today, at most two years out', () => {
     badOn({ ...park, parkDate: TODAY }, 'parkDate');
     badOn({ ...park, parkDate: '2026-11-01' }, 'parkDate');
-    for (const parkDate of ['2026-02-30', '12/15/2026', '2026-12-1', 'soon']) badOn({ ...park, parkDate }, 'parkDate');
-    assert.equal(okOn({ ...park, parkDate: '2026-11-28' }).parkDate, '2026-11-28');
-    // The route skips the day rule (a resend after midnight still reaches 7F's tag check).
-    assert.equal(checkUpdate({ ...park, parkDate: TODAY }, null, on).ok, true);
+    for (const parkDate of ['2026-02-30', '2026-12-99', '2026-13-01', '12/15/2026', '2026-12-1', 'soon']) badOn({ ...park, parkDate }, 'parkDate');
+    // Weekends and Field holidays: 7G sends no ask on them, so a revisit date there would not resume on the day.
+    for (const parkDate of ['2026-11-28', '2026-11-29', '2026-12-24', '2026-12-25', '2027-01-01', '2027-01-18']) badOn({ ...park, parkDate }, 'parkDate');
+    assert.equal(okOn({ ...park, parkDate: '2026-11-30' }).parkDate, '2026-11-30');
+    assert.equal(okOn({ ...park, parkDate: '2028-12-01' }).parkDate, '2028-12-01');
+    badOn({ ...park, parkDate: '2028-12-04' }, 'parkDate');
+    // The route skips the day rule (a resend after midnight still reaches 7F's tag check), never the business-day rule.
+    assert.equal(checkUpdate({ ...park, parkDate: '2026-11-25' }, null, on).ok, true);
+    assert.equal(checkUpdate({ ...park, parkDate: '2026-11-28' }, null, on).ok, false);
     assert.equal(checkUpdate({ ...park, parkDate: '2026-02-30' }, null, on).ok, false);
     assert.equal(nextDay('2026-11-30'), '2026-12-01');
     assert.equal(nextDay('2026-12-31'), '2027-01-01');

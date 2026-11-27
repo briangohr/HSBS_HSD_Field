@@ -2,6 +2,7 @@
 // the page script, the save route and node --test all use the same checks. It holds no
 // key, no flow URL and no lead data. Contract: docs/field-flow-contract.md, "HSBS 7F".
 
+import { addDays, isBusinessDay } from './field-rules.mjs';
 import { oneLine } from './one-line.mjs';
 import { PARK_CHOICES, PARK_CODES, RETIRED_CHOICE_CODES, STAND_CHOICES, displayStatus } from './partner-status-words.mjs';
 
@@ -97,16 +98,20 @@ export function dealValueOf(value) {
  * needs a reason and the name of who parked it; a save missing either is refused and names
  * what is missing, even when the date is missing too (E21). With both and no revisit date,
  * 7F saves the lead as Closed Lost, reason "Parked without a revisit date" (E22). A revisit
- * date must be after today. The partner link is shared per company, so who is typed.
+ * date must be a business day (no weekend, no Field holiday: 7G asks only on those) after
+ * today and at most PARK_DATE_MAX_DAYS out; 7F checks the same list. The partner link is
+ * shared per company, so who is typed.
  */
 export const PARK_REASON_MAX = 300;
 export const PARKED_BY_MAX = 100;
 export const PARK_FIELDS = ['parkDate', 'parkReason', 'parkedBy'];
+/** The latest revisit date, in days after today. 7F's Park_days list ends here too. */
+export const PARK_DATE_MAX_DAYS = 737;
 /** The Closed Reason 7F writes on a park with no revisit date. */
 export const PARK_NO_DATE_REASON = 'Parked without a revisit date';
 /** What the saver sees after a park with no revisit date (E22). */
 export const PARK_NO_DATE_WORDS = 'Saved as Closed Lost, no revisit date.';
-export const PARK_DATE_HINT = 'Leave it blank only to close the lead: a park with no revisit date saves as Closed lost.';
+export const PARK_DATE_HINT = 'Pick a weekday that is not a holiday. Leave it blank only to close the lead: a park with no revisit date saves as Closed lost.';
 
 /**
  * How many updates in a checked save are parks with no revisit date, which 7F closes.
@@ -136,7 +141,7 @@ export const FIELD_WORDS = {
   note: 'Note',
   offices: 'Office count',
   dealValue: 'Year 1 deal value',
-  parkDate: 'Revisit date',
+  parkDate: 'Revisit date (a weekday, not a holiday)',
   parkReason: 'Reason for setting it aside',
   parkedBy: 'Your name',
   parkReasonBy: 'Reason for setting it aside and Your name',
@@ -250,7 +255,8 @@ const text = (v) => (typeof v === 'string' ? v : '');
  * (PARTNER_PARKED_ENABLED), which also lets `parked` and `unpark` through. Off, both codes are
  * a bad choice and the update has none of the three keys. On, it always has all three, blank
  * unless the choice is `parked`. Reason and who are checked before the date (E21); a blank
- * date is allowed and 7F closes the lead (E22). The day rule (after today) needs `today`.
+ * date is allowed and 7F closes the lead (E22). A date must be a business day; the day rule
+ * (after today, at most PARK_DATE_MAX_DAYS out) needs `today`.
  * @param {unknown} raw
  * @param {string | null} today yyyy-MM-dd, Eastern, or null to skip the day rules
  * @param {{ dealValue?: boolean, parked?: boolean }} [opts]
@@ -309,7 +315,9 @@ export function checkUpdate(raw, today, opts = {}) {
     if (!reason || reason.length > PARK_REASON_MAX) return bad('parkReason');
     if (!by || by.length > PARKED_BY_MAX) return bad('parkedBy');
     const date = text(u.parkDate);
-    if (date !== '' && (!isDate(date) || (today !== null && date <= today))) return bad('parkDate');
+    if (date !== '' && (!isDate(date) || !isBusinessDay(date) || (today !== null && (date <= today || date > addDays(today, PARK_DATE_MAX_DAYS))))) {
+      return bad('parkDate');
+    }
     update.parkDate = date;
     update.parkReason = reason;
     update.parkedBy = by;
