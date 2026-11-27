@@ -27,6 +27,7 @@ import {
 
 export const LOCK_MINUTES = 4;
 /** Most referrals one run works, so a backlog cannot run past the function limit. */
+const SLOT_MS = 120_000;
 export const MAX_REFERRALS_PER_RUN = 25;
 const STALE_RETRIES = 3;
 const SENT_DISPATCH = 'Sent delivery unverified';
@@ -150,9 +151,14 @@ export async function runIntro({ store, now = new Date(), dryRun = false }) {
     const candidates = referrals
       .map((row) => ({ row, ref: readReferral(row.id, row.fields) }))
       .filter(({ ref }) => isCandidate(ref, nowMs))
-      .slice(0, MAX_REFERRALS_PER_RUN);
+      .sort((a, b) => a.row.id - b.row.id);
+    // Rows that stay unresolved (unknown company, a maybe) must not crowd out later ones. The
+    // window start moves one slot every run, so every row is reached within a few runs.
+    const slot = Math.floor(nowMs / SLOT_MS);
+    const start = candidates.length > MAX_REFERRALS_PER_RUN ? (slot * MAX_REFERRALS_PER_RUN) % candidates.length : 0;
+    const batch = [...candidates.slice(start), ...candidates.slice(0, start)].slice(0, MAX_REFERRALS_PER_RUN);
 
-    for (const { row, ref } of candidates) {
+    for (const { row, ref } of batch) {
       out.scanned += 1;
       try {
         await oneReferral(row, ref, routing);
@@ -209,7 +215,7 @@ export async function runIntro({ store, now = new Date(), dryRun = false }) {
       else if (step.kind === 'send') await sendIntro({ ref, step, route, kase, referrerLabel, logs: logs.rows });
       else if (step.kind === 'patch_case' && kase) await markSent(kase);
       else if (step.kind === 'alert_tries' && kase) await alertTries(ref, step, kase, row);
-      else if (step.kind === 'alert_maybe' && kase) await alertMaybe(ref, step, kase);
+      else if (step.kind === 'alert_maybe' && kase) await alertMaybe(ref, step, kase, route);
     }
 
     // Plan again from what is now stored. The stamp goes last, and only when every known name is done.
@@ -297,22 +303,29 @@ export async function runIntro({ store, now = new Date(), dryRun = false }) {
     }
   }
 
+  /** @returns {Promise<boolean>} true when the alert is known to have gone out (now or before) */
   async function alertOnce(key, subject, ref) {
-    if (await findLog(store, key)) return;
+    if (await findLog(store, key)) return true;
     // Send first, then write the row: a crash in between repeats an alert, never loses one.
     try {
       await store.send(alertMail(subject, ref));
-      out.alerts += 1;
+    } catch {
+      return false; // not delivered: the next run tries again
+    }
+    out.alerts += 1;
+    try {
       await store.create({ list: 'Field Send Log', fields: { Title: key, Kind: 'alert', CaseId: 0, Result: 'Sent', Tries: 1, LastTry: iso(nowMs), Note: '' } });
     } catch {
-      // No row means the alert is tried again on the next run.
+      // Delivered, row not written: a repeat alert next run, never a lost one.
     }
+    return true;
   }
 
   async function alertTries(ref, step, kase, row) {
     const key = `alerted:${kase.id}`;
     if (await findLog(store, key)) return;
-    await alertOnce(key, `HSBS intro not sent after ${MAX_TRIES} tries: ${step.name}`, ref);
+    // Stop further tries only after the alert is confirmed.
+    if (!(await alertOnce(key, `HSBS intro not sent after ${MAX_TRIES} tries: ${step.name}`, ref))) return;
     try {
       await patchFresh(store, 'Referrals', row, { Intro_x0020_Tries: MAX_TRIES });
     } catch {
@@ -320,10 +333,11 @@ export async function runIntro({ store, now = new Date(), dryRun = false }) {
     }
   }
 
-  async function alertMaybe(ref, step, kase) {
-    const log = await findLog(store, introKey(kase.id));
+  async function alertMaybe(ref, step, kase, route) {
+    // Same key the planner reads: held:<case> for an unroutable partner, intro:<case> otherwise.
+    const log = await findLog(store, route?.routable === false ? heldKey(kase.id) : introKey(kase.id));
     if (!log || logRow(log)?.result === 'Alerted') return;
-    await alertOnce(`maybe:${kase.id}`, `HSBS intro may or may not have gone out: ${step.name}. Check before sending again`, ref);
+    if (!(await alertOnce(`maybe:${kase.id}`, `HSBS intro may or may not have gone out: ${step.name}. Check before sending again`, ref))) return;
     try {
       await patchFresh(store, 'Field Send Log', log, { Result: 'Alerted' });
     } catch {

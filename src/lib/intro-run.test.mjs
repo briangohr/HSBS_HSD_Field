@@ -217,6 +217,57 @@ describe('seeded faults: no duplicate mail, no lost case, nothing lost without a
   });
 });
 
+describe('review findings: starvation, alert delivery, held maybe', () => {
+  test('25 unresolved referrals do not block a valid one behind them', async () => {
+    const unknown = Array.from({ length: 30 }, (_, i) => ({ ...REFERRAL, Title: `HSBS-U${i}`, Solutions: ['Nobody Inc'] }));
+    const store = createFakeStore({
+      lists: {
+        'Field Settings': SETTINGS,
+        Routing: ROUTING,
+        Referrals: [...unknown, { ...REFERRAL, Title: 'HSBS-GOOD' }],
+        'Service Cases': [],
+        'Field Send Log': [],
+        'Rep Roster': [],
+      },
+    });
+    await runMany(store, 6);
+    assert.equal(introMails(store).filter((m) => m.html.includes('HSBS-GOOD')).length, 1);
+    assert.equal(introMails(store).length, 1, 'only the valid referral is mailed');
+  });
+
+  test('a failed alert is tried again; the maybe log is not marked Alerted until it went out', async () => {
+    // send 1 is the intro (no clear answer), send 2 is the alert and fails.
+    const faults = [
+      { op: 'send', nth: 1, mode: 'maybe_before' },
+      { op: 'send', nth: 2, mode: 'fail' },
+    ];
+    const store = world({}, { faults });
+    await runMany(store, 5);
+    assert.equal(alerts(store).filter((m) => m.subject.includes('may or may not')).length, 1);
+    assert.equal(logs(store).find((r) => r.fields.Title === 'intro:1').fields.Result, 'Alerted');
+  });
+
+  test('a failed tries alert does not set Intro Tries until it went out', async () => {
+    const faults = [1, 2, 3].map((nth) => ({ op: 'send', nth, mode: 'fail' }));
+    faults.push({ op: 'send', nth: 4, mode: 'fail' });
+    const store = world({}, { faults });
+    await runIntro({ store, now: at(0) });
+    await runIntro({ store, now: at(6) });
+    await runIntro({ store, now: at(12) });
+    await runIntro({ store, now: at(18) });
+    assert.equal(referral(store).Intro_x0020_Tries, undefined, 'alert send 4 failed, so tries stay open');
+    await runIntro({ store, now: at(24) });
+    assert.equal(alerts(store).length, 1);
+    assert.equal(referral(store).Intro_x0020_Tries, 3);
+  });
+
+  test('an unroutable partner with an ambiguous owner mail gets its maybe alert', async () => {
+    const store = world({ Solutions: ['Unverified Co'] }, { faults: [{ op: 'send', nth: 1, mode: 'maybe_before' }] });
+    await runMany(store, 4);
+    assert.equal(alerts(store).filter((m) => m.subject.includes('may or may not')).length, 1);
+  });
+});
+
 describe('switches, settings and the lock', () => {
   test('dry run plans and writes and sends nothing', async () => {
     const store = world();
