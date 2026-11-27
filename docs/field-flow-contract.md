@@ -699,10 +699,10 @@ two 3F intro flows once Brian switches it on (not before Fri 12/4). Everything g
 - A run stops starting new referrals after 25 seconds (the function limit is 60) and counts the rest
   as `deferred`. The next run picks them up.
 - Each run works at most 25 referrals in two passes, each one page read with `ID gt` a cursor kept
-  on the lock row. The tail pass takes new referrals after `CaseId`. The sweep pass keeps 5 slots
-  for older open referrals, from `Tries` up to where the tail started, then wraps to the top. So
-  new referrals go out fast, and a failed send is still retried, or a maybe still alerted, while
-  new ones keep arriving. Spent rows are stepped past at no cost.
+  on the lock row. The sweep goes first, with up to 5 referrals and 10 seconds, over older open
+  referrals from `Tries` up to the head `CaseId`, then wraps to the top. The tail then takes new
+  referrals after `CaseId` with the rest of the run. So a failed send is still retried, or a maybe
+  still alerted, however fast new ones arrive. Spent rows are stepped past at no cost.
 - A lock row `lock:intro` in Field Send Log stops overlap and frees itself after 4 minutes.
 - Answers: 404 flags off, 401 bad secret, 200 `{ok, skipped?, scanned, introduced, held, retried,
   alerts, deferred, dryRun, plan}` (counts only, never a name, address or id), 503 `{ok:false, error}` with

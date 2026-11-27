@@ -35,6 +35,8 @@ export const MAX_REFERRALS_PER_RUN = 25;
 const PAGE_ROWS = 500;
 /** Slots of each run kept for the sweep over older open referrals. */
 const SWEEP_SLOTS = 5;
+/** The sweep stops after this long, so the tail always has most of the run. */
+const SWEEP_BUDGET_MS = 10_000;
 const STALE_RETRIES = 3;
 const SENT_DISPATCH = 'Sent delivery unverified';
 
@@ -172,25 +174,27 @@ export async function runIntro({ store, now = new Date(), dryRun = false, clock 
     const page = async (after) =>
       (await store.read({ ...referralQuery, where: [...referralQuery.where, { column: 'ID', op: 'gt', value: after }], top: PAGE_ROWS })).items;
 
-    // Two passes, each with its own cursor on the lock row:
-    //   tail   new referrals after `head`, most of the run's slots
-    //   sweep  older open referrals (ID up to the run's starting head), so a failed send is retried
-    //          and a maybe is alerted however many new referrals keep arriving
+    // Two passes, each with its own cursor on the lock row. The sweep goes first with its own slots
+    // and time, so older open referrals are never starved by new ones:
+    //   sweep  older open referrals (ID up to the head), so a failed send is retried and a maybe is
+    //          alerted however many new referrals keep arriving
+    //   tail   new referrals after `head`, the rest of the run
     const headAtStart = cursor.head;
-    const tail = await walk(await page(cursor.head), MAX_REFERRALS_PER_RUN - (headAtStart > 0 ? SWEEP_SLOTS : 0), Infinity);
-    cursor.head = tail.last ?? cursor.head;
     if (headAtStart > 0) {
-      const sweep = await walk(await page(cursor.sweep), MAX_REFERRALS_PER_RUN, headAtStart);
-      // Swept to the starting head, or nothing left: start the sweep from the top next run.
+      const sweep = await walk(await page(cursor.sweep), SWEEP_SLOTS, SWEEP_BUDGET_MS, headAtStart);
+      // Swept to the head, or nothing left: start the sweep from the top next run.
       cursor.sweep = sweep.end ? 0 : (sweep.last ?? cursor.sweep);
     }
+    const tail = await walk(await page(cursor.head), MAX_REFERRALS_PER_RUN, BUDGET_MS, Infinity);
+    cursor.head = tail.last ?? cursor.head;
     return;
 
     /**
-     * Work rows in order until `out.scanned` reaches `limit`, time runs out, a too-young row, or a
-     * row past `maxId`. `last` is the last row stepped past. Spent rows are stepped past at no cost.
+     * Work rows in order until `out.scanned` reaches `limit`, `budgetMs` has passed since the run
+     * started, a too-young row, or a row past `maxId`. `last` is the last row stepped past. Spent
+     * rows are stepped past at no cost.
      */
-    async function walk(rows, limit, maxId) {
+    async function walk(rows, limit, budgetMs, maxId) {
       let last;
       for (const [index, row] of rows.entries()) {
         if (row.id > maxId) return { last, end: true };
@@ -203,7 +207,7 @@ export async function runIntro({ store, now = new Date(), dryRun = false, clock 
           continue;
         }
         // Out of time or at the cap: the cursor stops here, so nothing after it is stepped past unseen.
-        if (out.scanned >= limit || clock() - startedAt >= BUDGET_MS) {
+        if (out.scanned >= limit || clock() - startedAt >= budgetMs) {
           out.deferred += rows.slice(index).filter((r) => r.id <= maxId && isCandidate(readReferral(r.id, r.fields), nowMs)).length;
           return { last, end: false };
         }

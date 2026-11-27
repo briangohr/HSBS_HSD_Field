@@ -402,6 +402,20 @@ describe('review findings: starvation, alert delivery, held maybe', () => {
     assert.equal(alerts(store).filter((m) => m.subject.includes('may or may not')).length, 1);
   });
 
+  test('a slow gateway and a flood of arrivals still leave the sweep time to retry an old send', async () => {
+    const base = world({}, { faults: [{ op: 'send', nth: 1, mode: 'fail' }] });
+    // Every gateway call costs 250 ms on the job's clock.
+    let t = 0;
+    const tick = (fn) => (q) => ((t += 250), fn(q));
+    const store = { ...base, read: tick(base.read), create: tick(base.create), patch: tick(base.patch), send: tick(base.send) };
+    for (let i = 0; i < 20; i += 1) {
+      for (let k = 0; k < 20; k += 1) await base.create({ list: 'Referrals', fields: { ...REFERRAL, Title: `HSBS-F${i}-${k}` } });
+      t = 0;
+      await runIntro({ store, now: at(i * 2), clock: () => t });
+    }
+    assert.equal(logs(base).find((r) => r.fields.Title === 'intro:1').fields.Result, 'Sent', 'the first referral was retried');
+  });
+
   test('two requests racing for a missing lock: one runs, one case, one mail', async () => {
     const store = world();
     const [a, b] = await Promise.all([runIntro({ store, now: at(0) }), runIntro({ store, now: at(0) })]);
