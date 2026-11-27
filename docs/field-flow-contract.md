@@ -696,10 +696,10 @@ two 3F intro flows once Brian switches it on (not before Fri 12/4). Everything g
   send is tried again after 5 minutes, and alerts at the third try.
 - A company with no Routing row gets no case and no mail, and one alert a day. An unroutable
   partner gets a Held case and a "NOT SENT, forward manually" mail to MailOwner.
-- A run stops starting new referrals after 25 seconds (the function limit is 60) and counts the rest
-  as `deferred`. The next run picks them up.
+- The tail stops starting new referrals 25 seconds into the run, and no referral starts after 40
+  seconds (the function limit is 60). The rest count as `deferred`. The next run picks them up.
 - Each run works at most 25 referrals in two passes, each one page read with `ID gt` a cursor kept
-  on the lock row. The sweep goes first, with up to 5 referrals and 10 seconds, over older open
+  on the lock row. The sweep goes first, with up to 5 referrals and 10 seconds from when it starts, over older open
   referrals from `Tries` up to the head `CaseId`, then wraps to the top. The tail then takes new
   referrals after `CaseId` with the rest of the run. So a failed send is still retried, or a maybe
   still alerted, however fast new ones arrive. Spent rows are stepped past at no cost.

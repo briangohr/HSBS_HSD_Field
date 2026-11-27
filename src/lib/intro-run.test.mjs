@@ -356,9 +356,14 @@ describe('review findings: starvation, alert delivery, held maybe', () => {
     let t = 0;
     const store = { ...base, read: (q) => ((t += 1300), base.read(q)), inspect: base.inspect };
     const mailed = () => introMails(base).filter((m) => m.html.includes('HSBS-READS')).length;
-    for (let i = 0; i < 20 && mailed() === 0; i += 1) {
+    // The sweep revisits older stuck rows too, so the tail moves a few rows a run. It must move every run.
+    let head = 0;
+    for (let i = 0; i < 80 && mailed() === 0; i += 1) {
       t = 0;
       await runIntro({ store, now: at(i * 2), clock: () => t });
+      const lock = base.inspect.rows('Field Send Log').find((x) => x.fields.Kind === 'lock');
+      assert.ok(lock.fields.CaseId > head, 'the tail cursor moved');
+      head = lock.fields.CaseId;
     }
     assert.equal(mailed(), 1);
   });
@@ -414,6 +419,32 @@ describe('review findings: starvation, alert delivery, held maybe', () => {
       await runIntro({ store, now: at(i * 2), clock: () => t });
     }
     assert.equal(logs(base).find((r) => r.fields.Title === 'intro:1').fields.Result, 'Sent', 'the first referral was retried');
+  });
+
+  test('a lock reread that fails means no run, never two', async () => {
+    const store = world();
+    // Reads 1 and 2 are each run's Field Settings, 3 and 4 the lock checks, 5 and 6 the rereads.
+    const faulty = createFakeStore({
+      lists: { 'Field Settings': SETTINGS, Routing: ROUTING, Referrals: [{ ...REFERRAL }], 'Service Cases': [], 'Field Send Log': [], 'Rep Roster': [] },
+      faults: [{ op: 'read', list: 'Field Send Log', nth: 4, mode: 'fail' }],
+    });
+    await Promise.all([runIntro({ store: faulty, now: at(0) }), runIntro({ store: faulty, now: at(0) })]);
+    assert.ok(cases(faulty).length <= 1);
+    assert.ok(introMails(faulty).length <= 1);
+    assert.ok(store);
+  });
+
+  test('a slow start does not eat the sweep: it has its own time from when it begins', async () => {
+    const base = world({}, { faults: [{ op: 'send', nth: 1, mode: 'fail' }] });
+    let t = 0;
+    const tick = (fn) => (q) => ((t += 2000), fn(q));
+    const store = { ...base, read: tick(base.read), create: tick(base.create), patch: tick(base.patch), send: tick(base.send) };
+    for (let i = 0; i < 20; i += 1) {
+      await base.create({ list: 'Referrals', fields: { ...REFERRAL, Title: `HSBS-S${i}` } });
+      t = 0;
+      await runIntro({ store, now: at(i * 2), clock: () => t });
+    }
+    assert.equal(logs(base).find((r) => r.fields.Title === 'intro:1').fields.Result, 'Sent');
   });
 
   test('two requests racing for a missing lock: one runs, one case, one mail', async () => {

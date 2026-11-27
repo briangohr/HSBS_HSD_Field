@@ -35,8 +35,10 @@ export const MAX_REFERRALS_PER_RUN = 25;
 const PAGE_ROWS = 500;
 /** Slots of each run kept for the sweep over older open referrals. */
 const SWEEP_SLOTS = 5;
-/** The sweep stops after this long, so the tail always has most of the run. */
+/** The sweep stops this long after it starts, so the tail always has most of the run. */
 const SWEEP_BUDGET_MS = 10_000;
+/** No referral starts after this, whatever the pass. The deployed function stops at 60 seconds. */
+const HARD_STOP_MS = 40_000;
 const STALE_RETRIES = 3;
 const SENT_DISPATCH = 'Sent delivery unverified';
 
@@ -181,20 +183,21 @@ export async function runIntro({ store, now = new Date(), dryRun = false, clock 
     //   tail   new referrals after `head`, the rest of the run
     const headAtStart = cursor.head;
     if (headAtStart > 0) {
-      const sweep = await walk(await page(cursor.sweep), SWEEP_SLOTS, SWEEP_BUDGET_MS, headAtStart);
+      const sweepStart = clock();
+      const sweep = await walk(await page(cursor.sweep), SWEEP_SLOTS, sweepStart, SWEEP_BUDGET_MS, headAtStart);
       // Swept to the head, or nothing left: start the sweep from the top next run.
       cursor.sweep = sweep.end ? 0 : (sweep.last ?? cursor.sweep);
     }
-    const tail = await walk(await page(cursor.head), MAX_REFERRALS_PER_RUN, BUDGET_MS, Infinity);
+    const tail = await walk(await page(cursor.head), MAX_REFERRALS_PER_RUN, startedAt, BUDGET_MS, Infinity);
     cursor.head = tail.last ?? cursor.head;
     return;
 
     /**
-     * Work rows in order until `out.scanned` reaches `limit`, `budgetMs` has passed since the run
-     * started, a too-young row, or a row past `maxId`. `last` is the last row stepped past. Spent
-     * rows are stepped past at no cost.
+     * Work rows in order until `out.scanned` reaches `limit`, `budgetMs` has passed since `since`,
+     * the run's hard stop, a too-young row, or a row past `maxId`. `last` is the last row stepped
+     * past. Spent rows are stepped past at no cost.
      */
-    async function walk(rows, limit, budgetMs, maxId) {
+    async function walk(rows, limit, since, budgetMs, maxId) {
       let last;
       for (const [index, row] of rows.entries()) {
         if (row.id > maxId) return { last, end: true };
@@ -207,7 +210,8 @@ export async function runIntro({ store, now = new Date(), dryRun = false, clock 
           continue;
         }
         // Out of time or at the cap: the cursor stops here, so nothing after it is stepped past unseen.
-        if (out.scanned >= limit || clock() - startedAt >= budgetMs) {
+        const t = clock();
+        if (out.scanned >= limit || t - since >= budgetMs || t - startedAt >= HARD_STOP_MS) {
           out.deferred += rows.slice(index).filter((r) => r.id <= maxId && isCandidate(readReferral(r.id, r.fields), nowMs)).length;
           return { last, end: false };
         }
@@ -454,8 +458,9 @@ async function takeLock(store, nowMs) {
     }
     // Two requests can both see no lock and both create one. The gateway does not enforce unique
     // titles, so the lowest id is the lock and every other creator backs off.
-    const after = await lockRows(store).catch(() => []);
-    if (after[0] && after[0].id !== made.id) {
+    // Fail closed: run only when a reread proves this row is the lowest-id lock.
+    const after = await lockRows(store).catch(() => null);
+    if (!after || after[0]?.id !== made.id) {
       try {
         await store.patch({ list: 'Field Send Log', id: made.id, etag: made.etag, fields: { Result: 'Free', LastTry: iso(nowMs) } });
       } catch {
