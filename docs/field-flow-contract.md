@@ -696,9 +696,11 @@ two 3F intro flows once Brian switches it on (not before Fri 12/4). Everything g
   send is tried again after 5 minutes, and alerts at the third try.
 - A company with no Routing row gets no case and no mail, and one alert a day. An unroutable
   partner gets a Held case and a "NOT SENT, forward manually" mail to MailOwner.
+- A run stops starting new referrals after 25 seconds (the function limit is 60) and counts the rest
+  as `deferred`. The next run picks them up.
 - A lock row `lock:intro` in Field Send Log stops overlap and frees itself after 4 minutes.
 - Answers: 404 flags off, 401 bad secret, 200 `{ok, skipped?, scanned, introduced, held, retried,
-  alerts, dryRun, plan}` (counts only, never a name, address or id), 503 `{ok:false, error}` with
+  alerts, deferred, dryRun, plan}` (counts only, never a name, address or id), 503 `{ok:false, error}` with
   `settings` or `failed`.
 
 ## What must stay true

@@ -28,6 +28,8 @@ import {
 export const LOCK_MINUTES = 4;
 /** Most referrals one run works, so a backlog cannot run past the function limit. */
 const SLOT_MS = 120_000;
+/** Stop starting referrals after this long. The deployed function stops at 60 seconds. */
+export const BUDGET_MS = 25_000;
 export const MAX_REFERRALS_PER_RUN = 25;
 const STALE_RETRIES = 3;
 const SENT_DISPATCH = 'Sent delivery unverified';
@@ -106,12 +108,13 @@ async function patchFresh(store, list, row, fields) {
 
 /**
  * @param {{ store: any, now?: Date, dryRun?: boolean }} job
- * @returns {Promise<{ ok: true, skipped?: string, scanned: number, introduced: number, held: number, retried: number, alerts: number, dryRun: boolean, plan: Record<string, number> }>}
+ * @returns {Promise<{ ok: true, skipped?: string, scanned: number, introduced: number, held: number, retried: number, alerts: number, deferred: number, dryRun: boolean, plan: Record<string, number> }>}
  */
-export async function runIntro({ store, now = new Date(), dryRun = false }) {
+export async function runIntro({ store, now = new Date(), dryRun = false, clock = Date.now }) {
   const nowMs = now.getTime();
+  const startedAt = clock();
   const today = etDate(now);
-  const out = { ok: /** @type {const} */ (true), scanned: 0, introduced: 0, held: 0, retried: 0, alerts: 0, dryRun, plan: /** @type {Record<string, number>} */ ({}) };
+  const out = { ok: /** @type {const} */ (true), scanned: 0, introduced: 0, held: 0, retried: 0, alerts: 0, deferred: 0, dryRun, plan: /** @type {Record<string, number>} */ ({}) };
 
   const settings = await readSettings(store);
   if (!settings.enabled) return { ...out, skipped: 'off' };
@@ -159,6 +162,11 @@ export async function runIntro({ store, now = new Date(), dryRun = false }) {
     const batch = [...candidates.slice(start), ...candidates.slice(0, start)].slice(0, MAX_REFERRALS_PER_RUN);
 
     for (const { row, ref } of batch) {
+      // Out of time: leave the rest for the next run. Every step is safe to repeat.
+      if (clock() - startedAt >= BUDGET_MS) {
+        out.deferred += 1;
+        continue;
+      }
       out.scanned += 1;
       try {
         await oneReferral(row, ref, routing);

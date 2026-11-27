@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { introDue } from './field-rules.mjs';
 import { createFakeStore } from './gateway-fake.mjs';
 import { introJob } from './intro-job.mjs';
-import { IntroSettingsError, LOCK_MINUTES, runIntro } from './intro-run.mjs';
+import { BUDGET_MS, IntroSettingsError, LOCK_MINUTES, runIntro } from './intro-run.mjs';
 
 const T0 = Date.parse('2026-12-02T15:00:00Z');
 const at = (minutes) => new Date(T0 + minutes * 60_000);
@@ -259,6 +259,23 @@ describe('review findings: starvation, alert delivery, held maybe', () => {
     await runIntro({ store, now: at(24) });
     assert.equal(alerts(store).length, 1);
     assert.equal(referral(store).Intro_x0020_Tries, 3);
+  });
+
+  test('out of time: the run stops starting referrals, frees the lock, and the next run finishes', async () => {
+    const many = Array.from({ length: 5 }, (_, i) => ({ ...REFERRAL, Title: `HSBS-T${i}`, Solutions: ['HealthFirst'] }));
+    const store = createFakeStore({
+      lists: { 'Field Settings': SETTINGS, Routing: ROUTING, Referrals: many, 'Service Cases': [], 'Field Send Log': [], 'Rep Roster': [] },
+    });
+    // Each clock read moves 10 seconds, so the budget runs out after two referrals.
+    let t = 0;
+    const slow = () => (t += BUDGET_MS / 2.5);
+    const first = await runIntro({ store, now: at(0), clock: slow });
+    assert.ok(first.deferred > 0 && first.scanned < 5, 'some referrals wait for the next run');
+    assert.equal(store.inspect.rows('Field Send Log').find((x) => x.fields.Kind === 'lock').fields.Result, 'Free');
+    await runIntro({ store, now: at(6) });
+    await runIntro({ store, now: at(12) });
+    await runIntro({ store, now: at(18) });
+    assert.equal(introMails(store).length, 5, 'every referral is mailed exactly once');
   });
 
   test('two requests racing for a missing lock: one runs, one case, one mail', async () => {
