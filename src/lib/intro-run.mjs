@@ -214,7 +214,7 @@ export async function runIntro({ store, now = new Date(), dryRun = false }) {
       if (step.kind === 'unknown_company') await alertOnce(unknownKey(ref.id, step.name, today), `HSBS intro: no Routing row for ${step.name}`, ref);
       else if (step.kind === 'send') await sendIntro({ ref, step, route, kase, referrerLabel, logs: logs.rows });
       else if (step.kind === 'patch_case' && kase) await markSent(kase);
-      else if (step.kind === 'alert_tries' && kase) await alertTries(ref, step, kase, row);
+      else if (step.kind === 'alert_tries' && kase) await alertTries(ref, step, kase);
       else if (step.kind === 'alert_maybe' && kase) await alertMaybe(ref, step, kase, route);
     }
 
@@ -225,6 +225,7 @@ export async function runIntro({ store, now = new Date(), dryRun = false }) {
       logs = await readLogs(cases, routing);
       plan = planReferral(ref, { routing, cases, logs: logs.map, nowMs, today });
     }
+    await stopRetriesIfSpent(row, plan);
     if (plan.stamp) {
       await patchFresh(store, 'Referrals', row, {
         Introduced_x0020_On: plan.stamp.introducedOn,
@@ -321,15 +322,24 @@ export async function runIntro({ store, now = new Date(), dryRun = false }) {
     return true;
   }
 
-  async function alertTries(ref, step, kase, row) {
-    const key = `alerted:${kase.id}`;
-    if (await findLog(store, key)) return;
-    // Stop further tries only after the alert is confirmed.
-    if (!(await alertOnce(key, `HSBS intro not sent after ${MAX_TRIES} tries: ${step.name}`, ref))) return;
+  async function alertTries(ref, step, kase) {
+    await alertOnce(`alerted:${kase.id}`, `HSBS intro not sent after ${MAX_TRIES} tries: ${step.name}`, ref);
+  }
+
+  /**
+   * The referral-level Intro Tries cutoff takes the whole referral out of later runs, so set it only
+   * when no partner still has work and every spent partner's alert is confirmed.
+   */
+  async function stopRetriesIfSpent(row, plan) {
+    const spent = plan.names.filter((n) => n.kind === 'alert_tries');
+    if (spent.length === 0) return;
+    const open = plan.names.some((n) => ['create_case', 'send', 'wait', 'patch_case', 'alert_maybe'].includes(n.kind));
+    if (open) return;
+    for (const n of spent) if (!(await findLog(store, `alerted:${n.caseId}`))) return;
     try {
       await patchFresh(store, 'Referrals', row, { Intro_x0020_Tries: MAX_TRIES });
     } catch {
-      // The log row above already stops a second alert.
+      // Every spent case already has its alert row, so a later run repeats nothing.
     }
   }
 
@@ -373,24 +383,44 @@ function caseFields(ref, service, route, settings) {
 
 /** Take the one-job lock. Undefined when another job holds it. */
 async function takeLock(store, nowMs) {
-  const found = await findLog(store, 'lock:intro');
+  const rows = await lockRows(store);
+  const found = rows[0];
   if (!found) {
+    let made;
     try {
-      const made = await store.create({
+      made = await store.create({
         list: 'Field Send Log',
         fields: { Title: 'lock:intro', Kind: 'lock', CaseId: 0, Result: 'Held', Tries: 0, LastTry: iso(nowMs), Note: '' },
       });
-      return { id: made.id, etag: made.etag };
     } catch {
       return undefined;
     }
+    // Two requests can both see no lock and both create one. The gateway does not enforce unique
+    // titles, so the lowest id is the lock and every other creator backs off.
+    const after = await lockRows(store).catch(() => []);
+    if (after[0] && after[0].id !== made.id) {
+      try {
+        await store.patch({ list: 'Field Send Log', id: made.id, etag: made.etag, fields: { Result: 'Free', LastTry: iso(nowMs) } });
+      } catch {
+        // A spare lock row stays Held at most LOCK_MINUTES and is never the lowest id.
+      }
+      return undefined;
+    }
+    return { id: made.id, etag: made.etag };
   }
   const row = logRow(found);
   if (row.result === 'Held' && nowMs - row.lastTryMs < LOCK_MINUTES * 60_000) return undefined;
   try {
+    // The etag makes this atomic: of two requests that both read it, one gets 412.
     const claimed = await store.patch({ list: 'Field Send Log', id: found.id, etag: found.etag, fields: { Result: 'Held', LastTry: iso(nowMs) } });
     return { id: found.id, etag: claimed.etag };
   } catch {
     return undefined;
   }
+}
+
+/** Every lock row, lowest id first. The lowest id is the lock. */
+async function lockRows(store) {
+  const { items } = await store.read({ list: 'Field Send Log', where: [{ column: 'Title', op: 'eq', value: 'lock:intro' }], top: 10 });
+  return [...items].sort((x, y) => x.id - y.id);
 }

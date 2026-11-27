@@ -261,6 +261,26 @@ describe('review findings: starvation, alert delivery, held maybe', () => {
     assert.equal(referral(store).Intro_x0020_Tries, 3);
   });
 
+  test('two requests racing for a missing lock: one runs, one case, one mail', async () => {
+    const store = world();
+    const [a, b] = await Promise.all([runIntro({ store, now: at(0) }), runIntro({ store, now: at(0) })]);
+    assert.deepEqual([a.skipped, b.skipped].filter(Boolean), ['locked']);
+    assert.equal(cases(store).length, 1);
+    assert.equal(introMails(store).length, 1);
+  });
+
+  test('one partner out of tries does not stop the other partner from its retries and alert', async () => {
+    // HealthFirst sends fail three times. Staffing sends fail three times too, one run later.
+    const faults = [1, 2, 3, 4, 5, 6, 7].map((nth) => ({ op: 'send', nth, mode: 'fail' }));
+    // The second partner's first claim row fails, so its tries run one behind the first partner's.
+    faults.push({ op: 'create', list: 'Field Send Log', nth: 3, mode: 'fail' });
+    const store = world({ Solutions: ['HealthFirst', STAFF] }, { faults });
+    await runMany(store, 12);
+    const tried = alerts(store).filter((m) => m.subject.includes('not sent after 3 tries'));
+    assert.equal(tried.length, 2, 'one alert per partner');
+    assert.equal(referral(store).Intro_x0020_Tries, 3, 'cutoff only after both alerts went out');
+  });
+
   test('an unroutable partner with an ambiguous owner mail gets its maybe alert', async () => {
     const store = world({ Solutions: ['Unverified Co'] }, { faults: [{ op: 'send', nth: 1, mode: 'maybe_before' }] });
     await runMany(store, 4);
