@@ -309,6 +309,28 @@ describe('review findings: starvation, alert delivery, held maybe', () => {
     assert.equal(mailed(), 1);
   });
 
+  test('a slow gateway: the cursor moves past the rows done, so a referral behind 24 stuck ones is reached', async () => {
+    const stuck = Array.from({ length: 24 }, (_, i) => ({ ...REFERRAL, Title: `HSBS-K${i}`, Solutions: ['Nobody Inc'] }));
+    const store = createFakeStore({
+      lists: {
+        'Field Settings': SETTINGS,
+        Routing: ROUTING,
+        Referrals: [...stuck, { ...REFERRAL, Title: 'HSBS-SLOW' }],
+        'Service Cases': [],
+        'Field Send Log': [],
+        'Rep Roster': [],
+      },
+    });
+    // Each clock read costs 2 seconds, so a run does about a dozen referrals before the budget ends.
+    let t = 0;
+    const slow = () => (t += 2000);
+    for (let i = 0; i < 4; i += 1) {
+      t = 0;
+      await runIntro({ store, now: at(i * 2), clock: slow });
+    }
+    assert.equal(introMails(store).filter((m) => m.html.includes('HSBS-SLOW')).length, 1);
+  });
+
   test('two requests racing for a missing lock: one runs, one case, one mail', async () => {
     const store = world();
     const [a, b] = await Promise.all([runIntro({ store, now: at(0) }), runIntro({ store, now: at(0) })]);

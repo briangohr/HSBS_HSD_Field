@@ -27,7 +27,6 @@ import {
 
 export const LOCK_MINUTES = 4;
 /** Most referrals one run works, so a backlog cannot run past the function limit. */
-const SLOT_MS = 120_000;
 /** Stop starting referrals after this long. The deployed function stops at 60 seconds. */
 export const BUDGET_MS = 25_000;
 export const MAX_REFERRALS_PER_RUN = 25;
@@ -139,12 +138,15 @@ export async function runIntro({ store, now = new Date(), dryRun = false, clock 
     lock = await takeLock(store, nowMs);
     if (!lock) return { ...out, skipped: 'locked' };
   }
+  // Where the last run stopped. Every run resumes after it, so no row waits behind stuck ones.
+  const cursor = lock ? { window: lock.window, lastId: lock.lastId } : await readCursor(store);
   try {
     await work();
   } finally {
     if (lock) {
       try {
-        await patchFresh(store, 'Field Send Log', lock, { Result: 'Free', LastTry: iso(nowMs) });
+        // The lock row also holds the cursor: Tries is the read window, CaseId the last referral done.
+        await patchFresh(store, 'Field Send Log', lock, { Result: 'Free', LastTry: iso(nowMs), Tries: cursor.window, CaseId: cursor.lastId });
       } catch {
         // A lock left Held frees itself after LOCK_MINUTES.
       }
@@ -161,14 +163,17 @@ export async function runIntro({ store, now = new Date(), dryRun = false, clock 
         { column: 'Introduced_x0020_On', op: 'eq', value: null },
       ],
     };
-    const slot = Math.floor(nowMs / SLOT_MS);
-    let { rows: referrals, truncated } = await readWindow(store, referralQuery);
-    if (truncated) {
-      // More open referrals than one window holds. Rotate the window so later rows are reached,
-      // and tell the owner once a day: rows that stay open this long need clearing by hand.
-      if (!dryRun) await alertOnce(`overflow:${today}`, `HSBS intro: more than ${WINDOW_ROWS} referrals are still open. Stamp or close the old ones`, null);
-      const more = slot % WINDOWS === 0 ? null : await readWindow(store, referralQuery, (slot % WINDOWS) * WINDOW_ROWS);
-      if (more && more.rows.length > 0) referrals = more.rows;
+    let window = cursor.window;
+    let { rows: referrals, truncated } = await readWindow(store, referralQuery, window * WINDOW_ROWS);
+    if (window > 0 && referrals.length === 0) {
+      window = 0;
+      cursor.lastId = 0;
+      ({ rows: referrals, truncated } = await readWindow(store, referralQuery));
+    }
+    if (truncated && !dryRun) {
+      // More open referrals than one window holds. The cursor walks the windows in turn. Rows that
+      // stay open this long need clearing by hand, so tell the owner once a day.
+      await alertOnce(`overflow:${today}`, `HSBS intro: more than ${WINDOW_ROWS} referrals are still open. Stamp or close the old ones`, null);
     }
     const routing = new Map();
     for (const row of await readAll(store, { list: 'Routing' })) {
@@ -179,13 +184,13 @@ export async function runIntro({ store, now = new Date(), dryRun = false, clock 
       .map((row) => ({ row, ref: readReferral(row.id, row.fields) }))
       .filter(({ ref }) => isCandidate(ref, nowMs))
       .sort((a, b) => a.row.id - b.row.id);
-    // Rows that stay unresolved (unknown company, a maybe) must not crowd out later ones. The
-    // window start moves one slot every run, so every row is reached within a few runs.
-    // The batch moves once per full turn of the read windows, so a window is revisited with a new batch.
-    const turn = Math.floor(slot / WINDOWS);
-    const start = candidates.length > MAX_REFERRALS_PER_RUN ? (turn * MAX_REFERRALS_PER_RUN) % candidates.length : 0;
-    const batch = [...candidates.slice(start), ...candidates.slice(0, start)].slice(0, MAX_REFERRALS_PER_RUN);
+    // Resume after the last referral done, then wrap to the start of the window.
+    const after = candidates.filter(({ row }) => row.id > cursor.lastId);
+    const before = candidates.filter(({ row }) => row.id <= cursor.lastId);
+    const batch = [...after, ...before].slice(0, MAX_REFERRALS_PER_RUN);
 
+    let lastDone = cursor.lastId;
+    const done = new Set();
     for (const { row, ref } of batch) {
       // Out of time: leave the rest for the next run. Every step is safe to repeat.
       if (clock() - startedAt >= BUDGET_MS) {
@@ -193,11 +198,22 @@ export async function runIntro({ store, now = new Date(), dryRun = false, clock 
         continue;
       }
       out.scanned += 1;
+      lastDone = row.id;
+      done.add(row.id);
       try {
         await oneReferral(row, ref, routing);
       } catch {
         // One bad referral never stops the rest. The next run reads it again.
       }
+    }
+    // Move to the next window once this one has been walked to its end.
+    const walked = after.every(({ row }) => done.has(row.id));
+    if (truncated && walked) {
+      cursor.window = (window + 1) % WINDOWS;
+      cursor.lastId = 0;
+    } else {
+      cursor.window = truncated ? window : 0;
+      cursor.lastId = lastDone;
     }
   }
 
@@ -441,17 +457,28 @@ async function takeLock(store, nowMs) {
       }
       return undefined;
     }
-    return { id: made.id, etag: made.etag };
+    return { id: made.id, etag: made.etag, window: 0, lastId: 0 };
   }
   const row = logRow(found);
   if (row.result === 'Held' && nowMs - row.lastTryMs < LOCK_MINUTES * 60_000) return undefined;
   try {
     // The etag makes this atomic: of two requests that both read it, one gets 412.
     const claimed = await store.patch({ list: 'Field Send Log', id: found.id, etag: found.etag, fields: { Result: 'Held', LastTry: iso(nowMs) } });
-    return { id: found.id, etag: claimed.etag };
+    return { id: found.id, etag: claimed.etag, ...cursorOf(found) };
   } catch {
     return undefined;
   }
+}
+
+/** The cursor kept on the lock row. Bad or missing numbers start from the top. */
+function cursorOf(row) {
+  const n = (v) => (Number.isSafeInteger(v) && v >= 0 ? v : 0);
+  return { window: n(row?.fields?.Tries) % WINDOWS, lastId: n(row?.fields?.CaseId) };
+}
+
+/** Dry run reads the cursor without taking the lock. */
+async function readCursor(store) {
+  return cursorOf((await lockRows(store))[0]);
 }
 
 /** Every lock row, lowest id first. The lowest id is the lock. */
