@@ -82,7 +82,11 @@ describe('what is refused before anything is posted', () => {
 
   test('bad paging, bad clauses, empty or nested fields, a bad id or etag', async () => {
     await assert.rejects(readRows({ list: 'Routing', top: 501 }), kind('bad_request'));
-    await assert.rejects(readRows({ list: 'Routing', skip: -1 }), kind('bad_request'));
+    await assert.rejects(readRows({ list: 'Routing', skip: 100 }), kind('bad_request'), 'no offset paging: SharePoint ignores $skip on list items');
+    await assert.rejects(
+      readRows({ list: 'Routing', where: [{ column: 'ID', op: 'gt', value: 1 }, { column: 'ID', op: 'gt', value: 2 }] }),
+      kind('bad_request'),
+    );
     await assert.rejects(readRows({ list: 'Routing', where: [{ column: 'Title', op: 'startswith', value: 'x' }] }), kind('bad_request'));
     await assert.rejects(readRows({ list: 'Routing', where: [{ column: 'Title', op: 'gt', value: 1 }] }), kind('bad_request'));
     await assert.rejects(readRows({ list: 'Routing', where: [{ column: 'ID', op: 'gt', value: 'x' }] }), kind('bad_request'));
@@ -116,8 +120,22 @@ describe('read', () => {
       select: ['Title'],
       where: [{ column: 'Title', op: 'eq', value: 'HealthFirst' }],
       top: 1,
-      skip: 0,
     });
+  });
+
+  test('pages by id: next is the last row id, and rows out of order or a wrong next is a failed read', async () => {
+    const rows = [
+      { id: 4, etag: '"1"', fields: {} },
+      { id: 9, etag: '"1"', fields: {} },
+    ];
+    reply = () => [200, { ok: true, items: rows, next: 9 }];
+    assert.equal((await readRows({ list: 'Routing', top: 2 })).next, 9);
+    reply = () => [200, { ok: true, items: rows, next: 2 }];
+    await assert.rejects(readRows({ list: 'Routing', top: 2 }), kind('failed'));
+    reply = () => [200, { ok: true, items: [], next: 9 }];
+    await assert.rejects(readRows({ list: 'Routing', top: 2 }), kind('failed'));
+    reply = () => [200, { ok: true, items: [rows[1], rows[0]], next: null }];
+    await assert.rejects(readRows({ list: 'Routing', top: 2 }), kind('failed'));
   });
 
   test('a bad row, over 500 rows, a 202 or non-JSON is a failed read, never a short list', async () => {
@@ -202,8 +220,10 @@ describe('the fake store', () => {
     const after = await store.read({ list: 'Routing', where: [{ column: 'ID', op: 'gt', value: 1 }] });
     assert.ok(after.items.every((r) => r.id > 1), 'gt on ID keeps later rows only');
     const page = await store.read({ list: 'Routing', top: 1 });
-    assert.equal(page.next, 1);
-    assert.equal((await store.read({ list: 'Routing', top: 1, skip: 1 })).next, null);
+    assert.equal(page.next, 1, 'next is the last id of a full page');
+    const rest = await store.read({ list: 'Routing', top: 1, where: [{ column: 'ID', op: 'gt', value: page.next }] });
+    assert.deepEqual([rest.items.map((r) => r.id), rest.next], [[2], null]);
+    await assert.rejects(store.read({ list: 'Routing', skip: 1 }), kind('bad_request'));
   });
 
   test('patch needs the current etag and a stale one changes nothing', async () => {

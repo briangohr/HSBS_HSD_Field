@@ -64,6 +64,22 @@ async function runMany(store, runs) {
 }
 
 describe('one referral, no trouble', () => {
+  test('Routing past one page: rows are paged by id, so a partner on row 150 is still found', async () => {
+    const filler = Array.from({ length: 149 }, (_, i) => ({ Title: `TEST Filler ${i}`, Verified: false }));
+    const store = createFakeStore({
+      lists: {
+        'Field Settings': SETTINGS,
+        Routing: [...filler, ROUTING[0]],
+        Referrals: [REFERRAL],
+        'Service Cases': [],
+        'Field Send Log': [],
+        'Rep Roster': [{ RepEmail: 'rep@example.invalid', Role: 'RM' }],
+      },
+    });
+    const answer = await runIntro({ store, now: at(0) });
+    assert.deepEqual([answer.introduced, answer.alerts], [1, 0]);
+  });
+
   test('a HealthFirst TEST referral: case, one mail to the owner only, log row, stamp, lock freed', async () => {
     const store = world();
     const answer = await runIntro({ store, now: at(0) });
