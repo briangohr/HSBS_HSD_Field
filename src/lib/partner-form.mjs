@@ -3,7 +3,7 @@
 // key, no flow URL and no lead data. Contract: docs/field-flow-contract.md, "HSBS 7F".
 
 import { oneLine } from './one-line.mjs';
-import { RETIRED_CHOICE_CODES, STAND_CHOICES, displayStatus } from './partner-status-words.mjs';
+import { PARK_CHOICES, PARK_CODES, RETIRED_CHOICE_CODES, STAND_CHOICES, displayStatus } from './partner-status-words.mjs';
 
 /** A Partner Links Link Key: 40 hex characters. Anything else is 404 before any flow call. */
 export const isPartnerKey = (key) => typeof key === 'string' && /^[0-9a-fA-F]{40}$/.test(key);
@@ -26,6 +26,8 @@ export const TALKED_FOR = {
   signed: 'Yes',
   lost: 'Yes',
   nochange: '',
+  parked: '',
+  unpark: '',
 };
 
 /** The disqualified codes (the page offers only dq_noanswer). Each closes the lead and emails Brian. */
@@ -90,6 +92,39 @@ export function dealValueOf(value) {
   return n <= DEAL_VALUE_MAX ? String(n) : null;
 }
 
+/**
+ * Parked (PARTNER_PARKED_ENABLED, Brian 11/26/2026, LTI-SHARED-001 r8 "Parked rules"). A park
+ * needs a reason and the name of who parked it; a save missing either is refused and names
+ * what is missing, even when the date is missing too (E21). With both and no revisit date,
+ * 7F saves the lead as Closed Lost, reason "Parked without a revisit date" (E22). A revisit
+ * date must be after today. The partner link is shared per company, so who is typed.
+ */
+export const PARK_REASON_MAX = 300;
+export const PARKED_BY_MAX = 100;
+export const PARK_FIELDS = ['parkDate', 'parkReason', 'parkedBy'];
+/** The Closed Reason 7F writes on a park with no revisit date. */
+export const PARK_NO_DATE_REASON = 'Parked without a revisit date';
+/** What the saver sees after a park with no revisit date (E22). */
+export const PARK_NO_DATE_WORDS = 'Saved as Closed Lost, no revisit date.';
+export const PARK_DATE_HINT = 'Leave it blank only to close the lead: a park with no revisit date saves as Closed lost.';
+
+/**
+ * How many updates in a checked save are parks with no revisit date, which 7F closes.
+ * @param {Record<string, unknown>[]} updates
+ */
+export const parkNoDateCount = (updates) => updates.filter((u) => u.choice === 'parked' && u.parkDate === '').length;
+
+/**
+ * The status words after a reload. A park with no revisit date adds PARK_NO_DATE_WORDS, but
+ * only on a full save: a partial one cannot tell which lead went through.
+ * @param {string} words the save result words
+ * @param {number} saved @param {number} sent @param {number} noDate parkNoDateCount of the save
+ */
+export function withParkWords(words, saved, sent, noDate) {
+  if (!words || !Number.isSafeInteger(noDate) || noDate < 1 || noDate > sent || saved !== sent) return words;
+  return `${words} ${noDate === 1 ? PARK_NO_DATE_WORDS : `${noDate} leads: ${PARK_NO_DATE_WORDS}`}`;
+}
+
 /** What the page names when a field is missing or wrong. */
 export const FIELD_WORDS = {
   choice: 'Where does it stand?',
@@ -101,6 +136,10 @@ export const FIELD_WORDS = {
   note: 'Note',
   offices: 'Office count',
   dealValue: 'Year 1 deal value',
+  parkDate: 'Revisit date',
+  parkReason: 'Reason for setting it aside',
+  parkedBy: 'Your name',
+  parkReasonBy: 'Reason for setting it aside and Your name',
 };
 
 export const SAVE_WORDS = {
@@ -128,7 +167,7 @@ export const saveLabel = (n) => (Number.isSafeInteger(n) && n > 0 ? `Save ${n} $
  * @param {string} choice a choice code, or 'nochange'
  */
 export function pickedWords(choice) {
-  const c = STAND_CHOICES.find((x) => x.code === choice);
+  const c = [...STAND_CHOICES, ...PARK_CHOICES].find((x) => x.code === choice);
   return c ? `Selected: ${c.label}` : '';
 }
 
@@ -171,6 +210,13 @@ export function isDate(value) {
   return at.getUTCFullYear() === y && at.getUTCMonth() === m - 1 && at.getUTCDate() === d;
 }
 
+/** The day after a yyyy-MM-dd date, or "" when it is not one. The earliest revisit date. */
+export function nextDay(value) {
+  if (!isDate(value)) return '';
+  const [y, m, d] = value.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+}
+
 /** "Nov 23, 2026" for a yyyy-MM-dd date, or "" when it is not one. */
 export function showDate(value) {
   if (!isDate(value)) return '';
@@ -199,9 +245,15 @@ const text = (v) => (typeof v === 'string' ? v : '');
  * ignored and the update has no dealValue key, exactly as before. On, the update always has
  * one: digits on a deal choice (meeting, proposal, signed), blank on the rest. Blank keeps
  * the stored value.
+ *
+ * `parkDate`, `parkReason` and `parkedBy` are read only with `opts.parked`
+ * (PARTNER_PARKED_ENABLED), which also lets `parked` and `unpark` through. Off, both codes are
+ * a bad choice and the update has none of the three keys. On, it always has all three, blank
+ * unless the choice is `parked`. Reason and who are checked before the date (E21); a blank
+ * date is allowed and 7F closes the lead (E22). The day rule (after today) needs `today`.
  * @param {unknown} raw
  * @param {string | null} today yyyy-MM-dd, Eastern, or null to skip the day rules
- * @param {{ dealValue?: boolean }} [opts]
+ * @param {{ dealValue?: boolean, parked?: boolean }} [opts]
  * @returns {{ ok: true, update: Record<string, unknown> } | { ok: false, id: number | null, field: string }}
  */
 export function checkUpdate(raw, today, opts = {}) {
@@ -212,7 +264,8 @@ export function checkUpdate(raw, today, opts = {}) {
   const choice = text(u.choice);
   const sentTalked = text(u.talkedToDoctor);
   const legacy = sentTalked !== '';
-  if (!(legacy ? LEGACY_CHOICE_CODES : CHOICE_CODES).includes(choice)) return bad('choice');
+  const codes = legacy ? LEGACY_CHOICE_CODES : opts.parked === true ? [...CHOICE_CODES, ...PARK_CODES] : CHOICE_CODES;
+  if (!codes.includes(choice)) return bad('choice');
   if (legacy && !TALKED_CHOICES.includes(sentTalked)) return bad('talkedToDoctor');
   const talked = legacy ? sentTalked : (TALKED_FOR[choice] ?? '');
   const rawNote = text(u.note);
@@ -244,6 +297,23 @@ export function checkUpdate(raw, today, opts = {}) {
     }
     update.dealValue = deal;
   }
+  if (opts.parked === true) {
+    update.parkDate = '';
+    update.parkReason = '';
+    update.parkedBy = '';
+  }
+  if (choice === 'parked') {
+    const reason = oneLine(text(u.parkReason), PARK_REASON_MAX + 1);
+    const by = oneLine(text(u.parkedBy), PARKED_BY_MAX + 1);
+    if (!reason && !by) return bad('parkReasonBy');
+    if (!reason || reason.length > PARK_REASON_MAX) return bad('parkReason');
+    if (!by || by.length > PARKED_BY_MAX) return bad('parkedBy');
+    const date = text(u.parkDate);
+    if (date !== '' && (!isDate(date) || (today !== null && date <= today))) return bad('parkDate');
+    update.parkDate = date;
+    update.parkReason = reason;
+    update.parkedBy = by;
+  }
   if (choice === 'meeting') {
     const date = text(u.meetingDate);
     if (!isDate(date) || (today !== null && date < today)) return bad('meetingDate');
@@ -269,7 +339,7 @@ export function checkUpdate(raw, today, opts = {}) {
  * Check a whole save: 1 to 50 updates, each lead once.
  * @param {unknown} updates
  * @param {string | null} today as checkUpdate
- * @param {{ dealValue?: boolean }} [opts] as checkUpdate
+ * @param {{ dealValue?: boolean, parked?: boolean }} [opts] as checkUpdate
  * @returns {{ ok: true, updates: Record<string, unknown>[] } | { ok: false, id: number | null, field: string }}
  */
 export function checkUpdates(updates, today, opts = {}) {
@@ -295,14 +365,19 @@ const MEETING_STATUSES = ['Meeting set', 'Meeting held'];
  * The "Now:" words on a lead card. The case keeps its old Meeting Date after a later save
  * (7F leaves the column alone), so the date shows only while the lead stands at a meeting.
  * Brian, 11/21/2026: "Trying to reach, meeting Nov 24" made no sense.
+ * A parked lead (7F's `parkedUntil`, PARTNER_PARKED_ENABLED) adds "Parked until <date>".
  * @param {string} status Partner Status as stored
  * @param {string} meetingDate YYYY-MM-DD or blank
+ * @param {string} [parkedUntil] YYYY-MM-DD while parked, else blank
  */
-export function nowLine(status, meetingDate) {
+export function nowLine(status, meetingDate, parkedUntil = '') {
   const shown = stageWords(status);
-  if (!shown) return 'No update yet';
+  const until = showDate(parkedUntil);
+  const park = until ? `Parked until ${until}` : '';
+  if (!shown) return park ? `No update yet. ${park}` : 'No update yet';
   const date = MEETING_STATUSES.includes(shown) ? showDate(meetingDate) : '';
-  return date ? `${shown}, meeting ${date}` : shown;
+  const line = date ? `${shown}, meeting ${date}` : shown;
+  return park ? `${line}. ${park}` : line;
 }
 
 /** The stage in the page's words: 7F stores Reached and Trying to reach. @param {string} status */
@@ -316,10 +391,14 @@ function stageWords(status) {
 /**
  * The hint under "No change this week". 7F leaves Partner Status as it is and counts the
  * save as this week's update, so the hint names the stage the lead keeps.
+ * A parked lead stays parked (E24): the hint says so.
  * @param {string} status Partner Status as stored
+ * @param {string} [parkedUntil] YYYY-MM-DD while parked, else blank
  */
-export function noChangeHint(status) {
+export function noChangeHint(status, parkedUntil = '') {
   const shown = stageWords(status);
+  const until = showDate(parkedUntil);
+  if (until) return `Keeps it parked until ${until}${shown ? `, at ${shown}` : ''}. Counts as this week's update.`;
   return shown ? `Keeps it at ${shown}. Counts as this week's update.` : "Counts as this week's update.";
 }
 

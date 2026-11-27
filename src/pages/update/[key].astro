@@ -6,16 +6,21 @@
 // true. No analytics. Contract: docs/field-flow-contract.md, "HSBS 7F".
 import '../../styles/global.css';
 import { clientIp, journeyLimited, secretUrlNotFound } from '../../lib/http';
-import { PartnerFlowError, dealValueEnabled, listLeads, partnerPageEnabled } from '../../lib/partner-flow.mjs';
+import { PartnerFlowError, dealValueEnabled, listLeads, parkedEnabled, partnerPageEnabled } from '../../lib/partner-flow.mjs';
 import {
   CLOSED_REASONS,
   DEAL_VALUE_INPUT_MAX,
   DEAL_VALUE_LABEL,
   MAX_UPDATES,
   NOTE_MAX,
+  PARKED_BY_MAX,
+  PARK_DATE_HINT,
+  PARK_REASON_MAX,
   PRODUCT_MAX,
   SAVE_WORDS,
   easternToday,
+  nextDay,
+  withParkWords,
   dueLine,
   isPartnerKey,
   noChangeHint,
@@ -71,6 +76,10 @@ const today = easternToday();
 // save body is exactly as before.
 const dealOn = dealValueEnabled();
 const storedDeal = (lead: (typeof leads)[number]) => ('dealValue' in lead ? lead.dealValue : '');
+// Parked (PARTNER_PARKED_ENABLED). Off: no Set aside choices, no park fields, no data
+// attribute, and the save body is exactly as before.
+const parkOn = parkedEnabled();
+const parkedUntil = (lead: (typeof leads)[number]) => (parkOn && 'parkedUntil' in lead ? String(lead.parkedUntil) : '');
 // After a save the page reloads with ?saved=<n>&of=<sent>, so a partial or zero save keeps
 // its words. A page opened before `of` existed sends ?saved=<n> alone: a full save.
 const params = Astro.url.searchParams;
@@ -78,7 +87,7 @@ const savedParam = params.get('saved');
 const ofParam = params.get('of');
 const wholeParam = (v: string | null) => (v !== null && /^\d{1,3}$/.test(v) ? Number(v) : NaN);
 const savedCount = wholeParam(savedParam);
-const saved =
+const savedWordsOnly =
   state !== 'ready' || savedParam === null
     ? ''
     : ofParam === null
@@ -86,6 +95,8 @@ const saved =
         ? savedWords(savedCount)
         : ''
       : (saveResultWords(savedCount, wholeParam(ofParam)) ?? '');
+// ?nd=<n>: parks with no revisit date in that save, which 7F saved as Closed Lost (E22).
+const saved = parkOn ? withParkWords(savedWordsOnly, savedCount, wholeParam(ofParam), wholeParam(params.get('nd'))) : savedWordsOnly;
 ---
 
 <!doctype html>
@@ -142,7 +153,7 @@ const saved =
 
       {
         state === 'ready' && (
-          <form id="pu-form" class="pu-form" data-key={key} data-deal-value={dealOn ? 'on' : undefined} novalidate>
+          <form id="pu-form" class="pu-form" data-key={key} data-deal-value={dealOn ? 'on' : undefined} data-parked={parkOn ? 'on' : undefined} novalidate>
             <h1 class="pu-h1">{partner ? `Lead updates for ${partner}` : 'Lead updates'}</h1>
             <p class="pu-intro">
               Please update each lead within 2 business days. Answer only the leads that changed, then press Save once.
@@ -185,7 +196,7 @@ const saved =
                       </div>
                       <div>
                         <dt>Stage</dt>
-                        <dd>{nowLine(lead.status, lead.meetingDate)}</dd>
+                        <dd>{nowLine(lead.status, lead.meetingDate, parkedUntil(lead))}</dd>
                       </div>
                       <div>
                         <dt>Next update</dt>
@@ -195,7 +206,7 @@ const saved =
 
                     <fieldset class="pu-q" data-q="choice">
                       <legend>Where does it stand?</legend>
-                      {choiceGroupsFor(lead.status).map((g) => (
+                      {choiceGroupsFor(lead.status, { on: parkOn, parked: parkedUntil(lead) !== '' }).map((g) => (
                         <div class="pu-group">
                           {g.heading && <p class="pu-group-h">{g.heading}</p>}
                           {g.note && <p class="pu-group-note">{g.note}</p>}
@@ -217,7 +228,7 @@ const saved =
                       <input type="checkbox" name={`nochange-${lead.id}`} value="nochange" data-nochange />
                       <span>
                         No change this week
-                        <span class="pu-hint">{noChangeHint(lead.status)}</span>
+                        <span class="pu-hint">{noChangeHint(lead.status, parkedUntil(lead))}</span>
                       </span>
                     </label>
 
@@ -262,6 +273,23 @@ const saved =
                             autocomplete="off"
                             value={storedDeal(lead)}
                           />
+                        </label>
+                      </div>
+                    )}
+                    {parkOn && (
+                      <div class="pu-more" data-for="parked" hidden>
+                        <label class="pu-field">
+                          <span>Revisit date</span>
+                          <input type="date" name={`parkDate-${lead.id}`} min={nextDay(today)} aria-describedby={`parkhint-${lead.id}`} />
+                        </label>
+                        <p class="pu-hint" id={`parkhint-${lead.id}`}>{PARK_DATE_HINT}</p>
+                        <label class="pu-field">
+                          <span>Reason for setting it aside</span>
+                          <input type="text" name={`parkReason-${lead.id}`} maxlength={PARK_REASON_MAX} autocomplete="off" />
+                        </label>
+                        <label class="pu-field">
+                          <span>Your name</span>
+                          <input type="text" name={`parkedBy-${lead.id}`} maxlength={PARKED_BY_MAX} autocomplete="name" />
                         </label>
                       </div>
                     )}
@@ -389,7 +417,9 @@ const saved =
         const key = form.dataset.key ?? '';
         // Year 1 deal value switch, set by the server. Off: no dealValue is read or sent.
         const dealOn = form.dataset.dealValue === 'on';
-        const checkOpts = { dealValue: dealOn };
+        // Parked switch, set by the server. Off: no park field is read or sent.
+        const parkOn = form.dataset.parked === 'on';
+        const checkOpts = { dealValue: dealOn, parked: parkOn };
         const leads = [...form.querySelectorAll<HTMLLIElement>('.pu-lead')];
         // A save with no clear answer keeps its id and its exact body, so Save resends it.
         let pending: { submissionId: string; updates: Record<string, unknown>[] } | null = null;
@@ -428,6 +458,7 @@ const saved =
           offices: li.dataset.askOffices === 'true' ? field(li, 'offices') : '',
           askOffices: li.dataset.askOffices === 'true',
           ...(dealOn ? { dealValue: dealSent(li) } : {}),
+          ...(parkOn ? { parkDate: field(li, 'parkDate'), parkReason: field(li, 'parkReason'), parkedBy: field(li, 'parkedBy') } : {}),
         });
         // Complete: an answer Save would send as it stands, follow-up fields included.
         const complete = (li: HTMLLIElement) => touched(li) && checkUpdate(answer(li), easternToday(), checkOpts).ok;
@@ -572,7 +603,8 @@ const saved =
           if (doneWords !== null) {
             pending = null;
             status.textContent = doneWords;
-            location.replace(`${location.pathname}?saved=${savedCount}&of=${updates.length}`);
+            const noDate = parkOn && typeof data?.parkNoDate === 'number' && data.parkNoDate > 0 ? `&nd=${data.parkNoDate}` : '';
+            location.replace(`${location.pathname}?saved=${savedCount}&of=${updates.length}${noDate}`);
             return;
           }
           if (code === 404 || code === 410) {
@@ -614,7 +646,9 @@ const saved =
             status.textContent = first.words;
             // Focus the field that is missing, next to its error, and keep the error clear of the
             // sticky Save (scroll-padding-bottom).
-            const named = first.li.querySelector<HTMLElement>(`[name="${first.field}-${first.li.dataset.id}"]`);
+            // A park missing both reason and name focuses the reason first.
+            const focusName = first.field === 'parkReasonBy' ? 'parkReason' : first.field;
+            const named = first.li.querySelector<HTMLElement>(`[name="${focusName}-${first.li.dataset.id}"]`);
             (named ?? first.li.querySelector<HTMLElement>('input, select'))?.focus();
             errorLine(first.li).scrollIntoView({ block: 'nearest' });
             return;

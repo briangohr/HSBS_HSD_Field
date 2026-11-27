@@ -30,6 +30,7 @@ route answers 404 and no flow is called.
 | `GATEWAY_SECRET` | Sent as header `X-GW-Secret`. The flow refuses a call without it. At least 16 characters | Yes |
 | `PARTNER_OFFICE_CHECK` | The partner page asks the office count on a Direct Dental Group lead (7F, below), exactly `true` (and `PARTNER_PAGE_ENABLED`). Off: no question, and `/api/partner-save` sends every `offices` blank, so no lead earns the group amount | No |
 | `PARTNER_DEAL_VALUE_ENABLED` | The partner page asks an optional Year 1 deal value on Demo set, Proposal and Signed, and the 7F save sends `dealValue` (7F, below), exactly `true` (and `PARTNER_PAGE_ENABLED`). Off: no field, `readLead` drops `dealValue`, and the save body has no `dealValue` key, exactly as before | No |
+| `PARTNER_PARKED_ENABLED` | The partner page offers "Set aside for later (Parked)" with a revisit date, a reason and the saver's name, and "Pick it back up" on a parked lead; the 7F save sends `parkDate`, `parkReason` and `parkedBy` (7F, below), exactly `true` (and `PARTNER_PAGE_ENABLED`). Off: no choice, no field, `readLead` drops `parkedUntil`, `parked` and `unpark` are 422 `bad_value` field `choice`, and the save body has none of the three keys, exactly as before | No |
 | `REP_APP_COMPANIES` | Which companies Send offers: `HealthFirst`, `Staffing`, comma separated. Unset is HealthFirst only | No |
 | `REP_PAY_ENABLED` | Dollar amounts on screens, exactly `true`. Off until Brian approves pay | No |
 | `REP_PAY_PLAN` | HealthFirst pay plan words (`src/lib/rep-pay-plan.mjs`). Set to `reached:100,manager:50` (promo file) | No |
@@ -435,7 +436,7 @@ to 7F. Waits: 20 s for `leads`, 55 s for `save`.
 Cases item id), `ref` (the Referrals Title: `HSBS-F<n>`, or `HSBS-A<n>` for the 12 moved
 from the old site), `practice`, `contact`, `company`, `introducedOn`,
 `status` (Partner Status), `talkedToDoctor`, `meetingDate`, `nextUpdateDue`,
-`missedUpdates`, `askOffices`, `dealValue`. Dates are `yyyy-MM-dd`. The site keeps only these (`readLead`); anything
+`missedUpdates`, `askOffices`, `dealValue`, `parkedUntil`. Dates are `yyyy-MM-dd`. The site keeps only these (`readLead`); anything
 else, a phone, email or JDE included, is dropped. A lead with a bad `id` or `ref` is
 dropped. More than 500 leads is a failed read. The page sorts overdue (Missed Updates above
 0) first, then by due date.
@@ -451,6 +452,12 @@ dollars (`"25000"`), or `""` when it is blank. `readLead` keeps it only with
 `PARTNER_DEAL_VALUE_ENABLED` on (then always, blank when 7F sent nothing, a number that is
 not whole, or more than 9,999,999); off, the lead has no `dealValue` key. The page pre-fills
 the field from it.
+
+`parkedUntil` (since 11/27/2026) is the case's `Park Revisit Date` (`yyyy-MM-dd`) while the
+case is parked, else `""`. A case is parked when `Parked On` is later than `Park Returned On`
+(blank counts as never). `readLead` keeps it only with `PARTNER_PARKED_ENABLED` on (blank
+when it is not a real date); off, the lead has no `parkedUntil` key. The page shows "Parked
+until <date>" on the Stage line and offers Pick it back up.
 
 ### save
 
@@ -468,7 +475,9 @@ the field from it.
 ```
 
 `dealValue` is in every update only while `PARTNER_DEAL_VALUE_ENABLED` is on; off, the key is
-absent and the body is exactly as before.
+absent and the body is exactly as before. `parkDate`, `parkReason` and `parkedBy` are in
+every update only while `PARTNER_PARKED_ENABLED` is on (blank unless `choice` is `parked`);
+off, the keys are absent.
 
 1 to 50 updates, each lead once, only the leads the partner touched. `choice` is one of
 `trying`, `qualified`, `dq_noanswer`, `dq_notinterested`, `meeting`, `proposal`, `signed`,
@@ -515,6 +524,43 @@ never "clear it". When it is not blank, 7F writes Service Cases `Deal Value Year
 the same write as the rest of the update. A missing `dealValue` (an older page) is blank.
 7F older than this change ignores the key.
 
+Parked (Brian, 11/26/2026 11:59 PM ET; rules in LTI-SHARED-001 r8 "Parked rules", checks E20
+to E26; written go to edit 7F 11/27/2026 12:01 AM ET). Two more choices, only with
+`PARTNER_PARKED_ENABLED` on and never with a legacy `talkedToDoctor`:
+
+- `parked` ("Set aside for later (Parked)", every open lead). `parkReason` (one line, up to
+  300) and `parkedBy` (the saver's typed name, one line, up to 100; the link is shared per
+  company) are required. Missing either is 422 `bad_value` with field `parkReason`,
+  `parkedBy`, or `parkReasonBy` when both are missing, and nothing is written, even when the
+  date is missing too (E21). `parkDate` is blank or a real date after today (the day rule is
+  the page's and 7F's, as for `meeting`).
+- `unpark` ("Pick it back up", offered only on a parked lead). No other field.
+
+Parked is a side state, outside Closed, never a win or a loss. 7F never writes a new Partner
+Status for it, so HSBS 10, 7G and every reader of Partner Status or Qualified see no new
+value. Service Cases columns (sites/HSBSField): `Parked On` (Date and Time), `Park Revisit
+Date` (Date), `Park Reason` (text), `Parked By` (text), `Park Origin` (text, Partner Status
+at the park save, the origin rung) and `Park Returned On` (Date and Time).
+
+- `parked` with a date (E20): Partner Status, Qualified and Talked To Doctor unchanged. 7F
+  writes `Parked On` now, `Park Revisit Date`, `Park Reason`, `Parked By`, `Park Origin`,
+  Next Update Due = the revisit date, Missed Updates 0, and the Status Log line "Parked until
+  <date> by <name>. Reason: <reason>." 7G asks only on a due date, so asks pause until the
+  revisit date and resume on it, and the case stays parked (E24). A missed revisit date makes
+  the lead Overdue the usual way (E23). Parking a parked lead again moves the date.
+- `parked` with no date (E22): stored as `lost`: Partner Status Not moving forward, Closed
+  Reason `Parked without a revisit date`, Closed On today, no park columns. The answer is
+  the usual 200; the site adds `parkNoDate` (count) to its answer, and after the reload the
+  page says "Saved as Closed Lost, no revisit date." (only on a full save).
+- Return (E25): `unpark`, or any choice but `nochange` and `parked` on a parked case, writes
+  `Park Returned On` now. The case is back on its origin rung (Partner Status never left
+  it), then moves as the choice says. No correction row. `unpark` keeps Partner Status and
+  sets the next due date as `nochange` does.
+- `nochange` on a parked case keeps it parked; before the revisit date the next due date
+  stays the revisit date.
+- A closed case cannot be parked (E26): the page lists only open leads, and 7F answers 422
+  `reload` for a closed case, as for every choice.
+
 A page loaded before 11/20/2026 still sends its own `talkedToDoctor` answer. An update that
 carries one gets the old rules, so an open tab or a retry of a partly written save still
 reaches 7F: `talkedToDoctor` must be one of the three Talked To Doctor choices and is sent
@@ -533,6 +579,8 @@ Salesforce picklist; every stored value is an existing column choice):
 | `meeting`, `proposal`, `signed` | Meeting set, Proposal or agreement sent, Signed | Yes | `signed` only | no |
 | `lost` | Not moving forward | unchanged, Closed Reason as sent | yes | no |
 | `nochange` | unchanged | unchanged | no | no |
+| `parked` with a date, `unpark` | unchanged (park columns as above) | unchanged | no | no |
+| `parked` with no date | Not moving forward, Closed Reason `Parked without a revisit date` | unchanged | yes | no |
 
 Next Update Due after a save (Brian, 11/22/2026): a lead still in qualification is asked
 every 2 business days, a qualified lead once a week on Friday. `trying`, and `nochange` on a
@@ -573,8 +621,9 @@ page; Qualified Yes with Reached is what the pay promise reads as reached and qu
 | 422 `{"error":"bad_value","id":n}` | Names the lead. Nothing was written |
 | 3xx, 408, 429, 5xx, timeout | "This is taking too long. It may already have gone through. Press Save again; it will not save twice." |
 
-`/api/partner-save` answers the page 200 `{"ok":true,"saved":n,"sent":m,"partial":bool,"message":"..."}`;
-`sent` and `partial` are the site's own fields, so 7F is unchanged. After a save the page
+`/api/partner-save` answers the page 200 `{"ok":true,"saved":n,"sent":m,"partial":bool,"message":"..."}`
+(plus `parkNoDate` with `PARTNER_PARKED_ENABLED` on); `sent`, `partial` and `parkNoDate` are
+the site's own fields, so 7F is unchanged. With `parkNoDate` above 0 the reload adds `&nd=<k>`. After a save the page
 reloads with `?saved=<n>&of=<m>`, so partial and zero words survive the reload, then drops
 the counts from the address so a refresh does not repeat them. A count pair that does not
 add up (`saved` above `of`, `of` outside 1 to 50, not whole numbers) shows no words. A page

@@ -19,6 +19,11 @@
 //   exactly as before, even when 7F sends a stored value. On, the field shows only on Demo
 //   set, Proposal and Signed, pre-filled; "$25,000" is sent as 25000; the stored value left
 //   as it is is sent blank; bad input names the lead and posts nothing.
+// - With PARTNER_PARKED_ENABLED off, the page has no Set aside choice, no park field and no
+//   "Parked until", even when 7F sends parkedUntil. On, every lead offers "Set aside for later
+//   (Parked)" and a parked lead also offers "Pick it back up"; a park missing reason and name
+//   names both and posts nothing; a full park sends the date, reason and name; a park with no
+//   date shows "Saved as Closed Lost, no revisit date." after the reload.
 
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
@@ -85,6 +90,8 @@ const LEADS = [
     meetingDate: eastern(3),
     nextUpdateDue: eastern(5),
     missedUpdates: 0,
+    // Parked until the revisit date (7F sends it; the page reads it only with the switch on).
+    parkedUntil: eastern(5),
   },
   {
     // A Direct Dental lead the rep marked Group: 7F asks the office count.
@@ -242,6 +249,11 @@ const phone = await browser.newContext({ ...devices['iPhone 13'], viewport: { wi
 await check('deal value switch off: no field, no attribute, even with a stored value', async () => {
   const html = await (await fetch(`${BASE}/update/${KEY}`)).text();
   assert.doesNotMatch(html, /dealValue-|data-deal-value|Year 1 deal value/);
+});
+
+await check('parked switch off: no Set aside choice, no park field, even with parkedUntil', async () => {
+  const html = await (await fetch(`${BASE}/update/${KEY}`)).text();
+  assert.doesNotMatch(html, /parkDate-|parkReason-|parkedBy-|data-parked|Set aside|Parked until|Pick it back up|value="parked"|value="unpark"/);
 });
 
 await check('375px: no sideways scroll', async () => {
@@ -708,6 +720,89 @@ if (process.env.PARTNER_SHOTS) {
   await page.addStyleTag({ content: '.pu-savebar { display: none !important; }' });
   await page.check('input[name="choice-37"][value="proposal"]');
   await page.locator('li[data-id="37"]').screenshot({ path: `${process.env.PARTNER_SHOTS}/deal-value-on.png` });
+  await page.close();
+}
+
+killDev(dev);
+
+// 4. Parked on (Brian, 11/26/2026; LTI-SHARED-001 r8, E20 to E22).
+dev = await startDev({
+  REP_APP_ENABLED: 'true',
+  PARTNER_PAGE_ENABLED: 'true',
+  PARTNER_OFFICE_CHECK: 'true',
+  PARTNER_PARKED_ENABLED: 'true',
+  PARTNER_FLOW_URL: FLOW_URL,
+});
+const PARK_DATE = 'input[name="parkDate-36"]';
+
+await check('parked: every lead offers Parked, a parked lead also Pick it back up, fields only on Parked', async () => {
+  const page = await phone.newPage();
+  await open(page);
+  assert.equal(await page.locator('input[name="choice-36"][value="parked"]').count(), 1);
+  assert.equal(await page.locator('input[name="choice-36"][value="unpark"]').count(), 0);
+  assert.equal(await page.locator('input[name="choice-38"][value="unpark"]').count(), 1);
+  assert.match(await page.textContent('li[data-id="38"]'), /Not reached yet\. Parked until [A-Z][a-z]{2} \d{1,2}, \d{4}/);
+  assert.match(await page.textContent('li[data-id="38"]'), /Keeps it parked until/);
+  assert.doesNotMatch(await page.textContent('li[data-id="36"]'), /Parked until/);
+  assert.equal(await page.isVisible(PARK_DATE), false, 'hidden before a pick');
+  await page.check('input[name="choice-36"][value="proposal"]');
+  assert.equal(await page.isVisible(PARK_DATE), false, 'proposal');
+  await page.check('input[name="choice-36"][value="parked"]');
+  assert.equal(await page.isVisible(PARK_DATE), true, 'parked');
+  assert.equal(await page.getAttribute(PARK_DATE, 'min'), TOMORROW);
+  assert.match(await page.textContent('li[data-id="36"]'), /a park with no revisit date saves as Closed lost/);
+  const wide = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  assert.ok(wide <= 0, `page is ${wide}px too wide`);
+  await page.close();
+});
+
+await check('parked: missing reason and name names both and posts nothing; a full park sends all three', async () => {
+  bodies.length = 0;
+  const page = await phone.newPage();
+  await open(page);
+  await page.check('input[name="choice-36"][value="parked"]');
+  await page.fill(PARK_DATE, eastern(14));
+  assert.equal(await label(page), 'Save', 'a park with no reason is not complete');
+  await page.click('#pu-save');
+  await page.waitForTimeout(300);
+  assert.match(await page.textContent('#pu-status'), /Lead HSBS-F90: check Reason for setting it aside and Your name\./);
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('name')), 'parkReason-36');
+  assert.equal(saves().length, 0);
+  await page.fill('input[name="parkReason-36"]', 'TEST office remodel');
+  await page.fill('input[name="parkedBy-36"]', 'TEST Jane Partner');
+  await page.check('input[name="choice-38"][value="unpark"]');
+  await Promise.all([page.waitForURL(/saved=2&of=2$/), page.click('#pu-save')]);
+  const sent = [...saves()[0].updates].sort((a, b) => a.id - b.id);
+  const blank = { talkedToDoctor: '', meetingDate: '', signedDate: '', signedProduct: '', closedReason: '', note: '', offices: '' };
+  assert.deepEqual(sent, [
+    { id: 36, choice: 'parked', ...blank, parkDate: eastern(14), parkReason: 'TEST office remodel', parkedBy: 'TEST Jane Partner' },
+    { id: 38, choice: 'unpark', ...blank, parkDate: '', parkReason: '', parkedBy: '' },
+  ]);
+  assert.match(await page.textContent('#pu-status'), /Saved 2 updates\./);
+  assert.doesNotMatch(await page.textContent('#pu-status'), /Closed Lost/);
+  await page.close();
+});
+
+await check('parked: no revisit date saves and says Saved as Closed Lost, no revisit date', async () => {
+  bodies.length = 0;
+  const page = await phone.newPage();
+  await open(page);
+  await page.check('input[name="choice-36"][value="parked"]');
+  await page.fill('input[name="parkReason-36"]', 'TEST not sure when');
+  await page.fill('input[name="parkedBy-36"]', 'TEST Jane Partner');
+  await Promise.all([page.waitForURL(/saved=1&of=1&nd=1/), page.click('#pu-save')]);
+  assert.equal(saves()[0].updates[0].parkDate, '');
+  assert.match(await page.textContent('#pu-status'), /Saved 1 update\. Saved as Closed Lost, no revisit date\./);
+  await page.close();
+});
+
+if (process.env.PARTNER_SHOTS) {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  await open(page);
+  await page.addStyleTag({ content: '.pu-savebar { display: none !important; }' });
+  await page.check('input[name="choice-36"][value="parked"]');
+  await page.locator('li[data-id="36"]').screenshot({ path: `${process.env.PARTNER_SHOTS}/parked-on.png` });
+  await page.locator('li[data-id="38"]').screenshot({ path: `${process.env.PARTNER_SHOTS}/parked-lead.png` });
   await page.close();
 }
 
