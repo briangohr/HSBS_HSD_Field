@@ -330,18 +330,18 @@ describe('review findings: starvation, alert delivery, held maybe', () => {
     assert.equal(introMails(store).filter((m) => m.html.includes('HSBS-SLOW')).length, 1);
   });
 
-  test('a valid referral at 2,050 behind unknown companies is reached; each run reads one page', async () => {
+  test('a valid referral at 2,050 behind unknown companies is reached; each run reads two pages at most', async () => {
     const rows = Array.from({ length: 2100 }, (_, i) => ({ ...REFERRAL, Title: `HSBS-N${i}`, Solutions: ['Nobody Inc'] }));
     rows[2049] = { ...REFERRAL, Title: 'HSBS-DEEP' };
     const store = createFakeStore({
       lists: { 'Field Settings': SETTINGS, Routing: ROUTING, Referrals: rows, 'Service Cases': [], 'Field Send Log': [], 'Rep Roster': [] },
     });
     const mailed = () => introMails(store).filter((m) => m.html.includes('HSBS-DEEP')).length;
-    for (let i = 0; i < 100 && mailed() === 0; i += 1) {
+    for (let i = 0; i < 150 && mailed() === 0; i += 1) {
       const before = store.inspect.calls.filter((c) => c.op === 'read' && c.list === 'Referrals').length;
       await runIntro({ store, now: at(i * 2) });
       const reads = store.inspect.calls.filter((c) => c.op === 'read' && c.list === 'Referrals').length - before;
-      assert.ok(reads <= 2, 'at most one page, plus one when it wraps to the top');
+      assert.ok(reads <= 2, 'one tail page and one sweep page');
     }
     assert.equal(mailed(), 1);
   });
@@ -379,6 +379,27 @@ describe('review findings: starvation, alert delivery, held maybe', () => {
     assert.deepEqual([first.scanned, first.deferred], [25, 5]);
     await runIntro({ store, now: at(6) });
     assert.equal(introMails(store).length, 30, 'the 5 deferred are mailed on the next run');
+  });
+
+  /** One new referral before each of 20 runs, 2 minutes apart. */
+  async function withArrivals(store) {
+    for (let i = 0; i < 20; i += 1) {
+      await store.create({ list: 'Referrals', fields: { ...REFERRAL, Title: `HSBS-NEW${i}` } });
+      await runIntro({ store, now: at(i * 2) });
+    }
+  }
+
+  test('a failed send is retried while new referrals keep arriving', async () => {
+    const store = world({}, { faults: [{ op: 'send', nth: 1, mode: 'fail' }] });
+    await withArrivals(store);
+    assert.equal(logs(store).find((r) => r.fields.Title === 'intro:1').fields.Result, 'Sent');
+    assert.equal(referral(store).Introduced_x0020_On, '2026-12-02');
+  });
+
+  test('a send with no clear answer is alerted while new referrals keep arriving', async () => {
+    const store = world({}, { faults: [{ op: 'send', nth: 1, mode: 'maybe_before' }] });
+    await withArrivals(store);
+    assert.equal(alerts(store).filter((m) => m.subject.includes('may or may not')).length, 1);
   });
 
   test('two requests racing for a missing lock: one runs, one case, one mail', async () => {

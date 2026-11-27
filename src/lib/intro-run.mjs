@@ -33,6 +33,8 @@ export const BUDGET_MS = 25_000;
 export const MAX_REFERRALS_PER_RUN = 25;
 /** Rows one read returns. Spent rows are stepped past without work, so a page can be wide. */
 const PAGE_ROWS = 500;
+/** Slots of each run kept for the sweep over older open referrals. */
+const SWEEP_SLOTS = 5;
 const STALE_RETRIES = 3;
 const SENT_DISPATCH = 'Sent delivery unverified';
 
@@ -137,14 +139,14 @@ export async function runIntro({ store, now = new Date(), dryRun = false, clock 
     if (!lock) return { ...out, skipped: 'locked' };
   }
   // Where the last run stopped. Every run resumes after it, so no row waits behind stuck ones.
-  const cursor = lock ? { lastId: lock.lastId } : await readCursor(store);
+  const cursor = lock ? { head: lock.head, sweep: lock.sweep } : await readCursor(store);
   try {
     await work();
   } finally {
     if (lock) {
       try {
-        // The lock row also holds the cursor: CaseId is the last referral the job stepped past.
-        await patchFresh(store, 'Field Send Log', lock, { Result: 'Free', LastTry: iso(nowMs), CaseId: cursor.lastId });
+        // The lock row also holds the cursors: CaseId is the tail head, Tries the sweep position.
+        await patchFresh(store, 'Field Send Log', lock, { Result: 'Free', LastTry: iso(nowMs), CaseId: cursor.head, Tries: cursor.sweep });
       } catch {
         // A lock left Held frees itself after LOCK_MINUTES.
       }
@@ -161,42 +163,59 @@ export async function runIntro({ store, now = new Date(), dryRun = false, clock 
         { column: 'Introduced_x0020_On', op: 'eq', value: null },
       ],
     };
-    // One bounded page after the cursor, in ID order. Nothing left after it: start from the top.
-    const page = async (after) =>
-      (await store.read({ ...referralQuery, where: [...referralQuery.where, { column: 'ID', op: 'gt', value: after }], top: PAGE_ROWS })).items;
-    let referrals = await page(cursor.lastId);
-    if (referrals.length === 0 && cursor.lastId > 0) {
-      cursor.lastId = 0;
-      referrals = await page(0);
-    }
     const routing = new Map();
     for (const row of await readAll(store, { list: 'Routing' })) {
       const route = readRoute(row.fields);
       if (route.name) routing.set(route.name, route);
     }
+    // One bounded page after an ID, in ID order.
+    const page = async (after) =>
+      (await store.read({ ...referralQuery, where: [...referralQuery.where, { column: 'ID', op: 'gt', value: after }], top: PAGE_ROWS })).items;
 
-    for (const [index, row] of referrals.entries()) {
-      const ref = readReferral(row.id, row.fields);
-      // IDs rise with creation time, so a referral too young to send means every later one is too.
-      const createdMs = Date.parse(ref.created);
-      if (!Number.isNaN(createdMs) && nowMs - createdMs < MIN_AGE_SECONDS * 1000) break;
-      if (!isCandidate(ref, nowMs)) {
-        cursor.lastId = row.id; // spent: step past it at no cost
-        continue;
+    // Two passes, each with its own cursor on the lock row:
+    //   tail   new referrals after `head`, most of the run's slots
+    //   sweep  older open referrals (ID up to the run's starting head), so a failed send is retried
+    //          and a maybe is alerted however many new referrals keep arriving
+    const headAtStart = cursor.head;
+    const tail = await walk(await page(cursor.head), MAX_REFERRALS_PER_RUN - (headAtStart > 0 ? SWEEP_SLOTS : 0), Infinity);
+    cursor.head = tail.last ?? cursor.head;
+    if (headAtStart > 0) {
+      const sweep = await walk(await page(cursor.sweep), MAX_REFERRALS_PER_RUN, headAtStart);
+      // Swept to the starting head, or nothing left: start the sweep from the top next run.
+      cursor.sweep = sweep.end ? 0 : (sweep.last ?? cursor.sweep);
+    }
+    return;
+
+    /**
+     * Work rows in order until `out.scanned` reaches `limit`, time runs out, a too-young row, or a
+     * row past `maxId`. `last` is the last row stepped past. Spent rows are stepped past at no cost.
+     */
+    async function walk(rows, limit, maxId) {
+      let last;
+      for (const [index, row] of rows.entries()) {
+        if (row.id > maxId) return { last, end: true };
+        const ref = readReferral(row.id, row.fields);
+        // IDs rise with creation time, so a referral too young to send means every later one is too.
+        const createdMs = Date.parse(ref.created);
+        if (!Number.isNaN(createdMs) && nowMs - createdMs < MIN_AGE_SECONDS * 1000) return { last, end: true };
+        if (!isCandidate(ref, nowMs)) {
+          last = row.id;
+          continue;
+        }
+        // Out of time or at the cap: the cursor stops here, so nothing after it is stepped past unseen.
+        if (out.scanned >= limit || clock() - startedAt >= BUDGET_MS) {
+          out.deferred += rows.slice(index).filter((r) => r.id <= maxId && isCandidate(readReferral(r.id, r.fields), nowMs)).length;
+          return { last, end: false };
+        }
+        last = row.id;
+        out.scanned += 1;
+        try {
+          await oneReferral(row, ref, routing);
+        } catch {
+          // One bad referral never stops the rest. The next run reads it again.
+        }
       }
-      // Out of time or at the cap: leave the rest for the next run. Every step is safe to repeat.
-      // The cursor stops here, so nothing after it is stepped past unseen.
-      if (out.scanned >= MAX_REFERRALS_PER_RUN || clock() - startedAt >= BUDGET_MS) {
-        out.deferred = referrals.slice(index).filter((r) => isCandidate(readReferral(r.id, r.fields), nowMs)).length;
-        break;
-      }
-      cursor.lastId = row.id;
-      out.scanned += 1;
-      try {
-        await oneReferral(row, ref, routing);
-      } catch {
-        // One bad referral never stops the rest. The next run reads it again.
-      }
+      return { last, end: rows.length < PAGE_ROWS };
     }
   }
 
@@ -440,7 +459,7 @@ async function takeLock(store, nowMs) {
       }
       return undefined;
     }
-    return { id: made.id, etag: made.etag, lastId: 0 };
+    return { id: made.id, etag: made.etag, head: 0, sweep: 0 };
   }
   const row = logRow(found);
   if (row.result === 'Held' && nowMs - row.lastTryMs < LOCK_MINUTES * 60_000) return undefined;
@@ -456,7 +475,7 @@ async function takeLock(store, nowMs) {
 /** The cursor kept on the lock row. Bad or missing numbers start from the top. */
 function cursorOf(row) {
   const n = (v) => (Number.isSafeInteger(v) && v >= 0 ? v : 0);
-  return { lastId: n(row?.fields?.CaseId) };
+  return { head: n(row?.fields?.CaseId), sweep: n(row?.fields?.Tries) };
 }
 
 /** Dry run reads the cursor without taking the lock. */
