@@ -535,15 +535,26 @@ to E26; written go to edit 7F 11/27/2026 12:01 AM ET). Two more choices, only wi
   300) and `parkedBy` (the saver's typed name, one line, up to 100; the link is shared per
   company) are required. Missing either is 422 `bad_value` with field `parkReason`,
   `parkedBy`, or `parkReasonBy` when both are missing, and nothing is written, even when the
-  date is missing too (E21). `parkDate` is blank or a real date after today (the day rule is
-  the page's and 7F's, as for `meeting`).
-- `unpark` ("Pick it back up", offered only on a parked lead). No other field.
+  date is missing too (E21). `parkDate` is blank or a real business day (no weekend, no Field
+  holiday) after today and at most 737 days out. The page and 7F both check it; 7F checks it
+  against a list it builds (`Park_days`, today minus 7 to today plus 737, business days only),
+  so an impossible date such as `2026-12-99` is 422 `bad_value` before any write. On a retry
+  of the same `submissionId` the day may be today or a past business day up to 7 days back.
+  7F never writes `talkedToDoctor` on `parked` or `unpark`, whatever the body carries.
+- `unpark` ("Pick it back up", offered only on a parked lead). No other field. On a case that
+  is not parked when 7F checks it: 422 `reload`.
 
 Parked is a side state, outside Closed, never a win or a loss. 7F never writes a new Partner
 Status for it, so HSBS 10, 7G and every reader of Partner Status or Qualified see no new
 value. Service Cases columns (sites/HSBSField): `Parked On` (Date and Time), `Park Revisit
 Date` (Date), `Park Reason` (text), `Parked By` (text), `Park Origin` (text, Partner Status
-at the park save, the origin rung) and `Park Returned On` (Date and Time).
+at the park save, the origin rung, `No update yet` when blank; a park of a parked case keeps
+the first origin) and `Park Returned On` (Date and Time).
+
+7F decides everything that depends on park state (the origin, the return stamp, the No change
+due date, the "Back from Parked" words) from the fresh read of the row on each write attempt,
+not from its earlier list read, so two saves that overlap cannot undo a park or return a case
+twice (Codex S8 verify 1, P0).
 
 - `parked` with a date (E20): Partner Status, Qualified and Talked To Doctor unchanged. 7F
   writes `Parked On` now, `Park Revisit Date`, `Park Reason`, `Parked By`, `Park Origin`,
@@ -556,8 +567,10 @@ at the park save, the origin rung) and `Park Returned On` (Date and Time).
   the usual 200; the site adds `parkNoDate` (count) to its answer, and after the reload the
   page says "Saved as Closed Lost, no revisit date." (only on a full save).
 - Return (E25): `unpark`, or any choice but `nochange` and `parked` on a parked case, writes
-  `Park Returned On` now. The case is back on its origin rung (Partner Status never left
-  it), then moves as the choice says. No correction row. `unpark` keeps Partner Status and
+  `Park Returned On` now and the Status Log adds "Back from Parked to <origin>."; who and when
+  are `Partner Updated By`, `Last Partner Update` and `Park Returned On`. The case is back on
+  its origin rung (Partner Status never left it), then moves as the choice says. A stage save
+  on a parked lead returns it. No correction row. `unpark` keeps Partner Status and
   sets the next due date as `nochange` does.
 - `nochange` on a parked case keeps it parked; before the revisit date the next due date
   stays the revisit date.
