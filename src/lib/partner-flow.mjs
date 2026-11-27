@@ -46,6 +46,13 @@ export const officeCheckEnabled = () => partnerPageEnabled() && env('PARTNER_OFF
 export const dealValueEnabled = () => partnerPageEnabled() && env('PARTNER_DEAL_VALUE_ENABLED') === 'true';
 
 /**
+ * Parked (Brian, 11/26/2026): the page offers "Set aside for later (Parked)" with a revisit
+ * date, a reason and who, and the save sends them. Off unless PARTNER_PARKED_ENABLED is
+ * exactly true: the page and the 7F save body are then exactly as before.
+ */
+export const parkedEnabled = () => partnerPageEnabled() && env('PARTNER_PARKED_ENABLED') === 'true';
+
+/**
  * Why a 7F call did not give leads or a save.
  * kind: 'unknown' (404, bad key, or off), 'expired' (410), 'reload' or 'bad_value' (422,
  * nothing written), 'config' (no URL), 'timeout' or 'failed' (no clear answer).
@@ -150,8 +157,9 @@ export function readLead(raw) {
   };
   // The case's stored Year 1 deal value, digits or blank. Kept only with the switch on, so
   // the lead is exactly as before with it off.
-  if (dealValueEnabled()) return { ...lead, dealValue: dealValueOf(r.dealValue) ?? '' };
-  return lead;
+  const withDeal = dealValueEnabled() ? { ...lead, dealValue: dealValueOf(r.dealValue) ?? '' } : lead;
+  // The revisit date while the case is parked, else blank. Kept only with the switch on.
+  return parkedEnabled() ? { ...withDeal, parkedUntil: date(r.parkedUntil) } : withDeal;
 }
 
 /**

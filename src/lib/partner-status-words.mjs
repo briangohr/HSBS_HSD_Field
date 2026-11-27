@@ -53,6 +53,20 @@ export const STAND_GROUPS = [
 ];
 
 /**
+ * Parked (Brian, 11/26/2026, LTI-SHARED-001 r8, "Parked rules"): set aside for later, outside
+ * Closed and never a win or a loss. Behind PARTNER_PARKED_ENABLED. 7F keeps Partner Status on
+ * the stage it had (the origin rung), stamps the park columns and holds the asks until the
+ * revisit date. `unpark` is offered only on a parked lead: it picks the lead back up at the
+ * stage it kept. Any other stage save on a parked lead also brings it back.
+ */
+export const PARK_CHOICES = [
+  { code: 'parked', label: 'Set aside for later (Parked)', hint: 'Updates pause until the revisit date.', group: 'side' },
+  { code: 'unpark', label: 'Pick it back up', hint: '', group: 'side' },
+];
+export const PARK_CODES = PARK_CHOICES.map((c) => c.code);
+export const PARK_GROUP = { group: 'side', heading: 'Set aside', note: '' };
+
+/**
  * Stages that mean the lead is qualified: Reached the customer (stored as Reached) and every
  * step after it. 7F sets Qualified Yes for each of these.
  */
@@ -66,15 +80,21 @@ export function isQualifiedStatus(raw) {
 /**
  * The groups the page offers one lead. Once a lead is qualified the Qualifying group is
  * frozen (Brian, 11/21/2026): it shows Qualified as done and offers no choice, so the
- * partner moves on through the After qualified steps.
+ * partner moves on through the After qualified steps. With `park.on` (PARTNER_PARKED_ENABLED)
+ * a Set aside group follows; `park.parked` adds Pick it back up.
  * @param {unknown} status Partner Status as stored
+ * @param {{ on?: boolean, parked?: boolean }} [park]
  */
-export function choiceGroupsFor(status) {
+export function choiceGroupsFor(status, park = {}) {
   const frozen = isQualifiedStatus(status);
-  return STAND_GROUPS.map((g) => {
+  const groups = STAND_GROUPS.map((g) => {
     const done = frozen && g.group === 'qualify';
     return { ...g, done: done ? 'Reached the customer' : '', choices: done ? [] : STAND_CHOICES.filter((c) => c.group === g.group) };
   });
+  if (park.on !== true) return groups;
+  // A lead that is not parked gets only Parked; a parked lead can be picked back up too.
+  const side = PARK_CHOICES.filter((c) => c.code === 'parked' || park.parked === true);
+  return [...groups, { ...PARK_GROUP, done: '', choices: side }];
 }
 
 /**

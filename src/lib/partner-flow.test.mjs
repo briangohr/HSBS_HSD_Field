@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { PartnerFlowError, dealValueEnabled, listLeads, officeCheckEnabled, partnerPageEnabled, readLead, saveUpdates, sortLeads } from './partner-flow.mjs';
+import { PartnerFlowError, dealValueEnabled, listLeads, officeCheckEnabled, parkedEnabled, partnerPageEnabled, readLead, saveUpdates, sortLeads } from './partner-flow.mjs';
 import { partnerSave } from './partner-save.mjs';
 
 const KEY = 'ab'.repeat(20);
@@ -298,6 +298,73 @@ describe('Year 1 deal value (Brian, 11/25/2026)', () => {
     for (const dealValue of ['10000000', '25.5', 'abc', '$25,000']) {
       const refused = await partnerSave({ key: KEY, submissionId: SID, updates: [{ ...SENT, dealValue }] });
       assert.deepEqual(refused, { status: 422, body: { error: 'bad_value', id: 36, field: 'dealValue' } }, dealValue);
+    }
+    assert.equal(posts.length, 0);
+  });
+});
+
+describe('Parked (Brian, 11/26/2026)', () => {
+  const PARK = { ...UPDATE, choice: 'parked', talkedToDoctor: '', meetingDate: '', parkDate: '2026-12-15', parkReason: 'Remodel', parkedBy: 'TEST Jane' };
+  const off = () => delete process.env.PARTNER_PARKED_ENABLED;
+  afterEach(off);
+  test('the switch is off unless exactly true, and needs the page switch', () => {
+    assert.equal(parkedEnabled(), false);
+    process.env.PARTNER_PARKED_ENABLED = 'TRUE';
+    assert.equal(parkedEnabled(), false);
+    process.env.PARTNER_PARKED_ENABLED = 'true';
+    assert.equal(parkedEnabled(), true);
+    process.env.PARTNER_PAGE_ENABLED = 'false';
+    assert.equal(parkedEnabled(), false);
+  });
+  test('switch off: the lead is exactly as before, parkedUntil dropped', async () => {
+    reply = () => [200, { partner: 'HealthFirst', leads: [{ ...LEAD, parkedUntil: '2026-12-15' }] }];
+    assert.deepEqual((await listLeads(KEY)).leads, [LEAD]);
+  });
+  test('switch on: parkedUntil is a date or blank', async () => {
+    process.env.PARTNER_PARKED_ENABLED = 'true';
+    reply = () => [200, { partner: 'HealthFirst', leads: [{ ...LEAD, parkedUntil: '2026-12-15' }] }];
+    assert.deepEqual((await listLeads(KEY)).leads, [{ ...LEAD, parkedUntil: '2026-12-15' }]);
+    for (const [v, want] of [['', ''], [undefined, ''], [null, ''], ['2026-02-30', ''], ['soon', ''], [20261215, '']]) {
+      assert.equal(readLead({ ...LEAD, parkedUntil: v })?.parkedUntil, want, String(v));
+    }
+  });
+  test('switch off: a park is refused before any post, and other bodies match main', async () => {
+    for (const choice of ['parked', 'unpark']) {
+      const refused = await partnerSave({ key: KEY, submissionId: SID, updates: [{ ...PARK, choice }] });
+      assert.deepEqual(refused, { status: 422, body: { error: 'bad_value', id: 36, field: 'choice' } }, choice);
+    }
+    assert.equal(posts.length, 0);
+    reply = () => [200, { ok: true, saved: 1 }];
+    const done = await partnerSave({ key: KEY, submissionId: SID, updates: [{ ...PARK, choice: 'proposal' }] });
+    assert.equal(done.status, 200);
+    assert.equal('parkNoDate' in done.body, false);
+    assert.deepEqual(posts[0].updates, [{ ...UPDATE, choice: 'proposal', meetingDate: '' }]);
+  });
+  test('switch on: the park fields reach 7F, blank on other choices', async () => {
+    process.env.PARTNER_PARKED_ENABLED = 'true';
+    reply = () => [200, { ok: true, saved: 2 }];
+    const done = await partnerSave({ key: KEY, submissionId: SID, updates: [PARK, { ...PARK, id: 37, choice: 'unpark' }] });
+    assert.equal(done.status, 200);
+    assert.equal(done.body.parkNoDate, 0);
+    assert.deepEqual(posts[0].updates, [
+      { ...UPDATE, choice: 'parked', talkedToDoctor: '', meetingDate: '', parkDate: '2026-12-15', parkReason: 'Remodel', parkedBy: 'TEST Jane' },
+      { ...UPDATE, id: 37, choice: 'unpark', talkedToDoctor: '', meetingDate: '', parkDate: '', parkReason: '', parkedBy: '' },
+    ]);
+  });
+  test('switch on: a park with no date is posted and the answer says Saved as Closed Lost', async () => {
+    process.env.PARTNER_PARKED_ENABLED = 'true';
+    reply = () => [200, { ok: true, saved: 1 }];
+    const done = await partnerSave({ key: KEY, submissionId: SID, updates: [{ ...PARK, parkDate: '' }] });
+    assert.equal(done.status, 200);
+    assert.equal(done.body.parkNoDate, 1);
+    assert.equal(done.body.message, 'Saved 1 update. Saved as Closed Lost, no revisit date.');
+    assert.equal(posts[0].updates[0].parkDate, '');
+  });
+  test('switch on: a park missing reason or who is refused before any post (E21)', async () => {
+    process.env.PARTNER_PARKED_ENABLED = 'true';
+    for (const [more, field] of [[{ parkReason: '' }, 'parkReason'], [{ parkedBy: '' }, 'parkedBy'], [{ parkReason: '', parkedBy: '', parkDate: '' }, 'parkReasonBy']]) {
+      const refused = await partnerSave({ key: KEY, submissionId: SID, updates: [{ ...PARK, ...more }] });
+      assert.deepEqual(refused, { status: 422, body: { error: 'bad_value', id: 36, field } }, field);
     }
     assert.equal(posts.length, 0);
   });
