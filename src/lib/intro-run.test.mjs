@@ -278,7 +278,7 @@ describe('review findings: starvation, alert delivery, held maybe', () => {
     assert.equal(introMails(store).length, 5, 'every referral is mailed exactly once');
   });
 
-  test('more open referrals than one read window: a later one is still reached, once-a-day alert', async () => {
+  test('2,100 spent referrals ahead of a valid one: the cursor steps past them and reaches it', async () => {
     const dead = Array.from({ length: 2100 }, (_, i) => ({ ...REFERRAL, Title: `HSBS-D${i}`, Intro_x0020_Tries: 3 }));
     const store = createFakeStore({
       lists: {
@@ -293,7 +293,6 @@ describe('review findings: starvation, alert delivery, held maybe', () => {
     // One run every 2 minutes, so the read window moves each time.
     for (let i = 0; i < 12; i += 1) await runIntro({ store, now: at(i * 2) });
     assert.equal(introMails(store).filter((m) => m.html.includes('HSBS-LATE')).length, 1);
-    assert.equal(alerts(store).filter((m) => m.subject.includes('still open')).length, 1);
   });
 
   test('window and batch rotation do not lock out a valid referral behind 26 unresolved ones', async () => {
@@ -329,6 +328,57 @@ describe('review findings: starvation, alert delivery, held maybe', () => {
       await runIntro({ store, now: at(i * 2), clock: slow });
     }
     assert.equal(introMails(store).filter((m) => m.html.includes('HSBS-SLOW')).length, 1);
+  });
+
+  test('a valid referral at 2,050 behind unknown companies is reached; each run reads one page', async () => {
+    const rows = Array.from({ length: 2100 }, (_, i) => ({ ...REFERRAL, Title: `HSBS-N${i}`, Solutions: ['Nobody Inc'] }));
+    rows[2049] = { ...REFERRAL, Title: 'HSBS-DEEP' };
+    const store = createFakeStore({
+      lists: { 'Field Settings': SETTINGS, Routing: ROUTING, Referrals: rows, 'Service Cases': [], 'Field Send Log': [], 'Rep Roster': [] },
+    });
+    const mailed = () => introMails(store).filter((m) => m.html.includes('HSBS-DEEP')).length;
+    for (let i = 0; i < 100 && mailed() === 0; i += 1) {
+      const before = store.inspect.calls.filter((c) => c.op === 'read' && c.list === 'Referrals').length;
+      await runIntro({ store, now: at(i * 2) });
+      const reads = store.inspect.calls.filter((c) => c.op === 'read' && c.list === 'Referrals').length - before;
+      assert.ok(reads <= 2, 'at most one page, plus one when it wraps to the top');
+    }
+    assert.equal(mailed(), 1);
+  });
+
+  test('slow reads still leave time to work: the cursor moves every run', async () => {
+    const rows = Array.from({ length: 2100 }, (_, i) => ({ ...REFERRAL, Title: `HSBS-R${i}`, Solutions: ['Nobody Inc'] }));
+    rows[60] = { ...REFERRAL, Title: 'HSBS-READS' };
+    const base = createFakeStore({
+      lists: { 'Field Settings': SETTINGS, Routing: ROUTING, Referrals: rows, 'Service Cases': [], 'Field Send Log': [], 'Rep Roster': [] },
+    });
+    // Every gateway read costs 1.3 seconds on the job's clock.
+    let t = 0;
+    const store = { ...base, read: (q) => ((t += 1300), base.read(q)), inspect: base.inspect };
+    const mailed = () => introMails(base).filter((m) => m.html.includes('HSBS-READS')).length;
+    for (let i = 0; i < 20 && mailed() === 0; i += 1) {
+      t = 0;
+      await runIntro({ store, now: at(i * 2), clock: () => t });
+    }
+    assert.equal(mailed(), 1);
+  });
+
+  test('at the cap, a spent row behind the deferred ones does not move the cursor past them', async () => {
+    const live = Array.from({ length: 30 }, (_, i) => ({ ...REFERRAL, Title: `HSBS-C${i}` }));
+    const store = createFakeStore({
+      lists: {
+        'Field Settings': SETTINGS,
+        Routing: ROUTING,
+        Referrals: [...live, { ...REFERRAL, Title: 'HSBS-SPENT', Intro_x0020_Tries: 3 }],
+        'Service Cases': [],
+        'Field Send Log': [],
+        'Rep Roster': [],
+      },
+    });
+    const first = await runIntro({ store, now: at(0) });
+    assert.deepEqual([first.scanned, first.deferred], [25, 5]);
+    await runIntro({ store, now: at(6) });
+    assert.equal(introMails(store).length, 30, 'the 5 deferred are mailed on the next run');
   });
 
   test('two requests racing for a missing lock: one runs, one case, one mail', async () => {

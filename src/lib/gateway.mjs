@@ -129,7 +129,7 @@ async function post(body, timeoutMs, write) {
 
 /**
  * One filter clause. All clauses of a read must match.
- * @typedef {{ column: string, op: 'eq' | 'ne', value: string | number | boolean | null }} Clause
+ * @typedef {{ column: string, op: 'eq' | 'ne' | 'gt', value: string | number | boolean | null }} Clause  `gt` only on `ID`, with a whole number
  */
 
 /**
@@ -142,7 +142,12 @@ export async function readRows({ list, select = [], where = [], top = 100, skip 
     throw new GatewayError('bad_request');
   }
   const clauses = where.every(
-    (c) => isObject(c) && typeof c.column === 'string' && ['eq', 'ne'].includes(c.op) && (c.value === null || ['string', 'number', 'boolean'].includes(typeof c.value)),
+    (c) =>
+      isObject(c) &&
+      typeof c.column === 'string' &&
+      (['eq', 'ne'].includes(c.op)
+        ? c.value === null || ['string', 'number', 'boolean'].includes(typeof c.value)
+        : c.op === 'gt' && c.column === 'ID' && Number.isSafeInteger(c.value) && c.value >= 0),
   );
   if (!clauses || where.length > 10 || !Array.isArray(select) || select.some((s) => typeof s !== 'string')) {
     throw new GatewayError('bad_request');

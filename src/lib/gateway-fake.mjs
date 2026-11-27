@@ -60,13 +60,15 @@ export function createFakeStore({ lists = {}, faults = [], allowRecipients } = {
   const matches = (row, where) =>
     where.every((c) => {
       const v = c.column === 'ID' ? row.id : (row.fields[c.column] ?? null);
+      if (c.op === 'gt') return typeof v === 'number' && v > c.value;
       return c.op === 'eq' ? v === c.value : v !== c.value;
     });
 
   return {
     read: async ({ list, select = [], where = [], top = 100, skip = 0 }) =>
       run('read', list, () => {
-        const hits = rowsOf(list).filter((r) => matches(r, where));
+        // Ascending ID order, like the real gateway.
+        const hits = rowsOf(list).filter((r) => matches(r, where)).sort((a, b) => a.id - b.id);
         const page = hits.slice(skip, skip + top);
         const items = page.map((r) => ({
           id: r.id,

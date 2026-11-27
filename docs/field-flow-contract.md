@@ -654,12 +654,12 @@ Waits: 20 s read, 55 s create and patch, 30 s send.
 
 | op | Body | 200 answer |
 |---|---|---|
-| `read` | `list`, `select` (column names, blank for all), `where` (up to 10 clauses `{column, op: "eq" or "ne", value}`, all must match), `top` (1 to 500), `skip` | `{"ok":true,"items":[{"id":n,"etag":"...","fields":{...}}],"next":n or null}`. More than 500 rows is a failed read |
+| `read` | `list`, `select` (column names, blank for all), `where` (up to 10 clauses `{column, op: "eq" or "ne", value}`, all must match, plus `{column: "ID", op: "gt", value: n}` with a whole number), `top` (1 to 500), `skip` | `{"ok":true,"items":[{"id":n,"etag":"...","fields":{...}}],"next":n or null}`. More than 500 rows is a failed read |
 | `create` | `list`, `fields` | `{"ok":true,"id":n,"etag":"..."}` |
 | `patch` | `list`, `id`, `etag`, `fields` | `{"ok":true,"etag":"..."}` |
 | `send` | `to[]`, `cc[]`, `replyTo`, `subject` (one line), `html`, `importance` | `{"ok":true}` |
 
-A `where` clause may name the column `ID`, the row id. `read` and `patch` use SharePoint internal column names as keys. The flow answers choice columns as plain
+A `where` clause may name the column `ID`, the row id. Rows come in ascending `ID` order. `read` and `patch` use SharePoint internal column names as keys. The flow answers choice columns as plain
 text and multi choice columns as lists of text, so the code never sees a `{"Value":...}` object.
 
 Other answers: 401 wrong or missing secret (the site reads it as config), 403 `not_allowed`
@@ -698,11 +698,10 @@ two 3F intro flows once Brian switches it on (not before Fri 12/4). Everything g
   partner gets a Held case and a "NOT SENT, forward manually" mail to MailOwner.
 - A run stops starting new referrals after 25 seconds (the function limit is 60) and counts the rest
   as `deferred`. The next run picks them up.
-- Each run resumes after the last referral it finished. The cursor lives on the lock row (`CaseId`
-  is the last referral, `Tries` the read window), so rows stuck on an unknown company or a maybe
-  never hold back the rows behind them.
-- One read window is 2,000 open referrals. With more, the cursor walks the windows in turn, and the
-  owner gets one alert a day to stamp or close the old ones.
+- Each run reads at most 25 open referrals after a cursor (`ID gt` the last referral finished), so
+  the work per run is bounded however long the backlog. The cursor lives on the lock row
+  (`CaseId`). When nothing is left after it, the run starts again from the top. Rows stuck on an
+  unknown company or a maybe never hold back the rows behind them.
 - A lock row `lock:intro` in Field Send Log stops overlap and frees itself after 4 minutes.
 - Answers: 404 flags off, 401 bad secret, 200 `{ok, skipped?, scanned, introduced, held, retried,
   alerts, deferred, dryRun, plan}` (counts only, never a name, address or id), 503 `{ok:false, error}` with
