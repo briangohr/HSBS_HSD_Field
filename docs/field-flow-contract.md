@@ -698,6 +698,8 @@ two 3F intro flows once Brian switches it on (not before Fri 12/4). Everything g
   partner gets a Held case and a "NOT SENT, forward manually" mail to MailOwner.
 - A run stops starting new referrals after 25 seconds (the function limit is 60) and counts the rest
   as `deferred`. The next run picks them up.
+- One read window is 2,000 open referrals. With more, the window moves each run so later rows are
+  reached, and the owner gets one alert a day to stamp or close the old ones.
 - A lock row `lock:intro` in Field Send Log stops overlap and frees itself after 4 minutes.
 - Answers: 404 flags off, 401 bad secret, 200 `{ok, skipped?, scanned, introduced, held, retried,
   alerts, deferred, dryRun, plan}` (counts only, never a name, address or id), 503 `{ok:false, error}` with

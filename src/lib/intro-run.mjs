@@ -45,17 +45,32 @@ export class IntroSettingsError extends Error {
   }
 }
 
-/** @param {any} store */
-async function readAll(store, query) {
-  const out = [];
-  let skip = 0;
-  for (let page = 0; page < 20; page += 1) {
-    const { items, next } = await store.read({ ...query, top: 100, skip });
-    out.push(...items);
-    if (next == null) return out;
+const PAGE = 100;
+const MAX_PAGES = 20;
+/** Rows one read window covers. */
+const WINDOW_ROWS = PAGE * MAX_PAGES;
+/** Windows the referral read can rotate through when there are more rows than one window holds. */
+const WINDOWS = 10;
+
+/**
+ * Read up to MAX_PAGES pages from `skip`. `truncated` means rows remain past the last page.
+ * @param {any} store
+ */
+async function readWindow(store, query, startSkip = 0) {
+  const rows = [];
+  let skip = startSkip;
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const { items, next } = await store.read({ ...query, top: PAGE, skip });
+    rows.push(...items);
+    if (next == null) return { rows, truncated: false };
     skip = next;
   }
-  return out;
+  return { rows, truncated: true };
+}
+
+/** @param {any} store */
+async function readAll(store, query) {
+  return (await readWindow(store, query)).rows;
 }
 
 /** @param {any} store */
@@ -138,14 +153,23 @@ export async function runIntro({ store, now = new Date(), dryRun = false, clock 
   return out;
 
   async function work() {
-    const referrals = await readAll(store, {
+    const referralQuery = {
       list: 'Referrals',
       where: [
         { column: 'Source', op: 'eq', value: 'Rep app' },
         { column: 'Route', op: 'eq', value: 'Direct to partner' },
         { column: 'Introduced_x0020_On', op: 'eq', value: null },
       ],
-    });
+    };
+    const slot = Math.floor(nowMs / SLOT_MS);
+    let { rows: referrals, truncated } = await readWindow(store, referralQuery);
+    if (truncated) {
+      // More open referrals than one window holds. Rotate the window so later rows are reached,
+      // and tell the owner once a day: rows that stay open this long need clearing by hand.
+      if (!dryRun) await alertOnce(`overflow:${today}`, `HSBS intro: more than ${WINDOW_ROWS} referrals are still open. Stamp or close the old ones`, null);
+      const more = slot % WINDOWS === 0 ? null : await readWindow(store, referralQuery, (slot % WINDOWS) * WINDOW_ROWS);
+      if (more && more.rows.length > 0) referrals = more.rows;
+    }
     const routing = new Map();
     for (const row of await readAll(store, { list: 'Routing' })) {
       const route = readRoute(row.fields);
@@ -157,7 +181,6 @@ export async function runIntro({ store, now = new Date(), dryRun = false, clock 
       .sort((a, b) => a.row.id - b.row.id);
     // Rows that stay unresolved (unknown company, a maybe) must not crowd out later ones. The
     // window start moves one slot every run, so every row is reached within a few runs.
-    const slot = Math.floor(nowMs / SLOT_MS);
     const start = candidates.length > MAX_REFERRALS_PER_RUN ? (slot * MAX_REFERRALS_PER_RUN) % candidates.length : 0;
     const batch = [...candidates.slice(start), ...candidates.slice(0, start)].slice(0, MAX_REFERRALS_PER_RUN);
 
@@ -364,8 +387,10 @@ export async function runIntro({ store, now = new Date(), dryRun = false, clock 
   }
 
   function alertMail(subject, ref) {
-    const html = `<p>Referral ${esc(ref.ref)}.</p><p>${esc(subject)}.</p><p>To try again, set Intro Tries to 0 on the referral and clear the Field Send Log row for the case.</p>`;
-    return { to: [settings.mailOwner], cc: [], replyTo: settings.replyTo, subject: `${ref.test ? '[TEST] ' : ''}${subject}`.slice(0, 300), html };
+    const html = ref
+      ? `<p>Referral ${esc(ref.ref)}.</p><p>${esc(subject)}.</p><p>To try again, set Intro Tries to 0 on the referral and clear the Field Send Log row for the case.</p>`
+      : `<p>${esc(subject)}.</p>`;
+    return { to: [settings.mailOwner], cc: [], replyTo: settings.replyTo, subject: `${ref?.test ? '[TEST] ' : ''}${subject}`.slice(0, 300), html };
   }
 }
 

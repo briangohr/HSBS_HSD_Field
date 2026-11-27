@@ -278,6 +278,24 @@ describe('review findings: starvation, alert delivery, held maybe', () => {
     assert.equal(introMails(store).length, 5, 'every referral is mailed exactly once');
   });
 
+  test('more open referrals than one read window: a later one is still reached, once-a-day alert', async () => {
+    const dead = Array.from({ length: 2100 }, (_, i) => ({ ...REFERRAL, Title: `HSBS-D${i}`, Intro_x0020_Tries: 3 }));
+    const store = createFakeStore({
+      lists: {
+        'Field Settings': SETTINGS,
+        Routing: ROUTING,
+        Referrals: [...dead, { ...REFERRAL, Title: 'HSBS-LATE' }],
+        'Service Cases': [],
+        'Field Send Log': [],
+        'Rep Roster': [],
+      },
+    });
+    // One run every 2 minutes, so the read window moves each time.
+    for (let i = 0; i < 12; i += 1) await runIntro({ store, now: at(i * 2) });
+    assert.equal(introMails(store).filter((m) => m.html.includes('HSBS-LATE')).length, 1);
+    assert.equal(alerts(store).filter((m) => m.subject.includes('still open')).length, 1);
+  });
+
   test('two requests racing for a missing lock: one runs, one case, one mail', async () => {
     const store = world();
     const [a, b] = await Promise.all([runIntro({ store, now: at(0) }), runIntro({ store, now: at(0) })]);
