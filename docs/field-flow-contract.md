@@ -656,6 +656,9 @@ Waits: 20 s read, 55 s create and patch, 30 s send.
 | `patch` | `list`, `id`, `etag`, `fields` | `{"ok":true,"etag":"..."}` |
 | `send` | `to[]`, `cc[]`, `replyTo`, `subject` (one line), `html`, `importance` | `{"ok":true}` |
 
+`read` and `patch` use SharePoint internal column names as keys. The flow answers choice columns as plain
+text and multi choice columns as lists of text, so the code never sees a `{"Value":...}` object.
+
 Other answers: 401 wrong or missing secret (the site reads it as config), 403 `not_allowed`
 (list, column or recipient off the allowlist, nothing written or sent), 412 stale etag (nothing
 written), 400, 404 and 422 a clear no.
