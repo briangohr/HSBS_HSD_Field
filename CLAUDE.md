@@ -20,7 +20,7 @@ repo on 11/17/2026 because Brian wants the field build entirely separate (Brian,
 - `/confirm/<token>`: kept in code, off (404) unless `REP_CONFIRM_ENABLED=true`.
 - Everything except `/j` answers 404 unless `REP_APP_ENABLED=true`.
 
-The field build talks to no flow but 1J, 1F and 7F, and to no other team's lists. Field
+The field build talks to no flow but 1J, 1F, 7F and the HSBS GW Field gateway (Brian, 11/26/2026: Field logic moves into tested code and one gateway flow does the reading, writing and mailing for it), and to no other team's lists. Field
 work, desk files, status updates and questions to Brian stay on the field side only. A
 field flow that still touches another team's flow or list is a defect to remove, not a feature to keep.
 
@@ -31,7 +31,7 @@ field flow that still touches another team's flow or list is a defect to remove,
 - `src/lib/`: server and shared logic, with tests beside the module. Lib must not import
   pages or components. `field-flow.mjs` is the only module that posts to 1F;
   `register-flow.mjs` the only one that posts to 1J; `partner-flow.mjs` the only one that
-  posts to 7F.
+  posts to 7F; `gateway.mjs` the only one that posts to the gateway.
 - `docs/`: the contract. A change to what a route sends to or expects from a flow updates
   `docs/field-flow-contract.md` in the same PR. `docs/build/` holds the flow-side build
   sheets moved from the old repo; read its README first.
@@ -42,7 +42,8 @@ field flow that still touches another team's flow or list is a defect to remove,
 
 - No secrets, signed flow URLs, keys, tokens or production data in the repo, logs,
   prompts or client bundle. They belong in Vercel env or SharePoint.
-- The site never calls SharePoint or Salesforce. It posts to Power Automate HTTP flows.
+- The site never calls SharePoint or Salesforce. It posts to Power Automate HTTP flows. Mail goes
+  out only through the gateway's `send`, to addresses on its allow list.
 - Claude makes field live changes itself, without asking (see "Live changes" below).
   Brian is the last resort, not the operator.
 - Name, email and role on a submit come from the 1F lookup, never from the browser body.
@@ -51,8 +52,8 @@ field flow that still touches another team's flow or list is a defect to remove,
 - Nothing writes back to Salesforce. Do not add Smartsheet or Airtable.
 - Success is HTTP 200 with `{"ok":true}` after the row exists. A 202, timeout or non-JSON
   is not success. A retry reuses the same `submissionId`.
-- No live sends while testing. Use TEST people. The site does not send mail. A flow
-  recipient who is a real partner or rep is added only with Brian's go.
+- No live sends while testing. Use TEST people. The site sends no mail itself; the gateway
+  does. A flow or gateway recipient who is a real partner or rep is added only with Brian's go.
 - Customer-facing copy uses the approved partner spellings (HealthFirst, Direct Dental,
   GoTu), does not name HSPA, HSRA or NumbersIQ, and uses no em dashes or arrow
   characters.

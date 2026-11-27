@@ -25,6 +25,9 @@ route answers 404 and no flow is called.
 | `REGISTER_FLOW_URL` | HSBS 1J trigger URL, `https` only | Yes |
 | `PARTNER_PAGE_ENABLED` | `/update/<key>` and `/api/partner-save`, exactly `true` (and `REP_APP_ENABLED`). Off: 404 and no 7F call | No |
 | `PARTNER_FLOW_URL` | HSBS 7F Field partner (new site) trigger URL, `https` only | Yes |
+| `GATEWAY_ENABLED` | Code that reads, writes or sends through HSBS GW (below), exactly `true` (and `REP_APP_ENABLED`). Off: nothing is posted to the gateway | No |
+| `GATEWAY_FLOW_URL` | HSBS GW Field gateway (new site) trigger URL, `https` only | Yes |
+| `GATEWAY_SECRET` | Sent as header `X-GW-Secret`. The flow refuses a call without it. At least 16 characters | Yes |
 | `PARTNER_OFFICE_CHECK` | The partner page asks the office count on a Direct Dental Group lead (7F, below), exactly `true` (and `PARTNER_PAGE_ENABLED`). Off: no question, and `/api/partner-save` sends every `offices` blank, so no lead earns the group amount | No |
 | `PARTNER_DEAL_VALUE_ENABLED` | The partner page asks an optional Year 1 deal value on Demo set, Proposal and Signed, and the 7F save sends `dealValue` (7F, below), exactly `true` (and `PARTNER_PAGE_ENABLED`). Off: no field, `readLead` drops `dealValue`, and the save body has no `dealValue` key, exactly as before | No |
 | `REP_APP_COMPANIES` | Which companies Send offers: `HealthFirst`, `Staffing`, comma separated. Unset is HealthFirst only | No |
@@ -631,6 +634,46 @@ number and the stage amount, and carries no app key or link. It can reach a rep 
 Settings `WinEmailOn` is Yes (HSBS 10 checks it when it makes the row and 7N checks it again before it sends), only for a rep on the Rep Roster, and never for a TEST case, which mails Brian
 only. The stage amount is the ledger amount, so the mail agrees with My Earnings (Awaiting payment).
 `public/logos/hsbs-email-logo.png` is the mail logo. Nothing in `earnings`, `list` or `team` changes.
+
+## HSBS GW: the Field gateway (no page uses it yet)
+
+Brian, 11/26/2026 (card, "Approve one gateway flow that site code posts to, including sending
+mail through it?", answered Yes): Field logic moves from flows into tested code, and one small
+flow does the reading, writing and mailing for that code. `src/lib/gateway.mjs` is the only
+module that posts to it. Nothing in `src/pages` calls it yet; the first user is the intro job
+(the U1 build spec in the project's field-rebuild folder). Until the flow is built and
+proven on TEST, `GATEWAY_ENABLED` stays off and nothing is posted.
+
+Every call is a POST of JSON with header `X-GW-Secret`. Success is HTTP 200 with `{"ok":true}`
+after the write or mail is done. A 202, a timeout or non-JSON on a write or send is "maybe": it
+may have happened, so the code never resends a mail or creates a second row on that alone.
+Waits: 20 s read, 55 s create and patch, 30 s send.
+
+| op | Body | 200 answer |
+|---|---|---|
+| `read` | `list`, `select` (column names, blank for all), `where` (up to 10 clauses `{column, op: "eq" or "ne", value}`, all must match), `top` (1 to 500), `skip` | `{"ok":true,"items":[{"id":n,"etag":"...","fields":{...}}],"next":n or null}`. More than 500 rows is a failed read |
+| `create` | `list`, `fields` | `{"ok":true,"id":n,"etag":"..."}` |
+| `patch` | `list`, `id`, `etag`, `fields` | `{"ok":true,"etag":"..."}` |
+| `send` | `to[]`, `cc[]`, `replyTo`, `subject` (one line), `html`, `importance` | `{"ok":true}` |
+
+Other answers: 401 wrong or missing secret (the site reads it as config), 403 `not_allowed`
+(list, column or recipient off the allowlist, nothing written or sent), 412 stale etag (nothing
+written), 400, 404 and 422 a clear no.
+
+What the flow enforces, whatever the code sends:
+
+1. Lists: Referrals, Service Cases, Routing, Rep Roster, Field Settings, Field Send Log.
+2. Columns: a per list, per op allowlist. A column not on it is 403 and nothing is written.
+3. No delete op. No op returns a Referral Key, a Link Key or a roster key.
+4. Recipients: every `to` and `cc` address must be on the Gateway Mail Allow list. A new real
+   recipient is a new row there, and CLAUDE.md says that needs Brian's go.
+5. Secure inputs and outputs on every action that handles a row or a mail, so run history holds
+   no names, addresses or bodies.
+
+The client refuses before posting: a list off the allowlist, `top` over 500, a filter that is not
+`eq` or `ne`, empty or nested `fields`, a bad id or etag, a mail with no recipient, an invalid
+address, more than 20 addresses, or a subject with a line break. `src/lib/gateway-fake.mjs` is the
+in-memory store with the same four operations and fault injection that job tests use.
 
 ## What must stay true
 
