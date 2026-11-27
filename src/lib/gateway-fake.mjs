@@ -65,17 +65,18 @@ export function createFakeStore({ lists = {}, faults = [], allowRecipients } = {
     });
 
   return {
-    read: async ({ list, select = [], where = [], top = 100, skip = 0 }) =>
+    read: async ({ list, select = [], where = [], top = 100, ...rest }) =>
       run('read', list, () => {
-        // Ascending ID order, like the real gateway.
+        if ('skip' in rest) throw new GatewayError('bad_request');
+        // Ascending ID order, like the real gateway. Paging is by id (`next` is the last id).
         const hits = rowsOf(list).filter((r) => matches(r, where)).sort((a, b) => a.id - b.id);
-        const page = hits.slice(skip, skip + top);
+        const page = hits.slice(0, top);
         const items = page.map((r) => ({
           id: r.id,
           etag: etag(r),
           fields: select.length ? Object.fromEntries(select.map((c) => [c, r.fields[c] ?? null])) : { ...r.fields },
         }));
-        return { items, next: skip + top < hits.length ? skip + top : null };
+        return { items, next: top < hits.length ? page[page.length - 1].id : null };
       }),
 
     create: async ({ list, fields }) =>

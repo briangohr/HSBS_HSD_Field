@@ -12,6 +12,7 @@
 //   - Dry run reads and plans. It writes and sends nothing.
 
 import { etDate } from './field-rules.mjs';
+import { GatewayError } from './gateway.mjs';
 import { buildIntroMail } from './intro-mail.mjs';
 import {
   MAX_TRIES,
@@ -56,24 +57,21 @@ export class IntroSettingsError extends Error {
 const PAGE = 100;
 const MAX_PAGES = 20;
 /**
- * Read up to MAX_PAGES pages from `skip`. `truncated` means rows remain past the last page.
+ * Every matching row, paged by id (SharePoint ignores an offset). More than MAX_PAGES pages is a
+ * failed read, never a short list.
  * @param {any} store
  */
-async function readWindow(store, query, startSkip = 0) {
-  const rows = [];
-  let skip = startSkip;
-  for (let page = 0; page < MAX_PAGES; page += 1) {
-    const { items, next } = await store.read({ ...query, top: PAGE, skip });
-    rows.push(...items);
-    if (next == null) return { rows, truncated: false };
-    skip = next;
-  }
-  return { rows, truncated: true };
-}
-
-/** @param {any} store */
 async function readAll(store, query) {
-  return (await readWindow(store, query)).rows;
+  const rows = [];
+  let after = null;
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const where = after == null ? query.where ?? [] : [...(query.where ?? []), { column: 'ID', op: 'gt', value: after }];
+    const { items, next } = await store.read({ ...query, where, top: PAGE });
+    rows.push(...items);
+    if (next == null) return rows;
+    after = next;
+  }
+  throw new GatewayError('failed');
 }
 
 /** @param {any} store */

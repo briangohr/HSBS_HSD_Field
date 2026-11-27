@@ -133,14 +133,17 @@ async function post(body, timeoutMs, write) {
  */
 
 /**
- * @param {{ list: string, select?: string[], where?: Clause[], top?: number, skip?: number }} q
+ * Paging is by row id, not by offset: SharePoint REST ignores `$skip` on list items. When more
+ * rows may match, `next` is the id of this page's last row; read the next page by adding
+ * `{ column: 'ID', op: 'gt', value: next }`.
+ * @param {{ list: string, select?: string[], where?: Clause[], top?: number }} q
  * @returns {Promise<{ items: { id: number, etag: string, fields: Record<string, unknown> }[], next: number | null }>}
  */
-export async function readRows({ list, select = [], where = [], top = 100, skip = 0 }) {
-  if (!isList(list)) throw new GatewayError('bad_request');
-  if (!Number.isSafeInteger(top) || top < 1 || top > MAX_ROWS || !Number.isSafeInteger(skip) || skip < 0) {
-    throw new GatewayError('bad_request');
-  }
+export async function readRows(q) {
+  const { list, select = [], where = [], top = 100 } = q;
+  if (!isList(list) || 'skip' in q) throw new GatewayError('bad_request');
+  if (!Number.isSafeInteger(top) || top < 1 || top > MAX_ROWS) throw new GatewayError('bad_request');
+  if (where.filter((c) => isObject(c) && c.op === 'gt').length > 1) throw new GatewayError('bad_request');
   const clauses = where.every(
     (c) =>
       isObject(c) &&
@@ -152,14 +155,18 @@ export async function readRows({ list, select = [], where = [], top = 100, skip 
   if (!clauses || where.length > 10 || !Array.isArray(select) || select.some((s) => typeof s !== 'string')) {
     throw new GatewayError('bad_request');
   }
-  const body = await post({ op: 'read', list, select, where, top, skip }, READ_TIMEOUT_MS, false);
+  const body = await post({ op: 'read', list, select, where, top }, READ_TIMEOUT_MS, false);
   if (!Array.isArray(body.items) || body.items.length > MAX_ROWS) throw new GatewayError('failed', { status: 200 });
   const items = [];
   for (const row of body.items) {
     if (!isObject(row) || !isId(row.id) || !isEtag(row.etag) || !isObject(row.fields)) throw new GatewayError('failed', { status: 200 });
     items.push({ id: row.id, etag: row.etag, fields: row.fields });
   }
-  const next = Number.isSafeInteger(body.next) && body.next > 0 ? /** @type {number} */ (body.next) : null;
+  // Rows must come in ascending id order, and `next` must be the last row's id. Anything else
+  // would page wrong, so it is a failed read.
+  if (items.some((r, i) => i > 0 && r.id <= items[i - 1].id)) throw new GatewayError('failed', { status: 200 });
+  const next = body.next ?? null;
+  if (next !== null && (items.length === 0 || next !== items[items.length - 1].id)) throw new GatewayError('failed', { status: 200 });
   return { items, next };
 }
 

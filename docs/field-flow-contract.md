@@ -703,12 +703,17 @@ Waits: 20 s read, 55 s create and patch, 30 s send.
 
 | op | Body | 200 answer |
 |---|---|---|
-| `read` | `list`, `select` (column names, blank for all), `where` (up to 10 clauses `{column, op: "eq" or "ne", value}`, all must match, plus `{column: "ID", op: "gt", value: n}` with a whole number), `top` (1 to 500), `skip` | `{"ok":true,"items":[{"id":n,"etag":"...","fields":{...}}],"next":n or null}`. More than 500 rows is a failed read |
+| `read` | `list`, `select` (column names, blank for all), `where` (up to 10 clauses `{column, op: "eq" or "ne", value}`, all must match, plus at most one `{column: "ID", op: "gt", value: n}` with a whole number), `top` (1 to 500). No `skip` | `{"ok":true,"items":[{"id":n,"etag":"...","fields":{...}}],"next":n or null}`. `next` is the last row's id when more rows may match, else null. More than 500 rows, rows out of id order, or a `next` that is not the last id is a failed read |
 | `create` | `list`, `fields` | `{"ok":true,"id":n,"etag":"..."}` |
 | `patch` | `list`, `id`, `etag`, `fields` | `{"ok":true,"etag":"..."}` |
 | `send` | `to[]`, `cc[]`, `replyTo`, `subject` (one line), `html`, `importance` | `{"ok":true}` |
 
-A `where` clause may name the column `ID`, the row id. Rows come in ascending `ID` order. `read` and `patch` use SharePoint internal column names as keys. The flow answers choice columns as plain
+A `where` clause may name the column `ID`, the row id. Rows come in ascending `ID` order.
+Paging is by id, never by offset, because SharePoint REST ignores `$skip` on list items
+(Microsoft Learn, "Use OData query operations in SharePoint REST requests", Page through
+returned items). To read the next page, the code adds `{column: "ID", op: "gt", value: next}`.
+The flow builds `$filter=<clauses> and ID gt n&$orderby=ID asc&$top=<top>` and sets `next` to
+the last id when it returned `top` rows. `read` and `patch` use SharePoint internal column names as keys. The flow answers choice columns as plain
 text and multi choice columns as lists of text, so the code never sees a `{"Value":...}` object.
 
 Other answers: 401 wrong or missing secret (the site reads it as config), 403 `not_allowed`
@@ -725,8 +730,8 @@ What the flow enforces, whatever the code sends:
 5. Secure inputs and outputs on every action that handles a row or a mail, so run history holds
    no names, addresses or bodies.
 
-The client refuses before posting: a list off the allowlist, `top` over 500, a filter that is not
-`eq` or `ne`, empty or nested `fields`, a bad id or etag, a mail with no recipient, an invalid
+The client refuses before posting: a list off the allowlist, `top` over 500, a `skip`, a filter that is not
+`eq`, `ne` or one `ID gt`, empty or nested `fields`, a bad id or etag, a mail with no recipient, an invalid
 address, more than 20 addresses, or a subject with a line break. `src/lib/gateway-fake.mjs` is the
 in-memory store with the same four operations and fault injection that job tests use.
 
